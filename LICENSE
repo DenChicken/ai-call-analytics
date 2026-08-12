@@ -1,13 +1,99 @@
-Copyright (c) 2026 Daniel Tokarchuk. All rights reserved.
+PROPRIETARY SOFTWARE LICENSE AND COPYRIGHT NOTICE
 
-This source code, software, and associated documentation (the "Software") are the sole intellectual property of the Rightsholder (Daniel Tokarchuk).
+Copyright (c) 2026 Mark Cherkasov. All rights reserved.
 
-Any unauthorized use, modification, reproduction, or distribution of this Software without express written permission from the Rightsholder is strictly prohibited.
+Author and Authorized Developer: Daniel Tokarchuk.
 
-Under this license, you MAY NOT:
-1. Copy, duplicate, or reproduce any part of the Software.
-2. Modify, adapt, translate, reverse engineer, or create derivative works based upon the Software.
-3. Distribute, sell, lease, sublicense, or otherwise transfer the Software to any third party.
-4. Deploy, run, or use the Software for commercial, production, or testing purposes without a separate written agreement.
+#### 1. OWNERSHIP
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+This source code, computer program, software, object code, documentation, configuration files, scripts, technical materials, and associated materials (collectively, the "Software") are proprietary and confidential.
+
+Daniel Tokarchuk is the author of the Software.
+
+The exclusive rights in and to the Software belong to Mark Cherkasov (the "Rightsholder"), except for third-party software, libraries, models, frameworks, dependencies, and other components governed by the rights and license terms of their respective owners.
+
+No transfer of the exclusive rights in the Software is made by granting access to this repository.
+
+#### 2. AUTHORIZED DEVELOPER
+
+The Rightsholder expressly authorizes Daniel Tokarchuk, as the Author and Authorized Developer, to access the private repository and the Software and, for development and maintenance of the Software, to:
+
+* Access, download, and make working copies of the Software as reasonably necessary for development.
+* Modify, adapt, supplement, refactor, debug, optimize, and improve the Software.
+* Create updates, new versions, modules, features, integrations, fixes, and other modifications of the Software.
+* Compile, execute, configure, deploy, and test the Software for development, maintenance, testing, technical support, and implementation purposes authorized by the Rightsholder.
+* Commit, push, merge, review, and otherwise manage changes to the Software within repositories, servers, and systems authorized by the Rightsholder.
+
+This authorization is personal, non-exclusive, and non-transferable.
+
+This authorization does not transfer the exclusive rights in the existing Software to Daniel Tokarchuk and does not authorize him to independently sell, license, sublicense, distribute, disclose, transfer, publish, or otherwise commercially exploit the Software or repository access for his own benefit or for the benefit of any third party, unless separately authorized in writing by the Rightsholder.
+
+Any allocation or transfer of exclusive rights in independently copyrightable modifications, updates, or new materials created after the date of this notice is governed by applicable law and any separate written agreement between the relevant parties. This notice itself does not replace such an agreement.
+
+#### 3. NO RIGHTS FOR OTHER PERSONS
+
+Except for Daniel Tokarchuk under Section 2 and any person or entity separately and expressly authorized in writing by the Rightsholder, no person receives any license or other right under this notice.
+
+Access to this private repository, possession of the Software, possession of credentials, or technical ability to view, download, copy, execute, or modify the Software does not constitute permission to use it.
+
+Unless expressly authorized in advance by a separate written agreement with the Rightsholder, any other person MAY NOT:
+
+* Copy, reproduce, download, duplicate, modify, adapt, translate, or create derivative works based on the Software.
+* Distribute, publish, disclose, sell, rent, lease, license, sublicense, assign, transfer, or otherwise provide the Software or repository access to any third party.
+* Deploy, run, host, test, evaluate, or otherwise use the Software for commercial, production, development, testing, internal business, demonstration, or other purposes.
+* Reverse engineer, decompile, disassemble, reconstruct, or otherwise attempt to derive source code, internal structure, algorithms, or implementation details, except to the extent that such restriction is prohibited by mandatory applicable law.
+* Remove, conceal, alter, or replace any copyright, authorship, ownership, confidentiality, or other proprietary notice.
+* Share repository credentials, SSH keys, tokens, passwords, access links, source code copies, archives, or other means of access with any third party.
+
+All rights not expressly granted are reserved by the Rightsholder.
+
+#### 4. CONFIDENTIALITY
+The Software and all non-public technical information contained in or associated with this private repository are proprietary and confidential.
+
+Any authorized person must take reasonable measures to prevent unauthorized access, copying, disclosure, publication, transfer, or use of the Software.
+
+Revocation or expiration of repository access does not terminate obligations concerning confidentiality, intellectual property, or non-disclosure that are intended by their nature or by a separate written agreement to survive termination of access.
+
+#### 5. THIRD-PARTY COMPONENTS
+
+The Software may contain or interact with third-party software, libraries, models, frameworks, APIs, and other dependencies.
+
+Such third-party materials remain subject to the rights and license terms of their respective owners. Nothing in this notice restricts rights independently granted under a valid third-party license.
+
+#### 6. COPYRIGHT PROTECTION AND APPLICABLE LAW
+
+The Software is protected by applicable copyright law.
+
+In the Russian Federation, protection includes Part IV of the Civil Code of the Russian Federation, including the rules governing exclusive rights and protection of computer programs.
+
+Internationally, protection may also arise under applicable treaties and national laws, including the Berne Convention for the Protection of Literary and Artistic Works and the WIPO Copyright Treaty, where applicable.
+
+Copyright protection does not depend on the presence of this notice, registration, deposit, or publication where applicable law provides automatic protection.
+
+In jurisdictions outside the Russian Federation, the existence, scope, limitations, exceptions, and enforcement of copyright are determined by the applicable national law together with applicable international treaty obligations.
+
+Nothing in this notice is intended to exclude any limitation, exception, or other right that cannot lawfully be excluded under mandatory applicable law.
+
+#### 7. NO IMPLIED LICENSE
+
+No license or right to use the Software is granted by implication, conduct, access, possession, disclosure, estoppel, or otherwise.
+
+Any right not expressly granted in this notice to Daniel Tokarchuk, or separately granted in writing by the Rightsholder to another person or entity, is reserved.
+
+Where a separate written license, sublicense, development agreement, services agreement, confidentiality agreement, or other written agreement applies, that agreement governs the authorized use within its scope.
+
+#### 8. DISCLAIMER
+
+THE SOFTWARE IS PROVIDED "AS IS" AND "AS AVAILABLE", WITHOUT WARRANTY OF ANY KIND, EXPRESS, IMPLIED, OR STATUTORY, INCLUDING, WITHOUT LIMITATION, WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, ACCURACY, RELIABILITY, TITLE, AND NON-INFRINGEMENT.
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE AUTHOR AND THE RIGHTSHOLDER SHALL NOT BE LIABLE FOR ANY CLAIM, LOSS, DAMAGE, EXPENSE, LOSS OF PROFITS, LOSS OF DATA, BUSINESS INTERRUPTION, OR OTHER LIABILITY ARISING OUT OF OR IN CONNECTION WITH ACCESS TO, USE OF, INABILITY TO USE, OR OTHER DEALINGS WITH THE SOFTWARE.
+
+#### 9. RESERVATION OF RIGHTS
+
+Unauthorized use, copying, modification, disclosure, publication, distribution, sublicensing, deployment, transfer, or other exploitation of the Software may infringe intellectual property rights and may result in liability under applicable law.
+
+All rights not expressly granted are reserved by the Rightsholder.
+
+<br>
+
+PROPRIETARY AND CONFIDENTIAL. UNAUTHORIZED USE, COPYING, MODIFICATION, DISCLOSURE, DISTRIBUTION, OR TRANSFER IS PROHIBITED.
