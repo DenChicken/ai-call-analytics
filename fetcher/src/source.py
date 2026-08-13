@@ -26,6 +26,7 @@ class Agent:
 @dataclass(frozen=True)
 class Call:
     external_id: str
+    cursor: str
     started_at: datetime
     duration_seconds: int
     direction: str

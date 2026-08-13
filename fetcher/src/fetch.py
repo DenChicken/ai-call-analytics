@@ -31,6 +31,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
 
     stored = 0
     for call in new_calls:
+        database.set_cursor(source_id, call.cursor)
         agent_id = database.upsert_agent(source_id, call.agent) if call.agent else None
 
         call_id = database.reserve_call_id()

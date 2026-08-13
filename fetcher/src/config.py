@@ -23,6 +23,7 @@ class FetchConfig:
     interval_seconds: int
     min_call_duration_seconds: int
     initial_lookback_days: int
+    max_records_per_cycle: int
     download_cooldown_seconds: float
 
 
@@ -131,6 +132,7 @@ def load_config(path: str | Path) -> Config:
         interval_seconds=_require(fetch_raw, "interval_seconds", "fetch"),
         min_call_duration_seconds=_require(fetch_raw, "min_call_duration_seconds", "fetch"),
         initial_lookback_days=_require(fetch_raw, "initial_lookback_days", "fetch"),
+        max_records_per_cycle=_require(fetch_raw, "max_records_per_cycle", "fetch"),
         download_cooldown_seconds=_require(fetch_raw, "download_cooldown_seconds", "fetch"),
     )
 

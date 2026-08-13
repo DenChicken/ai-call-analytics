@@ -21,6 +21,7 @@ DATE_FORMAT = "%Y-%m-%dT%H:%M:%S%z"
 FILE_NAME_TIME_FORMAT = "%Y%m%d%H%M%S"
 AUDIO_EXTENSION = ".mp3"
 UNKNOWN_AGENT_PART = "unknown"
+EMPTY_ID = "0"
 
 CALL_TYPE_DIRECTIONS = {
     "1": DIRECTION_OUTBOUND,
@@ -61,6 +62,7 @@ class BitrixSource(Source):
     def __init__(self, source_config: SourceConfig, network: NetworkConfig, fetch: FetchConfig):
         self._name = source_config.name
         self._initial_lookback_days = fetch.initial_lookback_days
+        self._max_records_per_cycle = fetch.max_records_per_cycle
         self._portal_url = str(require_option(source_config, "portal_url")).rstrip("/")
         self._client = BitrixClient(
             read_secret_file(require_option(source_config, "rest_url_file")), network
@@ -100,6 +102,7 @@ class BitrixSource(Source):
             calls.append(
                 Call(
                     external_id=str(call_id),
+                    cursor=str(record["ID"]),
                     started_at=datetime.strptime(record["CALL_START_DATE"], DATE_FORMAT),
                     duration_seconds=int(record.get("CALL_DURATION") or 0),
                     direction=CALL_TYPE_DIRECTIONS.get(
@@ -142,7 +145,7 @@ class BitrixSource(Source):
 
         records = []
         start = 0
-        while True:
+        while len(records) < self._max_records_per_cycle:
             body = self._client.call(
                 METHOD_STATISTIC,
                 {"FILTER": call_filter, "SORT": "ID", "ORDER": "ASC", "start": start},
@@ -191,7 +194,7 @@ class BitrixSource(Source):
         activity_ids = {
             str(record["CRM_ACTIVITY_ID"])
             for record in records
-            if record.get("CRM_ACTIVITY_ID")
+            if str(record.get("CRM_ACTIVITY_ID") or EMPTY_ID) != EMPTY_ID
         }
         if not activity_ids:
             return {}
