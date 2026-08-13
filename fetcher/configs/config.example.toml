@@ -1,0 +1,31 @@
+[database]
+dsn_file = "./secrets/database_dsn"
+
+[storage]
+pending_dir = "./data/pending"
+temp_dir = "./data/temp"
+
+[fetch]
+interval_seconds = 300
+min_call_duration_seconds = 30
+initial_lookback_days = 1
+download_cooldown_seconds = 1
+
+[network]
+connect_timeout = 5
+read_timeout = 20
+download_timeout = 120
+max_retries = 5
+backoff_base_seconds = 1
+backoff_max_seconds = 30
+requests_per_second = 2
+
+[logging]
+level = "INFO"
+dir = "./logs"
+
+[[source]]
+name = "crm_main"
+kind = "bitrix24"
+portal_url = "https://example.bitrix24.ru"
+rest_url_file = "./secrets/crm_main_rest_url"

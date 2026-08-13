@@ -1,0 +1,87 @@
+CREATE TABLE IF NOT EXISTS sources (
+    id          SMALLSERIAL PRIMARY KEY,
+    name        TEXT NOT NULL UNIQUE,
+    cursor      TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS agents (
+    id            BIGSERIAL PRIMARY KEY,
+    source_id     SMALLINT NOT NULL REFERENCES sources(id),
+    external_id   TEXT NOT NULL,
+    display_name  TEXT NOT NULL,
+    first_name    TEXT,
+    last_name     TEXT,
+    second_name   TEXT,
+    email         TEXT,
+    profile_link  TEXT,
+    synced_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (source_id, external_id)
+);
+
+CREATE TABLE IF NOT EXISTS calls (
+    id                BIGSERIAL PRIMARY KEY,
+    source_id         SMALLINT NOT NULL REFERENCES sources(id),
+    external_id       TEXT NOT NULL,
+    agent_id          BIGINT REFERENCES agents(id),
+    started_at        TIMESTAMPTZ NOT NULL,
+    duration_seconds  INTEGER NOT NULL,
+    direction         TEXT NOT NULL,
+    client_number     TEXT,
+    subject           TEXT,
+    crm_link          TEXT,
+    raw               JSONB NOT NULL DEFAULT '{}'::jsonb,
+    fetched_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    UNIQUE (source_id, external_id)
+);
+
+CREATE INDEX IF NOT EXISTS calls_agent_started_idx ON calls (agent_id, started_at DESC);
+CREATE INDEX IF NOT EXISTS calls_started_idx ON calls (started_at DESC);
+
+CREATE TABLE IF NOT EXISTS recordings (
+    id          BIGSERIAL PRIMARY KEY,
+    call_id     BIGINT NOT NULL UNIQUE REFERENCES calls(id) ON DELETE CASCADE,
+    file_path   TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending',
+    attempts    SMALLINT NOT NULL DEFAULT 0,
+    claimed_at  TIMESTAMPTZ,
+    last_error  TEXT,
+    updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT recordings_status_check CHECK (status IN ('pending', 'processing', 'done', 'failed'))
+);
+
+CREATE INDEX IF NOT EXISTS recordings_status_idx ON recordings (status, updated_at);
+
+CREATE TABLE IF NOT EXISTS analyses (
+    id                  BIGSERIAL PRIMARY KEY,
+    call_id             BIGINT NOT NULL UNIQUE REFERENCES calls(id) ON DELETE CASCADE,
+    overall_score       NUMERIC(3,2),
+    summary             TEXT,
+    strengths           TEXT,
+    weaknesses          TEXT,
+    recommendations     TEXT,
+    asr_model           TEXT,
+    llm_model           TEXT,
+    prompt_version      TEXT,
+    processing_seconds  INTEGER,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS transcript_segments (
+    id           BIGSERIAL PRIMARY KEY,
+    analysis_id  BIGINT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+    idx          INTEGER NOT NULL,
+    speaker      TEXT NOT NULL,
+    start_ms     INTEGER NOT NULL,
+    end_ms       INTEGER NOT NULL,
+    text         TEXT NOT NULL,
+    UNIQUE (analysis_id, idx)
+);
+
+CREATE TABLE IF NOT EXISTS criterion_scores (
+    analysis_id     BIGINT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+    criterion_code  TEXT NOT NULL,
+    score           SMALLINT NOT NULL,
+    PRIMARY KEY (analysis_id, criterion_code),
+    CONSTRAINT criterion_scores_score_check CHECK (score IN (0, 1))
+);
