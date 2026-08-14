@@ -1,0 +1,37 @@
+[database]
+dsn_file = "./secrets/database_dsn"
+
+[storage]
+pending_dir = "./data/pending"
+processing_dir = "./data/processing"
+done_dir = "./data/done"
+
+[worker]
+count = 1
+poll_interval_seconds = 10
+claim_timeout_seconds = 3600
+max_attempts = 3
+
+[asr]
+model = "large-v3"
+device = "cuda"
+compute_type = "float16"
+language = "ru"
+batch_size = 8
+diarize = true
+min_speakers = 1
+max_speakers = 2
+hf_token_file = "./secrets/hf_token"
+
+[llm]
+model = "Qwen/Qwen3-8B"
+device = "cuda"
+max_input_tokens = 24000
+max_output_tokens = 2048
+temperature = 0.2
+prompt_version = "v1"
+criteria_file = "./configs/pipeline/criteria.toml"
+
+[logging]
+level = "INFO"
+dir = "./logs/pipeline"

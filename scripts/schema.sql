@@ -52,13 +52,19 @@ CREATE TABLE IF NOT EXISTS recordings (
 
 CREATE INDEX IF NOT EXISTS recordings_status_idx ON recordings (status, updated_at);
 
+CREATE TABLE IF NOT EXISTS criteria (
+    code       TEXT PRIMARY KEY,
+    title      TEXT NOT NULL,
+    is_active  BOOLEAN NOT NULL DEFAULT TRUE,
+    synced_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS analyses (
     id                  BIGSERIAL PRIMARY KEY,
     call_id             BIGINT NOT NULL UNIQUE REFERENCES calls(id) ON DELETE CASCADE,
-    overall_score       NUMERIC(3,2),
     summary             TEXT,
-    strengths           TEXT,
-    weaknesses          TEXT,
+    strengths           TEXT[],
+    weaknesses          TEXT[],
     recommendations     TEXT,
     asr_model           TEXT,
     llm_model           TEXT,
@@ -80,7 +86,7 @@ CREATE TABLE IF NOT EXISTS transcript_segments (
 
 CREATE TABLE IF NOT EXISTS criterion_scores (
     analysis_id     BIGINT NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
-    criterion_code  TEXT NOT NULL,
+    criterion_code  TEXT NOT NULL REFERENCES criteria(code),
     score           SMALLINT NOT NULL,
     PRIMARY KEY (analysis_id, criterion_code),
     CONSTRAINT criterion_scores_score_check CHECK (score IN (0, 1))

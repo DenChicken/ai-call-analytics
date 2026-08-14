@@ -5,7 +5,6 @@ import sys
 import threading
 
 from src.config import ConfigError, load_config
-from src.constants import DEFAULT_CONFIG_PATH
 from src.database import Database
 from src.fetch import run_once
 from src.logging_setup import setup_logging
@@ -23,7 +22,7 @@ def handle_signal(signum, frame) -> None:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Fetch call recordings from CRM systems")
-    parser.add_argument("-c", "--config", default=DEFAULT_CONFIG_PATH, help="path to TOML config")
+    parser.add_argument("-c", "--config", required=True, help="path to TOML config")
     parser.add_argument("--once", action="store_true", help="run a single cycle and exit")
     return parser.parse_args()
 
