@@ -26,8 +26,8 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-**/configs/*.toml
-!**/configs/*.example.toml
+**.toml
+!**.example.toml
 **/secrets/
 *.pem
 *.key
