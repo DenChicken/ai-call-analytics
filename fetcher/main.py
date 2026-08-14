@@ -1,24 +1,16 @@
 import argparse
 import logging
-import signal
 import sys
-import threading
 
+from src import shutdown
 from src.config import ConfigError, load_config
-from src.constants import DEFAULT_CONFIG_PATH
+from src.constants import DEFAULT_CONFIG_PATH, SHUTDOWN_EXIT_CODE
 from src.database import Database
 from src.fetch import run_once
 from src.logging_setup import setup_logging
 from src.sources import create_source
 
 logger = logging.getLogger(__name__)
-
-stop = threading.Event()
-
-
-def handle_signal(signum, frame) -> None:
-    logger.info("received signal %s, finishing current cycle", signum)
-    stop.set()
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,26 +36,33 @@ def main() -> int:
     config.storage.pending_dir.mkdir(parents=True, exist_ok=True)
     config.storage.temp_dir.mkdir(parents=True, exist_ok=True)
 
-    signal.signal(signal.SIGINT, handle_signal)
-    signal.signal(signal.SIGTERM, handle_signal)
+    shutdown.install_handlers()
 
+    interrupted = False
     database = Database(config.database.dsn)
     try:
-        while not stop.is_set():
+        while not shutdown.is_stopping():
             for source in sources:
                 try:
                     run_once(config, database, source)
+                except shutdown.ShutdownRequested:
+                    raise
                 except Exception:
+                    database.rollback()
                     logger.exception("cycle failed for source %s", source.name)
             if args.once:
                 break
-            stop.wait(config.fetch.interval_seconds)
+            shutdown.wait(config.fetch.interval_seconds)
+    except shutdown.ShutdownRequested:
+        interrupted = True
+        logger.info("shutdown requested, stopped after last stored call")
     finally:
+        database.rollback()
         for source in sources:
             source.close()
         database.close()
 
-    return 0
+    return SHUTDOWN_EXIT_CODE if interrupted else 0
 
 
 if __name__ == "__main__":

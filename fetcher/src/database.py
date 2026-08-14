@@ -28,10 +28,15 @@ class Database:
         self._connection.commit()
         return row["id"]
 
+    def rollback(self) -> None:
+        if not self._connection.closed:
+            self._connection.rollback()
+
     def get_cursor(self, source_id: int) -> str | None:
         with self._connection.cursor() as cursor:
             cursor.execute("SELECT cursor FROM sources WHERE id = %s", (source_id,))
             row = cursor.fetchone()
+        self._connection.commit()
         return row["cursor"] if row else None
 
     def set_cursor(self, source_id: int, value: str) -> None:
@@ -50,7 +55,9 @@ class Database:
                 "SELECT external_id FROM calls WHERE source_id = %s AND external_id = ANY(%s)",
                 (source_id, external_ids),
             )
-            return {row["external_id"] for row in cursor.fetchall()}
+            known = {row["external_id"] for row in cursor.fetchall()}
+        self._connection.commit()
+        return known
 
     def upsert_agent(self, source_id: int, agent: Agent) -> int:
         with self._connection.cursor() as cursor:
@@ -94,10 +101,21 @@ class Database:
         return row["id"]
 
     def insert_call_with_recording(
-        self, call_id: int, source_id: int, call: Call, agent_id: int | None, file_path: str
+        self,
+        call_id: int,
+        source_id: int,
+        call: Call,
+        agent_id: int | None,
+        file_path: str,
+        cursor_value: str | None,
     ) -> bool:
         with self._connection.transaction():
             with self._connection.cursor() as cursor:
+                if cursor_value is not None:
+                    cursor.execute(
+                        "UPDATE sources SET cursor = %s, updated_at = now() WHERE id = %s",
+                        (cursor_value, source_id),
+                    )
                 cursor.execute(
                     """
                     INSERT INTO calls (

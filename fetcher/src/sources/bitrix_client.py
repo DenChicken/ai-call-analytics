@@ -4,6 +4,7 @@ from pathlib import Path
 
 import httpx
 
+from src import shutdown
 from src.config import NetworkConfig
 
 RETRYABLE_STATUS_CODES = (429, 500, 502, 503, 504)
@@ -27,7 +28,7 @@ class RateLimiter:
     def wait(self) -> None:
         remaining = self._min_interval - (time.monotonic() - self._last_call)
         if remaining > 0:
-            time.sleep(remaining)
+            shutdown.sleep(remaining)
         self._last_call = time.monotonic()
 
 
@@ -60,7 +61,7 @@ class BitrixClient:
             except httpx.RequestError as error:
                 delay = self._backoff_delay(attempt)
                 logger.warning("request to %s failed (%s), retrying in %.1fs", method, error, delay)
-                time.sleep(delay)
+                shutdown.sleep(delay)
                 continue
 
             if response.status_code in RETRYABLE_STATUS_CODES:
@@ -68,7 +69,7 @@ class BitrixClient:
                 logger.warning(
                     "method %s returned %s, retrying in %.1fs", method, response.status_code, delay
                 )
-                time.sleep(delay)
+                shutdown.sleep(delay)
                 continue
 
             if response.status_code != httpx.codes.OK:
@@ -79,7 +80,7 @@ class BitrixClient:
             if error_code in RETRYABLE_ERROR_CODES:
                 delay = self._backoff_delay(attempt)
                 logger.warning("method %s returned %s, retrying in %.1fs", method, error_code, delay)
-                time.sleep(delay)
+                shutdown.sleep(delay)
                 continue
             if error_code:
                 raise BitrixError(f"{method} returned {error_code}: {body.get('error_description')}")
@@ -109,4 +110,5 @@ class BitrixClient:
             response.raise_for_status()
             with target.open("wb") as handle:
                 for chunk in response.iter_bytes():
+                    shutdown.check()
                     handle.write(chunk)

@@ -1,6 +1,6 @@
 import logging
-import time
 
+from src import shutdown
 from src.config import Config
 from src.constants import TEMP_FILE_SUFFIX
 from src.database import Database
@@ -29,9 +29,15 @@ def run_once(config: Config, database: Database, source: Source) -> None:
         len(new_calls),
     )
 
+    if not new_calls:
+        database.set_cursor(source_id, batch.cursor)
+        logger.info("source %s: nothing to fetch, cursor moved to %s", source.name, batch.cursor)
+        return
+
     stored = 0
+    skipped = False
     for call in new_calls:
-        database.set_cursor(source_id, call.cursor)
+        shutdown.check()
         agent_id = database.upsert_agent(source_id, call.agent) if call.agent else None
 
         call_id = database.reserve_call_id()
@@ -42,18 +48,24 @@ def run_once(config: Config, database: Database, source: Source) -> None:
         try:
             source.download_audio(call, temp_path)
             temp_path.replace(final_path)
+        except shutdown.ShutdownRequested:
+            temp_path.unlink(missing_ok=True)
+            raise
         except Exception as error:
             logger.error("failed to download call %s: %s", call.external_id, error)
             temp_path.unlink(missing_ok=True)
+            skipped = True
             continue
 
         try:
+            cursor_value = None if skipped else call.cursor
             inserted = database.insert_call_with_recording(
-                call_id, source_id, call, agent_id, str(final_path)
+                call_id, source_id, call, agent_id, str(final_path), cursor_value
             )
         except Exception as error:
             logger.error("failed to store call %s: %s", call.external_id, error)
             final_path.unlink(missing_ok=True)
+            skipped = True
             continue
 
         if inserted:
@@ -63,7 +75,6 @@ def run_once(config: Config, database: Database, source: Source) -> None:
             final_path.unlink(missing_ok=True)
 
         if config.fetch.download_cooldown_seconds:
-            time.sleep(config.fetch.download_cooldown_seconds)
+            shutdown.sleep(config.fetch.download_cooldown_seconds)
 
-    database.set_cursor(source_id, batch.cursor)
     logger.info("source %s: stored %s new calls", source.name, stored)
