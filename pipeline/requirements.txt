@@ -1,4 +1,0 @@
-psycopg[binary]
-pydantic
-whisperx
-vllm

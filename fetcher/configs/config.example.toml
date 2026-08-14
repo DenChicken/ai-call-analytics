@@ -6,11 +6,11 @@ pending_dir = "./data/pending"
 temp_dir = "./data/temp"
 
 [fetch]
-interval_seconds = 300
+interval_seconds = 30
 min_call_duration_seconds = 30
 initial_lookback_days = 1
 max_records_per_cycle = 100
-download_cooldown_seconds = 1
+download_cooldown_seconds = 0
 
 [network]
 connect_timeout = 5
@@ -23,7 +23,7 @@ requests_per_second = 2
 
 [logging]
 level = "INFO"
-dir = "./logs/fetcher"
+dir = "./logs"
 
 [[source]]
 name = "crm_main"
