@@ -29,12 +29,12 @@ class Diarization:
     def diarize(self, audio_path: Path) -> list[Turn]:
         logger.info("diarizing %s", audio_path.name)
         with self._lock:
-            annotation = self._pipeline(
-                str(audio_path), max_speakers=self._config.max_speakers
-            )
+            output = self._pipeline(str(audio_path), max_speakers=self._config.max_speakers)
         turns = [
             Turn(start=segment.start, end=segment.end, speaker=speaker)
-            for segment, _, speaker in annotation.itertracks(yield_label=True)
+            for segment, _, speaker in output.exclusive_speaker_diarization.itertracks(
+                yield_label=True
+            )
         ]
         logger.info("diarized %s into %s turns", audio_path.name, len(turns))
         return turns

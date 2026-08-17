@@ -16,10 +16,10 @@ file = "./configs/pipeline/criteria.example.toml"
 hf_token_file = "./secrets/hf_token"
 
 [asr]
-repo_id = "Systran/faster-whisper-small"
-local_dir = "./models/faster-whisper-small"
+repo_id = "Systran/faster-whisper-large-v3"
+local_dir = "./models/faster-whisper-large-v3"
 device = "cpu"
-compute_type = "int8"
+compute_type = "int16"
 language = "ru"
 beam_size = 1
 vad_filter = true
@@ -41,9 +41,9 @@ max_new_tokens = 768
 temperature = 0.3
 
 [prompt]
-label = "v1-debug"
-system_file = "./configs/pipeline/prompts/system_v1.txt"
-user_file = "./configs/pipeline/prompts/user_v1.txt"
+label = "v1"
+system_file = "./configs/pipeline/prompts/system-example.txt"
+user_file = "./configs/pipeline/prompts/user-example.txt"
 
 [logging]
 level = "DEBUG"

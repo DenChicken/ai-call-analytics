@@ -1,5 +1,3 @@
-DEFAULT_CONFIG_PATH = "configs/config.toml"
-
 LOG_FILE_TIME_FORMAT = "%Y%m%d-%H%M%S"
 LOG_FILE_TEMPLATE = "fetcher-{timestamp}.log"
 LOG_LATEST_NAME = "latest.log"

@@ -1,0 +1,4 @@
+psycopg[binary]>=3.2
+huggingface_hub>=0.26
+pyyaml>=6.0
+pyannote.audio>=4.0

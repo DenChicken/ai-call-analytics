@@ -9,6 +9,7 @@ from src.constants import (
     CLAIMABLE_STATUSES,
     CLAIMED_STATUS,
     RELEASED_STATUS,
+    STAGE_PRIORITY,
     STATUS_DONE,
     STATUS_TRANSCRIBED,
 )
@@ -85,11 +86,11 @@ class Database:
                         FROM processing_jobs j
                         JOIN calls c ON c.id = j.call_id
                         WHERE j.status = ANY(%s) AND j.attempts < %s
-                        ORDER BY j.updated_at
+                        ORDER BY array_position(%s, j.status), j.updated_at
                         FOR UPDATE OF j SKIP LOCKED
                         LIMIT 1
                         """,
-                        (list(CLAIMABLE_STATUSES), max_attempts),
+                        (list(CLAIMABLE_STATUSES), max_attempts, list(STAGE_PRIORITY)),
                     )
                     row = cursor.fetchone()
                     if row is None:
@@ -159,7 +160,8 @@ class Database:
                     cursor.execute(
                         """
                         UPDATE processing_jobs
-                        SET status = %s, claimed_at = NULL, last_error = NULL, updated_at = now()
+                        SET status = %s, attempts = 0, claimed_at = NULL,
+                            last_error = NULL, updated_at = now()
                         WHERE call_id = %s
                         """,
                         (STATUS_TRANSCRIBED, call_id),

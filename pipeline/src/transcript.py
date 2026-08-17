@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 
+from src.config import Criterion
 from src.constants import (
     CRITERIA_LINE_TEMPLATE,
     MILLISECONDS_PER_SECOND,
@@ -7,6 +8,7 @@ from src.constants import (
     TRANSCRIPT_LINE_TEMPLATE,
     TRANSCRIPT_TIME_FORMAT,
 )
+
 
 @dataclass(frozen=True)
 class Word:
@@ -89,10 +91,9 @@ def render_transcript(segments: list[Segment]) -> str:
     )
 
 
-def render_criteria(criteria) -> str:
+def render_criteria(criteria: list[Criterion]) -> str:
     return "\n".join(
         CRITERIA_LINE_TEMPLATE.format(
-            code=criterion.code,
             label=criterion.label,
             description=criterion.description,
         )

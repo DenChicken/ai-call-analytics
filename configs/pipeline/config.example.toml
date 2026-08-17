@@ -42,8 +42,8 @@ temperature = 0.3
 
 [prompt]
 label = "v1"
-system_file = "./configs/pipeline/prompts/system_v1.txt"
-user_file = "./configs/pipeline/prompts/user_v1.txt"
+system_file = "./configs/pipeline/prompts/system-example.txt"
+user_file = "./configs/pipeline/prompts/user-example.txt"
 
 [logging]
 level = "DEBUG"
