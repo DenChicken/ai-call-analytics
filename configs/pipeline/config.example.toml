@@ -1,0 +1,48 @@
+[database]
+dsn_file = "./secrets/database_dsn"
+
+[storage]
+done_dir = "./data/done"
+
+[worker]
+count = 1
+poll_interval_seconds = 15
+max_attempts = 3
+
+[criteria]
+file = "./configs/pipeline/criteria.toml"
+
+[asr]
+repo_id = "Systran/faster-whisper-large-v3"
+local_dir = "./models/faster-whisper-large-v3"
+device = "cuda"
+compute_type = "float16"
+language = "ru"
+beam_size = 5
+vad_filter = true
+
+[diarization]
+repo_id = "pyannote/speaker-diarization-3.1"
+local_dir = "./models/pyannote-speaker-diarization-3.1"
+hf_token_file = "./secrets/hf_token"
+device = "cuda"
+max_speakers = 2
+
+[llm]
+repo_id = "Qwen/Qwen3-8B"
+local_dir = "./models/Qwen3-8B"
+device = "cuda"
+torch_dtype = "bfloat16"
+load_in_4bit = true
+max_input_tokens = 24000
+max_new_tokens = 2048
+temperature = 0.3
+
+[prompt]
+label = "v1"
+system_file = "./configs/pipeline/prompts/system_v1.txt"
+user_file = "./configs/pipeline/prompts/user_v1.txt"
+
+[logging]
+level = "INFO"
+dir = "./logs"

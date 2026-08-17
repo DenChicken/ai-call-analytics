@@ -100,13 +100,13 @@ class Database:
         self._connection.commit()
         return row["id"]
 
-    def insert_call_with_recording(
+    def insert_call_with_job(
         self,
         call_id: int,
         source_id: int,
         call: Call,
         agent_id: int | None,
-        file_path: str,
+        audio_path: str,
         cursor_value: str | None,
     ) -> bool:
         with self._connection.transaction():
@@ -120,9 +120,9 @@ class Database:
                     """
                     INSERT INTO calls (
                         id, source_id, external_id, agent_id, started_at, duration_seconds,
-                        direction, client_number, subject, crm_link, raw
+                        direction, client_number, subject, crm_link, audio_path, raw
                     )
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (source_id, external_id) DO NOTHING
                     RETURNING id
                     """,
@@ -137,6 +137,7 @@ class Database:
                         call.client_number,
                         call.subject,
                         call.crm_link,
+                        audio_path,
                         json.dumps(call.raw, ensure_ascii=False),
                     ),
                 )
@@ -145,7 +146,7 @@ class Database:
                     return False
 
                 cursor.execute(
-                    "INSERT INTO recordings (call_id, file_path, status) VALUES (%s, %s, %s)",
-                    (call_id, file_path, STATUS_PENDING),
+                    "INSERT INTO processing_jobs (call_id, status) VALUES (%s, %s)",
+                    (call_id, STATUS_PENDING),
                 )
         return True

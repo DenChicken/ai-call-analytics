@@ -59,7 +59,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
 
         try:
             cursor_value = None if skipped else call.cursor
-            inserted = database.insert_call_with_recording(
+            inserted = database.insert_call_with_job(
                 call_id, source_id, call, agent_id, str(final_path), cursor_value
             )
         except Exception as error:
