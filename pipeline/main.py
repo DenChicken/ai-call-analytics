@@ -11,6 +11,7 @@ from src.database import Database
 from src.diarization import Diarization
 from src.llm import Llm
 from src.logging_setup import setup_logging
+from src.preflight import PreflightError, check_audio_decoder
 from src.worker import Models, run
 
 logger = logging.getLogger(__name__)
@@ -33,6 +34,12 @@ def main() -> int:
 
     setup_logging(config.logging)
     config.storage.done_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        check_audio_decoder()
+    except PreflightError as error:
+        logger.error("%s", error)
+        return 1
 
     shutdown.install_handlers()
 

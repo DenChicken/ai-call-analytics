@@ -48,6 +48,7 @@ def run(config: Config, database: Database, models: Models) -> None:
             status = STATUS_FAILED if exhausted else task.stage
             database.release_task(task.call_id, status, str(error))
             logger.info("call %s moved to %s after attempt %s", task.call_id, status, task.attempts)
+            shutdown.check()
 
 
 def _transcribe(database: Database, models: Models, task: Task) -> None:
