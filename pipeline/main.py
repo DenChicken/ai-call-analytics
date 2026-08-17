@@ -8,10 +8,8 @@ from src.asr import Asr
 from src.config import Config, ConfigError, load_config
 from src.constants import SHUTDOWN_EXIT_CODE, WORKER_THREAD_NAME
 from src.database import Database
-from src.diarization import Diarization
 from src.llm import Llm
 from src.logging_setup import setup_logging
-from src.preflight import PreflightError, check_audio_decoder
 from src.worker import Models, run
 
 logger = logging.getLogger(__name__)
@@ -35,12 +33,6 @@ def main() -> int:
     setup_logging(config.logging)
     config.storage.done_dir.mkdir(parents=True, exist_ok=True)
 
-    try:
-        check_audio_decoder()
-    except PreflightError as error:
-        logger.error("%s", error)
-        return 1
-
     shutdown.install_handlers()
 
     database = Database(config.database.dsn, config.worker.count)
@@ -52,11 +44,10 @@ def main() -> int:
         if restored:
             logger.info("restored %s interrupted jobs", restored)
 
-        models = Models(
-            asr=Asr(config.asr),
-            diarization=Diarization(config.diarization),
-            llm=Llm(config.llm),
-        )
+        roles_llm = Llm(config.roles_llm)
+        shared = roles_llm if roles_llm.shares_weights_with(config.analysis_llm) else None
+        analysis_llm = Llm(config.analysis_llm, loaded=shared)
+        models = Models(asr=Asr(config.asr), roles_llm=roles_llm, analysis_llm=analysis_llm)
     except Exception:
         logger.exception("initialization failed")
         database.close()

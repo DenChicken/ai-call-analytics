@@ -24,13 +24,17 @@ language = "ru"
 beam_size = 5
 vad_filter = true
 
-[diarization]
-repo_id = "pyannote/speaker-diarization-3.1"
-local_dir = "./models/pyannote-speaker-diarization-3.1"
+[roles_llm]
+repo_id = "Qwen/Qwen3-8B"
+local_dir = "./models/Qwen3-8B"
 device = "cuda"
-max_speakers = 2
+torch_dtype = "bfloat16"
+load_in_4bit = true
+max_input_tokens = 24000
+max_new_tokens = 4096
+temperature = 0.0
 
-[llm]
+[analysis_llm]
 repo_id = "Qwen/Qwen3-8B"
 local_dir = "./models/Qwen3-8B"
 device = "cuda"
@@ -42,8 +46,10 @@ temperature = 0.3
 
 [prompt]
 label = "v1"
-system_file = "./configs/pipeline/prompts/system-example.txt"
-user_file = "./configs/pipeline/prompts/user-example.txt"
+roles_system_file = "./configs/pipeline/prompts/roles-system-example.txt"
+roles_user_file = "./configs/pipeline/prompts/roles-user-example.txt"
+analysis_system_file = "./configs/pipeline/prompts/analysis-system-example.txt"
+analysis_user_file = "./configs/pipeline/prompts/analysis-user-example.txt"
 
 [logging]
 level = "DEBUG"

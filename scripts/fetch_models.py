@@ -1,27 +1,16 @@
 import argparse
-import importlib
-import inspect
 import sys
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.errors import GatedRepoError
-from pyannote.audio.core.model import AssetFileName
 
-MODEL_SECTIONS = ("asr", "diarization", "llm")
+MODEL_SECTIONS = ("asr", "roles_llm", "analysis_llm")
 MODELS_SECTION = "models"
-DIARIZATION_SECTION = "diarization"
 TOKEN_KEY = "hf_token_file"
 REQUIRED_MODEL_KEYS = ("repo_id", "local_dir")
-
-OFFLINE_CONFIG_NAME = "config.offline.yaml"
-DEPENDENCY_DIR_NAME = "dependencies"
-CHECKPOINT_KEY = "checkpoint"
-SUBFOLDER_KEY = "subfolder"
-REPO_ID_SEPARATOR = "/"
 
 
 class ScriptError(Exception):
@@ -34,20 +23,6 @@ class ModelSpec:
     repo_id: str
     local_dir: Path
     token: str
-
-
-@dataclass(frozen=True)
-class Dependency:
-    param: str
-    repo_id: str
-    subfolder: str | None
-
-    def download_dir(self, root: Path) -> Path:
-        return root / DEPENDENCY_DIR_NAME / self.repo_id.split(REPO_ID_SEPARATOR)[-1]
-
-    def checkpoint_dir(self, root: Path) -> Path:
-        target = self.download_dir(root)
-        return target / self.subfolder if self.subfolder else target
 
 
 def read_secret_file(path: Path) -> str:
@@ -77,11 +52,15 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
     token = read_secret_file(Path(section(MODELS_SECTION)[TOKEN_KEY]))
 
     specs = []
+    seen = set()
     for name in MODEL_SECTIONS:
         entry = section(name)
         for key in REQUIRED_MODEL_KEYS:
             if key not in entry:
                 raise ScriptError(f"missing required key '{key}' in [{name}]")
+        if entry["repo_id"] in seen:
+            continue
+        seen.add(entry["repo_id"])
         specs.append(
             ModelSpec(
                 section=name,
@@ -93,58 +72,18 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
     return specs
 
 
-def read_dependencies(spec: ModelSpec) -> list[Dependency]:
-    """Repositories the pipeline pulls in beyond its own, resolved from its config and class."""
-    config_path = spec.local_dir / AssetFileName.Pipeline.value
-    if spec.section != DIARIZATION_SECTION or not config_path.is_file():
-        return []
-
-    pipeline = yaml.safe_load(config_path.read_text(encoding="utf-8"))["pipeline"]
-    params = pipeline.get("params") or {}
-    module_name, _, class_name = pipeline["name"].rpartition(".")
-    pipeline_class = getattr(importlib.import_module(module_name), class_name)
-
-    dependencies = []
-    for param in inspect.signature(pipeline_class.__init__).parameters.values():
-        declared = params.get(param.name)
-        source = declared if declared is not None else param.default
-        if isinstance(source, str) and REPO_ID_SEPARATOR in source:
-            source = {CHECKPOINT_KEY: source}
-        if not isinstance(source, dict) or CHECKPOINT_KEY not in source:
-            continue
-        repo_id = source[CHECKPOINT_KEY]
-        if Path(repo_id).is_dir():
-            continue
-        dependencies.append(
-            Dependency(
-                param=param.name,
-                repo_id=repo_id,
-                subfolder=source.get(SUBFOLDER_KEY),
-            )
-        )
-    return dependencies
-
-
 def check_access(specs: list[ModelSpec]) -> int:
     api = HfApi()
     unreachable = []
 
     for spec in specs:
-        dependencies = read_dependencies(spec)
-        for repo_id in [spec.repo_id] + [d.repo_id for d in dependencies]:
-            try:
-                api.auth_check(repo_id, token=spec.token)
-                print(f"[{spec.section}] {repo_id}: ok")
-            except Exception as error:
-                reason = "gated" if isinstance(error, GatedRepoError) else error
-                print(f"[{spec.section}] {repo_id}: FAILED: {reason}")
-                unreachable.append(repo_id)
-
-        if spec.section == DIARIZATION_SECTION and not dependencies:
-            print(
-                f"[{spec.section}] nested dependencies stay unknown until {spec.repo_id} "
-                "is downloaded, so re-run this check afterwards"
-            )
+        try:
+            api.auth_check(spec.repo_id, token=spec.token)
+            print(f"[{spec.section}] {spec.repo_id}: ok")
+        except Exception as error:
+            reason = "gated" if isinstance(error, GatedRepoError) else error
+            print(f"[{spec.section}] {spec.repo_id}: FAILED: {reason}")
+            unreachable.append(spec.repo_id)
 
     if unreachable:
         print("\naccept the conditions while signed in with the account owning", file=sys.stderr)
@@ -157,34 +96,15 @@ def check_access(specs: list[ModelSpec]) -> int:
     return 0
 
 
-def download_repo(repo_id: str, local_dir: Path, token: str) -> None:
-    local_dir.mkdir(parents=True, exist_ok=True)
-    try:
-        snapshot_download(repo_id=repo_id, local_dir=str(local_dir), token=token)
-    except GatedRepoError as error:
-        raise ScriptError(f"{repo_id} is gated, run with --check for details") from error
-
-
 def download(spec: ModelSpec) -> None:
     print(f"[{spec.section}] {spec.repo_id} -> {spec.local_dir}", flush=True)
-    download_repo(spec.repo_id, spec.local_dir, spec.token)
-
-    dependencies = read_dependencies(spec)
-    if not dependencies:
-        return
-
-    config_path = spec.local_dir / AssetFileName.Pipeline.value
-    config = yaml.safe_load(config_path.read_text(encoding="utf-8"))
-    params = config["pipeline"].setdefault("params", {})
-
-    for dependency in dependencies:
-        print(f"[{spec.section}] {dependency.param}: {dependency.repo_id}", flush=True)
-        download_repo(dependency.repo_id, dependency.download_dir(spec.local_dir), spec.token)
-        params[dependency.param] = str(dependency.checkpoint_dir(spec.local_dir))
-
-    offline_path = spec.local_dir / OFFLINE_CONFIG_NAME
-    offline_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-    print(f"[{spec.section}] offline config written to {offline_path}", flush=True)
+    spec.local_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot_download(
+            repo_id=spec.repo_id, local_dir=str(spec.local_dir), token=spec.token
+        )
+    except GatedRepoError as error:
+        raise ScriptError(f"{spec.repo_id} is gated, run with --check for details") from error
 
 
 def main() -> int:

@@ -31,11 +31,18 @@ STAGE_PRIORITY = (STATUS_TRANSCRIBED, STATUS_PENDING)
 DONE_DIR_TEMPLATE = "%Y-%m/%d"
 
 TRANSCRIPT_LINE_TEMPLATE = "[{start}] {speaker}: {text}"
+NUMBERED_LINE_TEMPLATE = "{index}. [{start}] {text}"
 TRANSCRIPT_TIME_FORMAT = "{minutes:02d}:{seconds:02d}"
 CRITERIA_LINE_TEMPLATE = "- {label}: {description}"
+ROLE_LABELS = {"manager": "Менеджер", "client": "Клиент"}
+UNKNOWN_ROLE_LABEL = "Участник"
 
 PROMPT_CRITERIA_PLACEHOLDER = "criteria"
 PROMPT_TRANSCRIPT_PLACEHOLDER = "transcript"
+PROMPT_MANAGER_PLACEHOLDER = "manager"
+UNKNOWN_MANAGER = "имя неизвестно"
+
+SCORES_FIELD = "scores"
 
 MILLISECONDS_PER_SECOND = 1000
 SECONDS_PER_MINUTE = 60

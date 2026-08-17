@@ -4,14 +4,12 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src import shutdown
-from src.analysis import analyze
+from src.analysis import analyze, attribute_roles
 from src.asr import Asr
 from src.config import Config
 from src.constants import DONE_DIR_TEMPLATE, STATUS_FAILED, STATUS_PENDING
 from src.database import Database, Task
-from src.diarization import Diarization
 from src.llm import Llm
-from src.transcript import build_segments
 
 logger = logging.getLogger(__name__)
 
@@ -19,8 +17,8 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Models:
     asr: Asr
-    diarization: Diarization
-    llm: Llm
+    roles_llm: Llm
+    analysis_llm: Llm
 
 
 def run(config: Config, database: Database, models: Models) -> None:
@@ -56,17 +54,12 @@ def _transcribe(database: Database, models: Models, task: Task) -> None:
     if not audio_path.is_file():
         raise FileNotFoundError(f"audio file not found: {audio_path}")
 
-    words = models.asr.transcribe(audio_path)
-    if not words:
-        raise ValueError("transcription produced no words")
+    segments = models.asr.transcribe(audio_path)
+    if not segments:
+        raise ValueError("transcription produced no lines")
 
-    turns = models.diarization.diarize(audio_path)
-    if not turns:
-        raise ValueError("diarization produced no speaker turns")
-
-    segments = build_segments(words, turns)
     database.save_transcript(task.call_id, segments)
-    logger.info("call %s transcribed into %s segments", task.call_id, len(segments))
+    logger.info("call %s transcribed into %s lines", task.call_id, len(segments))
 
 
 def _analyze(
@@ -80,12 +73,18 @@ def _analyze(
     if not criteria:
         raise ValueError("no enabled criteria")
 
-    analysis, scores = analyze(config, models.llm, criteria, segments)
+    segments = attribute_roles(
+        config, models.roles_llm, segments, database.manager_name(task.call_id)
+    )
+    database.save_roles(task.call_id, segments)
+
+    analysis, scores = analyze(config, models.analysis_llm, criteria, segments)
     final_path = _move_to_done(config, task)
     metadata = {
         "asr_model": models.asr.model_name,
-        "llm_model": models.llm.model_name,
-        "prompt_label": config.prompt.label,
+        "roles_model": models.roles_llm.model_name,
+        "analysis_model": models.analysis_llm.model_name,
+        "prompt_label": config.prompt_label,
         "processing_seconds": int(time.monotonic() - started),
     }
     database.save_analysis(task.call_id, analysis, scores, metadata, str(final_path))

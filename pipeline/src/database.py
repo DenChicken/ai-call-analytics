@@ -149,11 +149,11 @@ class Database:
                     cursor.executemany(
                         """
                         INSERT INTO transcript_segments
-                            (call_id, idx, speaker, start_ms, end_ms, text)
+                            (call_id, idx, role, start_ms, end_ms, text)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
                         [
-                            (call_id, idx, s.speaker, s.start_ms, s.end_ms, s.text)
+                            (call_id, idx, s.role, s.start_ms, s.end_ms, s.text)
                             for idx, s in enumerate(segments)
                         ],
                     )
@@ -181,29 +181,29 @@ class Database:
                     cursor.execute(
                         """
                         INSERT INTO analyses (
-                            call_id, manager_speaker, summary, strengths, weaknesses,
-                            asr_model, llm_model, prompt_label, processing_seconds
+                            call_id, summary, strengths, weaknesses, asr_model,
+                            roles_model, analysis_model, prompt_label, processing_seconds
                         )
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (call_id) DO UPDATE
-                        SET manager_speaker = EXCLUDED.manager_speaker,
-                            summary = EXCLUDED.summary,
+                        SET summary = EXCLUDED.summary,
                             strengths = EXCLUDED.strengths,
                             weaknesses = EXCLUDED.weaknesses,
                             asr_model = EXCLUDED.asr_model,
-                            llm_model = EXCLUDED.llm_model,
+                            roles_model = EXCLUDED.roles_model,
+                            analysis_model = EXCLUDED.analysis_model,
                             prompt_label = EXCLUDED.prompt_label,
                             processing_seconds = EXCLUDED.processing_seconds,
                             created_at = now()
                         """,
                         (
                             call_id,
-                            analysis["manager_speaker"],
                             analysis["summary"],
                             json.dumps(analysis["strengths"], ensure_ascii=False),
                             json.dumps(analysis["weaknesses"], ensure_ascii=False),
                             metadata["asr_model"],
-                            metadata["llm_model"],
+                            metadata["roles_model"],
+                            metadata["analysis_model"],
                             metadata["prompt_label"],
                             metadata["processing_seconds"],
                         ),
@@ -237,7 +237,7 @@ class Database:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    SELECT speaker, start_ms, end_ms, text FROM transcript_segments
+                    SELECT role, start_ms, end_ms, text FROM transcript_segments
                     WHERE call_id = %s ORDER BY idx
                     """,
                     (call_id,),
@@ -245,10 +245,33 @@ class Database:
                 rows = cursor.fetchall()
         return [
             Segment(
-                speaker=row["speaker"],
+                role=row["role"],
                 start_ms=row["start_ms"],
                 end_ms=row["end_ms"],
                 text=row["text"],
             )
             for row in rows
         ]
+
+    def manager_name(self, call_id: int) -> str | None:
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT a.display_name FROM calls c
+                    JOIN agents a ON a.id = c.agent_id
+                    WHERE c.id = %s
+                    """,
+                    (call_id,),
+                )
+                row = cursor.fetchone()
+        return row["display_name"] if row else None
+
+    def save_roles(self, call_id: int, segments: list[Segment]) -> None:
+        with self._pool.connection() as connection:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.executemany(
+                        "UPDATE transcript_segments SET role = %s WHERE call_id = %s AND idx = %s",
+                        [(s.role, call_id, idx) for idx, s in enumerate(segments)],
+                    )

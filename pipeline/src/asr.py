@@ -5,7 +5,8 @@ from pathlib import Path
 from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
-from src.transcript import Word
+from src.constants import MILLISECONDS_PER_SECOND
+from src.transcript import Segment
 
 logger = logging.getLogger(__name__)
 
@@ -29,20 +30,23 @@ class Asr:
     def model_name(self) -> str:
         return self._config.repo_id
 
-    def transcribe(self, audio_path: Path) -> list[Word]:
+    def transcribe(self, audio_path: Path) -> list[Segment]:
         logger.info("transcribing %s", audio_path.name)
         with self._lock:
-            segments, _ = self._model.transcribe(
+            raw_segments, _ = self._model.transcribe(
                 str(audio_path),
                 language=self._config.language,
                 beam_size=self._config.beam_size,
                 vad_filter=self._config.vad_filter,
-                word_timestamps=True,
             )
-            words = [
-                Word(start=word.start, end=word.end, text=word.word)
-                for segment in segments
-                for word in (segment.words or [])
+            segments = [
+                Segment(
+                    start_ms=int(segment.start * MILLISECONDS_PER_SECOND),
+                    end_ms=int(segment.end * MILLISECONDS_PER_SECOND),
+                    text=text,
+                )
+                for segment in raw_segments
+                if (text := segment.text.strip())
             ]
-        logger.info("transcribed %s into %s words", audio_path.name, len(words))
-        return words
+        logger.info("transcribed %s into %s lines", audio_path.name, len(segments))
+        return segments

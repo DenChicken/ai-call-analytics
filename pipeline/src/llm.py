@@ -26,8 +26,20 @@ class LlmError(Exception):
     pass
 
 
+def _weights_key(config: LlmConfig) -> tuple:
+    return (config.local_dir, config.device, config.torch_dtype, config.load_in_4bit)
+
+
 class Llm:
-    def __init__(self, config: LlmConfig):
+    def __init__(self, config: LlmConfig, loaded: "Llm | None" = None):
+        self._config = config
+        if loaded is not None:
+            logger.info("reusing loaded llm %s", config.repo_id)
+            self._tokenizer = loaded._tokenizer
+            self._model = loaded._model
+            self._lock = loaded._lock
+            return
+
         if not config.local_dir.is_dir():
             raise FileNotFoundError(
                 f"llm directory not found: {config.local_dir}, run scripts/fetch_models.py"
@@ -41,12 +53,14 @@ class Llm:
             device_map=config.device,
         )
         self._model.eval()
-        self._config = config
         self._lock = threading.Lock()
 
     @property
     def model_name(self) -> str:
         return self._config.repo_id
+
+    def shares_weights_with(self, config: LlmConfig) -> bool:
+        return _weights_key(config) == _weights_key(self._config)
 
     def generate(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
         messages = [
@@ -65,9 +79,7 @@ class Llm:
             truncation=True,
             max_length=self._config.max_input_tokens,
         ).to(self._model.device)
-        logger.info(
-            "generating analysis from %s input tokens", inputs["input_ids"].shape[1]
-        )
+        logger.info("generating from %s input tokens", inputs["input_ids"].shape[1])
 
         prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
             self._tokenizer, JsonSchemaParser(schema, config=parser_config())
@@ -84,9 +96,14 @@ class Llm:
                     pad_token_id=self._tokenizer.eos_token_id,
                 )
 
-        completion = self._tokenizer.decode(
-            generated[0][inputs["input_ids"].shape[1] :], skip_special_tokens=True
-        )
+        produced = generated[0][inputs["input_ids"].shape[1] :]
+        if len(produced) >= self._config.max_new_tokens:
+            raise LlmError(
+                f"generation hit the max_new_tokens limit of {self._config.max_new_tokens}, "
+                "raise it in the config"
+            )
+
+        completion = self._tokenizer.decode(produced, skip_special_tokens=True)
         try:
             return json.loads(completion)
         except json.JSONDecodeError as error:

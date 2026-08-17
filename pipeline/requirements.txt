@@ -1,8 +1,6 @@
 psycopg[binary]>=3.2
 psycopg_pool>=3.2
 faster-whisper>=1.1
-pyannote.audio>=4.0
-torchcodec>=0.6
 torch>=2.4
 transformers>=4.51,<5
 accelerate>=1.0

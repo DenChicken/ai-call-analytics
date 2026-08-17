@@ -62,12 +62,12 @@ CREATE TABLE IF NOT EXISTS criteria (
 
 CREATE TABLE IF NOT EXISTS analyses (
     call_id             BIGINT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
-    manager_speaker     TEXT NOT NULL,
     summary             TEXT NOT NULL,
     strengths           JSONB NOT NULL DEFAULT '[]'::jsonb,
     weaknesses          JSONB NOT NULL DEFAULT '[]'::jsonb,
     asr_model           TEXT NOT NULL,
-    llm_model           TEXT NOT NULL,
+    roles_model         TEXT NOT NULL,
+    analysis_model      TEXT NOT NULL,
     prompt_label        TEXT NOT NULL,
     processing_seconds  INTEGER NOT NULL,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -76,11 +76,12 @@ CREATE TABLE IF NOT EXISTS analyses (
 CREATE TABLE IF NOT EXISTS transcript_segments (
     call_id   BIGINT NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
     idx       INTEGER NOT NULL,
-    speaker   TEXT NOT NULL,
+    role      TEXT,
     start_ms  INTEGER NOT NULL,
     end_ms    INTEGER NOT NULL,
     text      TEXT NOT NULL,
-    PRIMARY KEY (call_id, idx)
+    PRIMARY KEY (call_id, idx),
+    CONSTRAINT transcript_segments_role_check CHECK (role IN ('manager', 'client'))
 );
 
 CREATE TABLE IF NOT EXISTS criterion_scores (

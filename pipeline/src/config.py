@@ -2,7 +2,11 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.constants import PROMPT_CRITERIA_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER
+from src.constants import (
+    PROMPT_CRITERIA_PLACEHOLDER,
+    PROMPT_MANAGER_PLACEHOLDER,
+    PROMPT_TRANSCRIPT_PLACEHOLDER,
+)
 
 
 class ConfigError(Exception):
@@ -38,14 +42,6 @@ class AsrConfig:
 
 
 @dataclass(frozen=True)
-class DiarizationConfig:
-    repo_id: str
-    local_dir: Path
-    device: str
-    max_speakers: int
-
-
-@dataclass(frozen=True)
 class LlmConfig:
     repo_id: str
     local_dir: Path
@@ -59,7 +55,6 @@ class LlmConfig:
 
 @dataclass(frozen=True)
 class PromptConfig:
-    label: str
     system: str
     user: str
 
@@ -85,9 +80,11 @@ class Config:
     storage: StorageConfig
     worker: WorkerConfig
     asr: AsrConfig
-    diarization: DiarizationConfig
-    llm: LlmConfig
-    prompt: PromptConfig
+    roles_llm: LlmConfig
+    analysis_llm: LlmConfig
+    prompt_label: str
+    roles_prompt: PromptConfig
+    analysis_prompt: PromptConfig
     logging: LoggingConfig
     criteria: list[Criterion]
 
@@ -125,12 +122,32 @@ def _read_text_file(path: str | Path, where: str) -> str:
     return text
 
 
-def _read_user_prompt(path: str | Path) -> str:
-    text = _read_text_file(path, "prompt")
-    for placeholder in (PROMPT_CRITERIA_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER):
-        if "{" + placeholder + "}" not in text:
-            raise ConfigError(f"user prompt {path} must contain the {{{placeholder}}} placeholder")
-    return text
+def _load_llm(raw: dict, name: str) -> LlmConfig:
+    section = _section(raw, name)
+    return LlmConfig(
+        repo_id=_require(section, "repo_id", name),
+        local_dir=Path(_require(section, "local_dir", name)).resolve(),
+        device=_require(section, "device", name),
+        torch_dtype=_require(section, "torch_dtype", name),
+        load_in_4bit=_require(section, "load_in_4bit", name),
+        max_input_tokens=_require(section, "max_input_tokens", name),
+        max_new_tokens=_require(section, "max_new_tokens", name),
+        temperature=_require(section, "temperature", name),
+    )
+
+
+def _load_prompt(section: dict, name: str, placeholders: tuple[str, ...]) -> PromptConfig:
+    user_path = _require(section, f"{name}_user_file", "prompt")
+    user = _read_text_file(user_path, "prompt")
+    for placeholder in placeholders:
+        if "{" + placeholder + "}" not in user:
+            raise ConfigError(
+                f"user prompt {user_path} must contain the {{{placeholder}}} placeholder"
+            )
+    return PromptConfig(
+        system=_read_text_file(_require(section, f"{name}_system_file", "prompt"), "prompt"),
+        user=user,
+    )
 
 
 def _load_criteria(path: str | Path) -> list[Criterion]:
@@ -175,8 +192,6 @@ def load_config(path: str | Path) -> Config:
     worker_raw = _section(raw, "worker")
     criteria_raw = _section(raw, "criteria")
     asr_raw = _section(raw, "asr")
-    diarization_raw = _section(raw, "diarization")
-    llm_raw = _section(raw, "llm")
     prompt_raw = _section(raw, "prompt")
     logging_raw = _section(raw, "logging")
 
@@ -200,28 +215,11 @@ def load_config(path: str | Path) -> Config:
         vad_filter=_require(asr_raw, "vad_filter", "asr"),
     )
 
-    diarization = DiarizationConfig(
-        repo_id=_require(diarization_raw, "repo_id", "diarization"),
-        local_dir=Path(_require(diarization_raw, "local_dir", "diarization")).resolve(),
-        device=_require(diarization_raw, "device", "diarization"),
-        max_speakers=_require(diarization_raw, "max_speakers", "diarization"),
+    roles_prompt = _load_prompt(
+        prompt_raw, "roles", (PROMPT_MANAGER_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER)
     )
-
-    llm = LlmConfig(
-        repo_id=_require(llm_raw, "repo_id", "llm"),
-        local_dir=Path(_require(llm_raw, "local_dir", "llm")).resolve(),
-        device=_require(llm_raw, "device", "llm"),
-        torch_dtype=_require(llm_raw, "torch_dtype", "llm"),
-        load_in_4bit=_require(llm_raw, "load_in_4bit", "llm"),
-        max_input_tokens=_require(llm_raw, "max_input_tokens", "llm"),
-        max_new_tokens=_require(llm_raw, "max_new_tokens", "llm"),
-        temperature=_require(llm_raw, "temperature", "llm"),
-    )
-
-    prompt = PromptConfig(
-        label=_require(prompt_raw, "label", "prompt"),
-        system=_read_text_file(_require(prompt_raw, "system_file", "prompt"), "prompt"),
-        user=_read_user_prompt(_require(prompt_raw, "user_file", "prompt")),
+    analysis_prompt = _load_prompt(
+        prompt_raw, "analysis", (PROMPT_CRITERIA_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER)
     )
 
     logging_config = LoggingConfig(
@@ -236,9 +234,11 @@ def load_config(path: str | Path) -> Config:
         storage=storage,
         worker=worker,
         asr=asr,
-        diarization=diarization,
-        llm=llm,
-        prompt=prompt,
+        roles_llm=_load_llm(raw, "roles_llm"),
+        analysis_llm=_load_llm(raw, "analysis_llm"),
+        prompt_label=_require(prompt_raw, "label", "prompt"),
+        roles_prompt=roles_prompt,
+        analysis_prompt=analysis_prompt,
         logging=logging_config,
         criteria=_load_criteria(_require(criteria_raw, "file", "criteria")),
     )
