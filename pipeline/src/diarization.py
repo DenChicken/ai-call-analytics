@@ -8,14 +8,14 @@ from pyannote.audio import Pipeline
 from src.config import DiarizationConfig
 from src.transcript import Turn
 
-CONFIG_FILE_NAME = "config.yaml"
+OFFLINE_CONFIG_NAME = "config.offline.yaml"
 
 logger = logging.getLogger(__name__)
 
 
 class Diarization:
     def __init__(self, config: DiarizationConfig):
-        pipeline_config = config.local_dir / CONFIG_FILE_NAME
+        pipeline_config = config.local_dir / OFFLINE_CONFIG_NAME
         if not pipeline_config.is_file():
             raise FileNotFoundError(
                 f"diarization config not found: {pipeline_config}, run scripts/fetch_models.py"
@@ -27,6 +27,7 @@ class Diarization:
         self._lock = threading.Lock()
 
     def diarize(self, audio_path: Path) -> list[Turn]:
+        logger.info("diarizing %s", audio_path.name)
         with self._lock:
             annotation = self._pipeline(
                 str(audio_path), max_speakers=self._config.max_speakers

@@ -41,7 +41,6 @@ class AsrConfig:
 class DiarizationConfig:
     repo_id: str
     local_dir: Path
-    hf_token: str
     device: str
     max_speakers: int
 
@@ -69,6 +68,8 @@ class PromptConfig:
 class LoggingConfig:
     level: str
     dir: Path
+    external_logs: bool
+    external_level: str
 
 
 @dataclass(frozen=True)
@@ -202,7 +203,6 @@ def load_config(path: str | Path) -> Config:
     diarization = DiarizationConfig(
         repo_id=_require(diarization_raw, "repo_id", "diarization"),
         local_dir=Path(_require(diarization_raw, "local_dir", "diarization")).resolve(),
-        hf_token=read_secret_file(_require(diarization_raw, "hf_token_file", "diarization")),
         device=_require(diarization_raw, "device", "diarization"),
         max_speakers=_require(diarization_raw, "max_speakers", "diarization"),
     )
@@ -227,6 +227,8 @@ def load_config(path: str | Path) -> Config:
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
         dir=Path(_require(logging_raw, "dir", "logging")),
+        external_logs=_require(logging_raw, "external_logs", "logging"),
+        external_level=_require(logging_raw, "external_level", "logging"),
     )
 
     return Config(

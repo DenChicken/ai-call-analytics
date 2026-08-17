@@ -36,45 +36,50 @@ def run_once(config: Config, database: Database, source: Source) -> None:
 
     stored = 0
     skipped = False
-    for call in new_calls:
-        shutdown.check()
-        agent_id = database.upsert_agent(source_id, call.agent) if call.agent else None
+    total = len(new_calls)
+    try:
+        for number, call in enumerate(new_calls, start=1):
+            shutdown.check()
+            agent_id = database.upsert_agent(source_id, call.agent) if call.agent else None
 
-        call_id = database.reserve_call_id()
-        file_name = source.build_file_name(call, call_id)
-        temp_path = config.storage.temp_dir / (file_name + TEMP_FILE_SUFFIX)
-        final_path = config.storage.pending_dir / file_name
+            call_id = database.reserve_call_id()
+            file_name = source.build_file_name(call, call_id)
+            temp_path = config.storage.temp_dir / (file_name + TEMP_FILE_SUFFIX)
+            final_path = config.storage.pending_dir / file_name
 
-        try:
-            source.download_audio(call, temp_path)
-            temp_path.replace(final_path)
-        except shutdown.ShutdownRequested:
-            temp_path.unlink(missing_ok=True)
-            raise
-        except Exception as error:
-            logger.error("failed to download call %s: %s", call.external_id, error)
-            temp_path.unlink(missing_ok=True)
-            skipped = True
-            continue
-
-        try:
-            cursor_value = None if skipped else call.cursor
-            inserted = database.insert_call_with_job(
-                call_id, source_id, call, agent_id, str(final_path), cursor_value
+            logger.info(
+                "downloading %s/%s: call %s -> %s", number, total, call.external_id, file_name
             )
-        except Exception as error:
-            logger.error("failed to store call %s: %s", call.external_id, error)
-            final_path.unlink(missing_ok=True)
-            skipped = True
-            continue
+            try:
+                source.download_audio(call, temp_path)
+                temp_path.replace(final_path)
+            except shutdown.ShutdownRequested:
+                temp_path.unlink(missing_ok=True)
+                raise
+            except Exception as error:
+                logger.error("failed to download call %s: %s", call.external_id, error)
+                temp_path.unlink(missing_ok=True)
+                skipped = True
+                continue
 
-        if inserted:
-            stored += 1
-        else:
-            logger.info("call %s stored by another run, removing file", call.external_id)
-            final_path.unlink(missing_ok=True)
+            try:
+                cursor_value = None if skipped else call.cursor
+                inserted = database.insert_call_with_job(
+                    call_id, source_id, call, agent_id, str(final_path), cursor_value
+                )
+            except Exception as error:
+                logger.error("failed to store call %s: %s", call.external_id, error)
+                final_path.unlink(missing_ok=True)
+                skipped = True
+                continue
 
-        if config.fetch.download_cooldown_seconds:
-            shutdown.sleep(config.fetch.download_cooldown_seconds)
+            if inserted:
+                stored += 1
+            else:
+                logger.info("call %s stored by another run, removing file", call.external_id)
+                final_path.unlink(missing_ok=True)
 
-    logger.info("source %s: stored %s new calls", source.name, stored)
+            if config.fetch.download_cooldown_seconds:
+                shutdown.sleep(config.fetch.download_cooldown_seconds)
+    finally:
+        logger.info("source %s: stored %s of %s new calls", source.name, stored, total)

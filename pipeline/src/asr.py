@@ -30,6 +30,7 @@ class Asr:
         return self._config.repo_id
 
     def transcribe(self, audio_path: Path) -> list[Word]:
+        logger.info("transcribing %s", audio_path.name)
         with self._lock:
             segments, _ = self._model.transcribe(
                 str(audio_path),

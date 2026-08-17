@@ -12,6 +12,9 @@ max_attempts = 3
 [criteria]
 file = "./configs/pipeline/criteria.toml"
 
+[models]
+hf_token_file = "./secrets/hf_token"
+
 [asr]
 repo_id = "Systran/faster-whisper-large-v3"
 local_dir = "./models/faster-whisper-large-v3"
@@ -24,7 +27,6 @@ vad_filter = true
 [diarization]
 repo_id = "pyannote/speaker-diarization-3.1"
 local_dir = "./models/pyannote-speaker-diarization-3.1"
-hf_token_file = "./secrets/hf_token"
 device = "cuda"
 max_speakers = 2
 
@@ -44,5 +46,7 @@ system_file = "./configs/pipeline/prompts/system_v1.txt"
 user_file = "./configs/pipeline/prompts/user_v1.txt"
 
 [logging]
-level = "INFO"
+level = "DEBUG"
 dir = "./logs"
+external_logs = false
+external_level = "WARNING"

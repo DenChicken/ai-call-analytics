@@ -31,6 +31,9 @@ def run(config: Config, database: Database, models: Models) -> None:
             continue
 
         started = time.monotonic()
+        logger.info(
+            "call %s claimed from %s (attempt %s)", task.call_id, task.stage, task.attempts
+        )
         try:
             if task.stage == STATUS_PENDING:
                 _transcribe(database, models, task)

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from src.config import LoggingConfig
 from src.constants import (
+    LOG_APPLICATION_LOGGERS,
     LOG_BACKUP_COUNT,
     LOG_FILE_TEMPLATE,
     LOG_FILE_TIME_FORMAT,
@@ -25,9 +26,12 @@ def _link_latest(directory: Path, target: Path) -> None:
 
 
 def setup_logging(config: LoggingConfig) -> None:
+    level = config.level.upper()
     root = logging.getLogger()
-    root.setLevel(config.level.upper())
+    root.setLevel(level if config.external_logs else config.external_level.upper())
     root.handlers.clear()
+    for name in LOG_APPLICATION_LOGGERS:
+        logging.getLogger(name).setLevel(level)
 
     formatter = logging.Formatter(LOG_FORMAT)
 

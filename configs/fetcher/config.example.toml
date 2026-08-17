@@ -21,12 +21,14 @@ backoff_base_seconds = 1
 backoff_max_seconds = 30
 requests_per_second = 2
 
-[logging]
-level = "INFO"
-dir = "./logs"
-
 [[source]]
 name = "crm_main"
 kind = "bitrix24"
 portal_url = "https://example.bitrix24.ru"
 rest_url_file = "./secrets/crm_main_rest_url"
+
+[logging]
+level = "DEBUG"
+dir = "./logs"
+external_logs = false
+external_level = "WARNING"

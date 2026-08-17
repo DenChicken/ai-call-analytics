@@ -4,10 +4,23 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+import yaml
 from huggingface_hub import snapshot_download
+from huggingface_hub.errors import GatedRepoError
+from pyannote.audio.core.model import AssetFileName
 
 MODEL_SECTIONS = ("asr", "diarization", "llm")
+MODELS_SECTION = "models"
+DIARIZATION_SECTION = "diarization"
 TOKEN_KEY = "hf_token_file"
+GATED_REPO_HINT = (
+    "this repository is gated: open https://huggingface.co/{repo_id} while signed in "
+    "with the account owning the token and accept the conditions"
+)
+
+OFFLINE_CONFIG_NAME = "config.offline.yaml"
+DEPENDENCY_DIR_NAME = "dependencies"
+DEPENDENCY_KEYS = ("segmentation", "embedding")
 
 
 class ScriptError(Exception):
@@ -19,7 +32,7 @@ class ModelSpec:
     section: str
     repo_id: str
     local_dir: Path
-    token: str | None
+    token: str
 
 
 def read_secret_file(path: Path) -> str:
@@ -39,6 +52,12 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
     with config_path.open("rb") as handle:
         raw = tomllib.load(handle)
 
+    if MODELS_SECTION not in raw:
+        raise ScriptError(f"missing required section [{MODELS_SECTION}] in {config_path}")
+    if TOKEN_KEY not in raw[MODELS_SECTION]:
+        raise ScriptError(f"missing required key '{TOKEN_KEY}' in [{MODELS_SECTION}]")
+    token = read_secret_file(Path(raw[MODELS_SECTION][TOKEN_KEY]))
+
     specs = []
     for section in MODEL_SECTIONS:
         if section not in raw:
@@ -47,26 +66,57 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
         for key in ("repo_id", "local_dir"):
             if key not in entry:
                 raise ScriptError(f"missing required key '{key}' in [{section}]")
-        token_path = entry.get(TOKEN_KEY)
         specs.append(
             ModelSpec(
                 section=section,
                 repo_id=entry["repo_id"],
                 local_dir=Path(entry["local_dir"]).resolve(),
-                token=read_secret_file(Path(token_path)) if token_path else None,
+                token=token,
             )
         )
     return specs
 
 
+def download_repo(repo_id: str, local_dir: Path, token: str) -> None:
+    local_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        snapshot_download(repo_id=repo_id, local_dir=str(local_dir), token=token)
+    except GatedRepoError as error:
+        raise ScriptError(GATED_REPO_HINT.format(repo_id=repo_id)) from error
+
+
 def download(spec: ModelSpec) -> None:
-    print(f"[{spec.section}] {spec.repo_id} -> {spec.local_dir}")
-    spec.local_dir.mkdir(parents=True, exist_ok=True)
-    snapshot_download(
-        repo_id=spec.repo_id,
-        local_dir=str(spec.local_dir),
-        token=spec.token,
-    )
+    print(f"[{spec.section}] {spec.repo_id} -> {spec.local_dir}", flush=True)
+    download_repo(spec.repo_id, spec.local_dir, spec.token)
+    if spec.section == DIARIZATION_SECTION:
+        vendor_diarization_dependencies(spec)
+
+
+def vendor_diarization_dependencies(spec: ModelSpec) -> None:
+    source_path = spec.local_dir / AssetFileName.Pipeline.value
+    if not source_path.is_file():
+        raise ScriptError(f"{AssetFileName.Pipeline.value} not found in {spec.local_dir}")
+
+    config = yaml.safe_load(source_path.read_text(encoding="utf-8"))
+    params = config["pipeline"]["params"]
+
+    checkpoint_name = AssetFileName.Model.value
+    for key in DEPENDENCY_KEYS:
+        repo_id = params.get(key)
+        if not repo_id:
+            raise ScriptError(f"'{key}' missing in {source_path}")
+
+        target = spec.local_dir / DEPENDENCY_DIR_NAME / repo_id.split("/")[-1]
+        print(f"[{spec.section}] {key}: {repo_id} -> {target}", flush=True)
+        download_repo(repo_id, target, spec.token)
+
+        if not (target / checkpoint_name).is_file():
+            raise ScriptError(f"{checkpoint_name} not found in {target}")
+        params[key] = str(target)
+
+    offline_path = spec.local_dir / OFFLINE_CONFIG_NAME
+    offline_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    print(f"[{spec.section}] offline config written to {offline_path}", flush=True)
 
 
 def main() -> int:
@@ -82,14 +132,23 @@ def main() -> int:
         print(error, file=sys.stderr)
         return 1
 
+    failures = {}
     for spec in specs:
         try:
             download(spec)
         except Exception as error:
-            print(f"failed to download {spec.repo_id}: {error}", file=sys.stderr)
-            return 1
+            failures[spec.section] = error
 
-    print(f"downloaded {len(specs)} models")
+    print()
+    for spec in specs:
+        error = failures.get(spec.section)
+        print(f"[{spec.section}] {spec.repo_id}: {f'FAILED: {error}' if error else 'ok'}")
+
+    if failures:
+        print(f"\n{len(failures)} of {len(specs)} models could not be downloaded", file=sys.stderr)
+        return 1
+
+    print(f"\ndownloaded {len(specs)} models")
     return 0
 
 

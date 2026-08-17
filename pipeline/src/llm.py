@@ -65,6 +65,9 @@ class Llm:
             truncation=True,
             max_length=self._config.max_input_tokens,
         ).to(self._model.device)
+        logger.info(
+            "generating analysis from %s input tokens", inputs["input_ids"].shape[1]
+        )
 
         prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
             self._tokenizer, JsonSchemaParser(schema, config=parser_config())

@@ -4,6 +4,7 @@ LOG_LATEST_NAME = "latest.log"
 LOG_FORMAT = "%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s"
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
+LOG_APPLICATION_LOGGERS = ("src", "__main__")
 
 SHUTDOWN_EXIT_CODE = 130
 

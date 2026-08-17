@@ -42,6 +42,8 @@ class NetworkConfig:
 class LoggingConfig:
     level: str
     dir: Path
+    external_logs: bool
+    external_level: str
 
 
 @dataclass(frozen=True)
@@ -149,6 +151,8 @@ def load_config(path: str | Path) -> Config:
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
         dir=Path(_require(logging_raw, "dir", "logging")),
+        external_logs=_require(logging_raw, "external_logs", "logging"),
+        external_level=_require(logging_raw, "external_level", "logging"),
     )
 
     return Config(
