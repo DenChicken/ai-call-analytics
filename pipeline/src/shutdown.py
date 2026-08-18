@@ -32,7 +32,3 @@ def check() -> None:
 def sleep(seconds: float) -> None:
     if _stop.wait(seconds):
         raise ShutdownRequested()
-
-
-def wait(seconds: float) -> None:
-    _stop.wait(seconds)

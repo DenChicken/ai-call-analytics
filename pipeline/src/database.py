@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -8,12 +8,17 @@ from src.config import Criterion
 from src.constants import (
     CLAIMABLE_STATUSES,
     CLAIMED_STATUS,
+    MILLISECONDS_PER_SECOND,
     RELEASED_STATUS,
     STAGE_PRIORITY,
+    STATUS_ATTRIBUTED,
     STATUS_DONE,
     STATUS_TRANSCRIBED,
 )
-from src.transcript import Segment
+from src.transcript import Segment, Turn, Word
+
+SEGMENTS_KEY = "segments"
+WORDS_KEY = "words"
 
 
 @dataclass(frozen=True)
@@ -139,33 +144,94 @@ class Database:
             for row in rows
         ]
 
-    def save_transcript(self, call_id: int, segments: list[Segment]) -> None:
+    def manager_name(self, call_id: int) -> str | None:
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT a.display_name FROM calls c
+                    JOIN agents a ON a.id = c.agent_id
+                    WHERE c.id = %s
+                    """,
+                    (call_id,),
+                )
+                row = cursor.fetchone()
+        return row["display_name"] if row else None
+
+    def save_asr_result(
+        self,
+        call_id: int,
+        segments: list[Segment],
+        model: str,
+        language: str,
+        duration_seconds: float,
+    ) -> None:
+        payload = {SEGMENTS_KEY: [asdict(segment) for segment in segments]}
         with self._pool.connection() as connection:
             with connection.transaction():
                 with connection.cursor() as cursor:
                     cursor.execute(
-                        "DELETE FROM transcript_segments WHERE call_id = %s", (call_id,)
+                        """
+                        INSERT INTO asr_results (call_id, model, language, duration_ms, raw)
+                        VALUES (%s, %s, %s, %s, %s)
+                        ON CONFLICT (call_id) DO UPDATE
+                        SET model = EXCLUDED.model,
+                            language = EXCLUDED.language,
+                            duration_ms = EXCLUDED.duration_ms,
+                            raw = EXCLUDED.raw,
+                            created_at = now()
+                        """,
+                        (
+                            call_id,
+                            model,
+                            language,
+                            int(duration_seconds * MILLISECONDS_PER_SECOND),
+                            json.dumps(payload, ensure_ascii=False),
+                        ),
                     )
+                    _advance(cursor, call_id, STATUS_TRANSCRIBED)
+
+    def load_segments(self, call_id: int) -> list[Segment]:
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT raw FROM asr_results WHERE call_id = %s", (call_id,))
+                row = cursor.fetchone()
+        if row is None:
+            return []
+        return [
+            Segment(**{**entry, WORDS_KEY: [Word(**word) for word in entry[WORDS_KEY]]})
+            for entry in row["raw"][SEGMENTS_KEY]
+        ]
+
+    def save_turns(self, call_id: int, turns: list[Turn]) -> None:
+        with self._pool.connection() as connection:
+            with connection.transaction():
+                with connection.cursor() as cursor:
+                    cursor.execute("DELETE FROM dialog_turns WHERE call_id = %s", (call_id,))
                     cursor.executemany(
                         """
-                        INSERT INTO transcript_segments
-                            (call_id, idx, role, start_ms, end_ms, text)
+                        INSERT INTO dialog_turns (call_id, idx, role, start_ms, end_ms, text)
                         VALUES (%s, %s, %s, %s, %s, %s)
                         """,
                         [
-                            (call_id, idx, s.role, s.start_ms, s.end_ms, s.text)
-                            for idx, s in enumerate(segments)
+                            (call_id, idx, turn.role, turn.start_ms, turn.end_ms, turn.text)
+                            for idx, turn in enumerate(turns)
                         ],
                     )
-                    cursor.execute(
-                        """
-                        UPDATE processing_jobs
-                        SET status = %s, attempts = 0, claimed_at = NULL,
-                            last_error = NULL, updated_at = now()
-                        WHERE call_id = %s
-                        """,
-                        (STATUS_TRANSCRIBED, call_id),
-                    )
+                    _advance(cursor, call_id, STATUS_ATTRIBUTED)
+
+    def load_turns(self, call_id: int) -> list[Turn]:
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    SELECT role, start_ms, end_ms, text FROM dialog_turns
+                    WHERE call_id = %s ORDER BY idx
+                    """,
+                    (call_id,),
+                )
+                rows = cursor.fetchall()
+        return [Turn(**row) for row in rows]
 
     def save_analysis(
         self,
@@ -181,26 +247,30 @@ class Database:
                     cursor.execute(
                         """
                         INSERT INTO analyses (
-                            call_id, summary, strengths, weaknesses, asr_model,
-                            roles_model, analysis_model, prompt_label, processing_seconds
+                            call_id, call_type, summary, strengths, weaknesses, recommendations,
+                            asr_model, roles_model, analysis_model, prompt_label,
+                            processing_seconds
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (call_id) DO UPDATE
-                        SET summary = EXCLUDED.summary,
+                        SET call_type = EXCLUDED.call_type,
+                            summary = EXCLUDED.summary,
                             strengths = EXCLUDED.strengths,
                             weaknesses = EXCLUDED.weaknesses,
+                            recommendations = EXCLUDED.recommendations,
                             asr_model = EXCLUDED.asr_model,
                             roles_model = EXCLUDED.roles_model,
                             analysis_model = EXCLUDED.analysis_model,
                             prompt_label = EXCLUDED.prompt_label,
-                            processing_seconds = EXCLUDED.processing_seconds,
-                            created_at = now()
+                            processing_seconds = EXCLUDED.processing_seconds
                         """,
                         (
                             call_id,
+                            analysis["call_type"],
                             analysis["summary"],
                             json.dumps(analysis["strengths"], ensure_ascii=False),
                             json.dumps(analysis["weaknesses"], ensure_ascii=False),
+                            json.dumps(analysis["recommendations"], ensure_ascii=False),
                             metadata["asr_model"],
                             metadata["roles_model"],
                             metadata["analysis_model"],
@@ -209,9 +279,7 @@ class Database:
                         ),
                     )
 
-                    cursor.execute(
-                        "DELETE FROM criterion_scores WHERE call_id = %s", (call_id,)
-                    )
+                    cursor.execute("DELETE FROM criterion_scores WHERE call_id = %s", (call_id,))
                     cursor.executemany(
                         """
                         INSERT INTO criterion_scores (call_id, criterion_code, score)
@@ -223,55 +291,15 @@ class Database:
                     cursor.execute(
                         "UPDATE calls SET audio_path = %s WHERE id = %s", (audio_path, call_id)
                     )
-                    cursor.execute(
-                        """
-                        UPDATE processing_jobs
-                        SET status = %s, claimed_at = NULL, last_error = NULL, updated_at = now()
-                        WHERE call_id = %s
-                        """,
-                        (STATUS_DONE, call_id),
-                    )
+                    _advance(cursor, call_id, STATUS_DONE)
 
-    def load_transcript(self, call_id: int) -> list[Segment]:
-        with self._pool.connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT role, start_ms, end_ms, text FROM transcript_segments
-                    WHERE call_id = %s ORDER BY idx
-                    """,
-                    (call_id,),
-                )
-                rows = cursor.fetchall()
-        return [
-            Segment(
-                role=row["role"],
-                start_ms=row["start_ms"],
-                end_ms=row["end_ms"],
-                text=row["text"],
-            )
-            for row in rows
-        ]
 
-    def manager_name(self, call_id: int) -> str | None:
-        with self._pool.connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT a.display_name FROM calls c
-                    JOIN agents a ON a.id = c.agent_id
-                    WHERE c.id = %s
-                    """,
-                    (call_id,),
-                )
-                row = cursor.fetchone()
-        return row["display_name"] if row else None
-
-    def save_roles(self, call_id: int, segments: list[Segment]) -> None:
-        with self._pool.connection() as connection:
-            with connection.transaction():
-                with connection.cursor() as cursor:
-                    cursor.executemany(
-                        "UPDATE transcript_segments SET role = %s WHERE call_id = %s AND idx = %s",
-                        [(s.role, call_id, idx) for idx, s in enumerate(segments)],
-                    )
+def _advance(cursor, call_id: int, status: str) -> None:
+    cursor.execute(
+        """
+        UPDATE processing_jobs
+        SET status = %s, attempts = 0, claimed_at = NULL, last_error = NULL, updated_at = now()
+        WHERE call_id = %s
+        """,
+        (status, call_id),
+    )

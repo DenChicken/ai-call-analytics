@@ -38,7 +38,8 @@ class AsrConfig:
     compute_type: str
     language: str
     beam_size: int
-    vad_filter: bool
+    min_silence_duration_ms: int
+    unload_after: bool
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,9 @@ class LlmConfig:
     max_input_tokens: int
     max_new_tokens: int
     temperature: float
+    top_p: float
+    top_k: int
+    unload_after: bool
 
 
 @dataclass(frozen=True)
@@ -133,6 +137,9 @@ def _load_llm(raw: dict, name: str) -> LlmConfig:
         max_input_tokens=_require(section, "max_input_tokens", name),
         max_new_tokens=_require(section, "max_new_tokens", name),
         temperature=_require(section, "temperature", name),
+        top_p=_require(section, "top_p", name),
+        top_k=_require(section, "top_k", name),
+        unload_after=_require(section, "unload_after", name),
     )
 
 
@@ -191,9 +198,12 @@ def load_config(path: str | Path) -> Config:
     storage_raw = _section(raw, "storage")
     worker_raw = _section(raw, "worker")
     criteria_raw = _section(raw, "criteria")
+    models_raw = _section(raw, "models")
     asr_raw = _section(raw, "asr")
     prompt_raw = _section(raw, "prompt")
     logging_raw = _section(raw, "logging")
+
+    read_secret_file(_require(models_raw, "hf_token_file", "models"))
 
     database = DatabaseConfig(dsn=read_secret_file(_require(database_raw, "dsn_file", "database")))
 
@@ -212,7 +222,8 @@ def load_config(path: str | Path) -> Config:
         compute_type=_require(asr_raw, "compute_type", "asr"),
         language=_require(asr_raw, "language", "asr"),
         beam_size=_require(asr_raw, "beam_size", "asr"),
-        vad_filter=_require(asr_raw, "vad_filter", "asr"),
+        min_silence_duration_ms=_require(asr_raw, "min_silence_duration_ms", "asr"),
+        unload_after=_require(asr_raw, "unload_after", "asr"),
     )
 
     roles_prompt = _load_prompt(
@@ -229,13 +240,25 @@ def load_config(path: str | Path) -> Config:
         external_level=_require(logging_raw, "external_level", "logging"),
     )
 
+    roles_llm = _load_llm(raw, "roles_llm")
+    analysis_llm = _load_llm(raw, "analysis_llm")
+
+    models = {"asr": asr, "roles_llm": roles_llm, "analysis_llm": analysis_llm}
+    unloading = [name for name, model in models.items() if model.unload_after]
+    if worker.count > 1 and unloading:
+        raise ConfigError(
+            f"unload_after is set in {', '.join(unloading)} but [worker] count is "
+            f"{worker.count}: unloading a model shared by several workers would drop it "
+            "while another worker is still using it, set count = 1 or unload_after = false"
+        )
+
     return Config(
         database=database,
         storage=storage,
         worker=worker,
         asr=asr,
-        roles_llm=_load_llm(raw, "roles_llm"),
-        analysis_llm=_load_llm(raw, "analysis_llm"),
+        roles_llm=roles_llm,
+        analysis_llm=analysis_llm,
         prompt_label=_require(prompt_raw, "label", "prompt"),
         roles_prompt=roles_prompt,
         analysis_prompt=analysis_prompt,

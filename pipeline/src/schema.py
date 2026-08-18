@@ -4,6 +4,12 @@ from lmformatenforcer.characterlevelparser import CharacterLevelParserConfig
 from pydantic import BaseModel, Field, create_model
 
 from src.config import Criterion
+from src.constants import (
+    CALL_TYPE_NOT_SALES,
+    CALL_TYPE_SALES,
+    ROLE_CLIENT,
+    ROLE_MANAGER,
+)
 
 ASCII_PRINTABLE_RANGE = (0x20, 0x7F)
 CYRILLIC_RANGE = (0x0410, 0x0450)
@@ -11,40 +17,36 @@ CYRILLIC_EXTRA = "Ёё"
 
 SCORES_MODEL_NAME = "CriteriaScores"
 ANALYSIS_MODEL_NAME = "CallAnalysis"
-ROLES_MODEL_NAME = "SpeakerRoles"
 SCORE_NOT_MET = 0
 SCORE_MET = 1
 
-ROLE_MANAGER = "manager"
-ROLE_CLIENT = "client"
-ROLE_FIELD_TEMPLATE = "line_{index}"
+CALL_TYPE_DESCRIPTION = (
+    "sales — разговор менеджера с клиентом о товаре или услуге; "
+    "not_sales — всё остальное: разговор между сотрудниками, личный разговор, "
+    "автоответчик, гудки, обрыв связи"
+)
 
-ROLES_DESCRIPTION = "Кто произнёс реплику номер {index}"
-SUMMARY_DESCRIPTION = "Краткое содержание разговора"
-STRENGTHS_DESCRIPTION = "Список сильных сторон менеджера"
-WEAKNESSES_DESCRIPTION = "Список слабых сторон менеджера и точек роста"
-SCORES_DESCRIPTION = "Оценки менеджера по каждому критерию"
+
+class DialogTurn(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    role: Literal[ROLE_MANAGER, ROLE_CLIENT] = Field(
+        ..., description="Кто произнёс реплику: manager или client"
+    )
+    time: str = Field(..., description="Время начала реплики в формате ММ:СС")
+    text: str = Field(..., description="Текст реплики целиком")
+
+
+class Dialog(BaseModel):
+    model_config = {"extra": "forbid"}
+
+    dialog: list[DialogTurn] = Field(..., description="Разговор, разбитый на реплики по очереди")
 
 
 def parser_config() -> CharacterLevelParserConfig:
     alphabet = "".join(chr(code) for code in range(*ASCII_PRINTABLE_RANGE))
     alphabet += "".join(chr(code) for code in range(*CYRILLIC_RANGE))
     return CharacterLevelParserConfig(alphabet=alphabet + CYRILLIC_EXTRA)
-
-
-def role_field_name(index: int) -> str:
-    return ROLE_FIELD_TEMPLATE.format(index=index)
-
-
-def build_roles_model(segment_count: int) -> type[BaseModel]:
-    fields = {
-        role_field_name(index): (
-            Literal[ROLE_MANAGER, ROLE_CLIENT],
-            Field(..., description=ROLES_DESCRIPTION.format(index=index)),
-        )
-        for index in range(segment_count)
-    }
-    return create_model(ROLES_MODEL_NAME, **fields)
 
 
 def build_analysis_model(criteria: list[Criterion]) -> type[BaseModel]:
@@ -59,8 +61,19 @@ def build_analysis_model(criteria: list[Criterion]) -> type[BaseModel]:
 
     return create_model(
         ANALYSIS_MODEL_NAME,
-        scores=(scores_model, Field(..., description=SCORES_DESCRIPTION)),
-        summary=(str, Field(..., description=SUMMARY_DESCRIPTION)),
-        strengths=(list[str], Field(..., description=STRENGTHS_DESCRIPTION)),
-        weaknesses=(list[str], Field(..., description=WEAKNESSES_DESCRIPTION)),
+        call_type=(
+            Literal[CALL_TYPE_SALES, CALL_TYPE_NOT_SALES],
+            Field(..., description=CALL_TYPE_DESCRIPTION),
+        ),
+        scores=(scores_model, Field(..., description="Оценки менеджера по каждому критерию")),
+        summary=(str, Field(..., description="Краткое содержание разговора")),
+        strengths=(list[str], Field(..., description="Список сильных сторон менеджера")),
+        weaknesses=(
+            list[str],
+            Field(..., description="Список слабых сторон менеджера и точек роста"),
+        ),
+        recommendations=(
+            list[str],
+            Field(..., description="Что менеджеру сделать иначе в следующий раз"),
+        ),
     )

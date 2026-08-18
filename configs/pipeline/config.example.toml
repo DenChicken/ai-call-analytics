@@ -22,27 +22,34 @@ device = "cuda"
 compute_type = "float16"
 language = "ru"
 beam_size = 5
-vad_filter = true
+min_silence_duration_ms = 350
+unload_after = false
 
 [roles_llm]
-repo_id = "Qwen/Qwen3-8B"
-local_dir = "./models/Qwen3-8B"
+repo_id = "Qwen/Qwen3-4B-Instruct-2507"
+local_dir = "./models/Qwen3-4B-Instruct-2507"
 device = "cuda"
 torch_dtype = "bfloat16"
-load_in_4bit = true
-max_input_tokens = 24000
-max_new_tokens = 4096
+load_in_4bit = false
+max_input_tokens = 32000
+max_new_tokens = 8192
 temperature = 0.0
+top_p = 0.8
+top_k = 20
+unload_after = false
 
 [analysis_llm]
-repo_id = "Qwen/Qwen3-8B"
-local_dir = "./models/Qwen3-8B"
+repo_id = "Qwen/Qwen3-4B-Instruct-2507"
+local_dir = "./models/Qwen3-4B-Instruct-2507"
 device = "cuda"
 torch_dtype = "bfloat16"
-load_in_4bit = true
-max_input_tokens = 24000
+load_in_4bit = false
+max_input_tokens = 32000
 max_new_tokens = 2048
-temperature = 0.3
+temperature = 0.7
+top_p = 0.8
+top_k = 20
+unload_after = false
 
 [prompt]
 label = "v1"
@@ -52,7 +59,7 @@ analysis_system_file = "./configs/pipeline/prompts/analysis-system-example.txt"
 analysis_user_file = "./configs/pipeline/prompts/analysis-user-example.txt"
 
 [logging]
-level = "DEBUG"
+level = "INFO"
 dir = "./logs"
 external_logs = false
 external_level = "WARNING"

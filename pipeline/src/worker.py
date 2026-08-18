@@ -7,7 +7,12 @@ from src import shutdown
 from src.analysis import analyze, attribute_roles
 from src.asr import Asr
 from src.config import Config
-from src.constants import DONE_DIR_TEMPLATE, STATUS_FAILED, STATUS_PENDING
+from src.constants import (
+    DONE_DIR_TEMPLATE,
+    STATUS_FAILED,
+    STATUS_PENDING,
+    STATUS_TRANSCRIBED,
+)
 from src.database import Database, Task
 from src.llm import Llm
 
@@ -29,12 +34,12 @@ def run(config: Config, database: Database, models: Models) -> None:
             continue
 
         started = time.monotonic()
-        logger.info(
-            "call %s claimed from %s (attempt %s)", task.call_id, task.stage, task.attempts
-        )
+        logger.info("call %s claimed from %s (attempt %s)", task.call_id, task.stage, task.attempts)
         try:
             if task.stage == STATUS_PENDING:
-                _transcribe(database, models, task)
+                _transcribe(config, database, models, task)
+            elif task.stage == STATUS_TRANSCRIBED:
+                _attribute(config, database, models, task)
             else:
                 _analyze(config, database, models, task, started)
         except shutdown.ShutdownRequested:
@@ -49,37 +54,48 @@ def run(config: Config, database: Database, models: Models) -> None:
             shutdown.check()
 
 
-def _transcribe(database: Database, models: Models, task: Task) -> None:
+def _transcribe(config: Config, database: Database, models: Models, task: Task) -> None:
     audio_path = Path(task.audio_path)
     if not audio_path.is_file():
         raise FileNotFoundError(f"audio file not found: {audio_path}")
 
-    segments = models.asr.transcribe(audio_path)
+    segments, duration = models.asr.transcribe(audio_path)
     if not segments:
-        raise ValueError("transcription produced no lines")
+        raise ValueError("transcription produced no segments")
 
-    database.save_transcript(task.call_id, segments)
-    logger.info("call %s transcribed into %s lines", task.call_id, len(segments))
+    database.save_asr_result(
+        task.call_id, segments, models.asr.model_name, config.asr.language, duration
+    )
+    logger.info("call %s transcribed into %s segments", task.call_id, len(segments))
+
+
+def _attribute(config: Config, database: Database, models: Models, task: Task) -> None:
+    segments = database.load_segments(task.call_id)
+    if not segments:
+        raise ValueError("stored transcription is empty")
+
+    turns = attribute_roles(
+        config, models.roles_llm, segments, database.manager_name(task.call_id)
+    )
+    database.save_turns(task.call_id, turns)
+    logger.info("call %s attributed into %s turns", task.call_id, len(turns))
 
 
 def _analyze(
     config: Config, database: Database, models: Models, task: Task, started: float
 ) -> None:
-    segments = database.load_transcript(task.call_id)
-    if not segments:
-        raise ValueError("stored transcript is empty")
+    turns = database.load_turns(task.call_id)
+    if not turns:
+        raise ValueError("stored dialog is empty")
 
     criteria = database.enabled_criteria()
     if not criteria:
         raise ValueError("no enabled criteria")
 
-    segments = attribute_roles(
-        config, models.roles_llm, segments, database.manager_name(task.call_id)
-    )
-    database.save_roles(task.call_id, segments)
+    analysis, scores = analyze(config, models.analysis_llm, criteria, turns)
 
-    analysis, scores = analyze(config, models.analysis_llm, criteria, segments)
-    final_path = _move_to_done(config, task)
+    source = Path(task.audio_path)
+    target = _done_path(config, source)
     metadata = {
         "asr_model": models.asr.model_name,
         "roles_model": models.roles_llm.model_name,
@@ -87,16 +103,15 @@ def _analyze(
         "prompt_label": config.prompt_label,
         "processing_seconds": int(time.monotonic() - started),
     }
-    database.save_analysis(task.call_id, analysis, scores, metadata, str(final_path))
-    logger.info("call %s analyzed and stored", task.call_id)
+    database.save_analysis(task.call_id, analysis, scores, metadata, str(target))
+    if target != source:
+        source.replace(target)
+    logger.info("call %s analyzed as %s", task.call_id, analysis["call_type"])
 
 
-def _move_to_done(config: Config, task: Task) -> Path:
-    source = Path(task.audio_path)
+def _done_path(config: Config, source: Path) -> Path:
     if source.is_relative_to(config.storage.done_dir) or not source.is_file():
         return source
     target_dir = config.storage.done_dir / time.strftime(DONE_DIR_TEMPLATE)
     target_dir.mkdir(parents=True, exist_ok=True)
-    target = target_dir / source.name
-    source.replace(target)
-    return target
+    return target_dir / source.name

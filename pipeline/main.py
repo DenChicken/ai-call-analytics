@@ -44,10 +44,11 @@ def main() -> int:
         if restored:
             logger.info("restored %s interrupted jobs", restored)
 
-        roles_llm = Llm(config.roles_llm)
-        shared = roles_llm if roles_llm.shares_weights_with(config.analysis_llm) else None
-        analysis_llm = Llm(config.analysis_llm, loaded=shared)
-        models = Models(asr=Asr(config.asr), roles_llm=roles_llm, analysis_llm=analysis_llm)
+        models = Models(
+            asr=Asr(config.asr),
+            roles_llm=Llm(config.roles_llm),
+            analysis_llm=Llm(config.analysis_llm),
+        )
     except Exception:
         logger.exception("initialization failed")
         database.close()
