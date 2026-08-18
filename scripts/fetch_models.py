@@ -7,9 +7,9 @@ from pathlib import Path
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.errors import GatedRepoError
 
-MODEL_SECTIONS = ("asr", "roles_llm", "analysis_llm")
-MODELS_SECTION = "models"
-TOKEN_KEY = "hf_token_file"
+MODEL_SECTIONS = ("asr", "llm")
+HUGGINGFACE_SECTION = "huggingface"
+TOKEN_KEY = "token_file"
 REQUIRED_MODEL_KEYS = ("repo_id", "local_dir")
 
 
@@ -47,9 +47,9 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
             raise ScriptError(f"missing required section [{name}] in {config_path}")
         return raw[name]
 
-    if TOKEN_KEY not in section(MODELS_SECTION):
-        raise ScriptError(f"missing required key '{TOKEN_KEY}' in [{MODELS_SECTION}]")
-    token = read_secret_file(Path(section(MODELS_SECTION)[TOKEN_KEY]))
+    if TOKEN_KEY not in section(HUGGINGFACE_SECTION):
+        raise ScriptError(f"missing required key '{TOKEN_KEY}' in [{HUGGINGFACE_SECTION}]")
+    token = read_secret_file(Path(section(HUGGINGFACE_SECTION)[TOKEN_KEY]))
 
     specs = []
     seen = set()

@@ -107,7 +107,7 @@ class Llm:
             with torch.inference_mode():
                 generated = self._model.generate(
                     **inputs,
-                    max_new_tokens=self._config.max_new_tokens,
+                    max_new_tokens=self._config.output.max_new_tokens,
                     prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
                     pad_token_id=self._tokenizer.eos_token_id,
                     **sampling,
@@ -116,10 +116,10 @@ class Llm:
             produced = generated[0][prompt_tokens:]
             completion = self._tokenizer.decode(produced, skip_special_tokens=True)
 
-        if len(produced) >= self._config.max_new_tokens:
+        if len(produced) >= self._config.output.max_new_tokens:
             raise LlmError(
-                f"generation hit the max_new_tokens limit of {self._config.max_new_tokens}, "
-                "raise it in the config"
+                f"generation hit the token budget of {self._config.output.max_new_tokens} "
+                "derived from [llm.output], raise list_items, tokens_per_item or summary_tokens"
             )
 
         if self._config.unload_after:

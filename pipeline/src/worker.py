@@ -4,17 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src import shutdown
-from src.analysis import analyze, attribute_roles
+from src.analysis import analyze
 from src.asr import Asr
 from src.config import Config
-from src.constants import (
-    DONE_DIR_TEMPLATE,
-    STATUS_FAILED,
-    STATUS_PENDING,
-    STATUS_TRANSCRIBED,
-)
+from src.constants import DONE_DIR_TEMPLATE, STATUS_FAILED, STATUS_PENDING
 from src.database import Database, Task
 from src.llm import Llm
+from src.transcript import render_plain, render_transcript
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +18,7 @@ logger = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class Models:
     asr: Asr
-    roles_llm: Llm
-    analysis_llm: Llm
+    llm: Llm
 
 
 def run(config: Config, database: Database, models: Models) -> None:
@@ -38,8 +33,6 @@ def run(config: Config, database: Database, models: Models) -> None:
         try:
             if task.stage == STATUS_PENDING:
                 _transcribe(config, database, models, task)
-            elif task.stage == STATUS_TRANSCRIBED:
-                _attribute(config, database, models, task)
             else:
                 _analyze(config, database, models, task, started)
         except shutdown.ShutdownRequested:
@@ -64,43 +57,38 @@ def _transcribe(config: Config, database: Database, models: Models, task: Task) 
         raise ValueError("transcription produced no segments")
 
     database.save_asr_result(
-        task.call_id, segments, models.asr.model_name, config.asr.language, duration
+        task.call_id,
+        segments,
+        plain=render_plain(segments),
+        transcript=render_transcript(segments, config.asr.transcript.break_silence_ms),
+        model=models.asr.model_name,
+        language=config.asr.transcript.language,
+        duration_seconds=duration,
     )
     logger.info("call %s transcribed into %s segments", task.call_id, len(segments))
-
-
-def _attribute(config: Config, database: Database, models: Models, task: Task) -> None:
-    segments = database.load_segments(task.call_id)
-    if not segments:
-        raise ValueError("stored transcription is empty")
-
-    turns = attribute_roles(
-        config, models.roles_llm, segments, database.manager_name(task.call_id)
-    )
-    database.save_turns(task.call_id, turns)
-    logger.info("call %s attributed into %s turns", task.call_id, len(turns))
 
 
 def _analyze(
     config: Config, database: Database, models: Models, task: Task, started: float
 ) -> None:
-    turns = database.load_turns(task.call_id)
-    if not turns:
-        raise ValueError("stored dialog is empty")
+    plain = database.load_plain(task.call_id)
+    if not plain:
+        raise ValueError("stored transcription is empty")
 
     criteria = database.enabled_criteria()
     if not criteria:
         raise ValueError("no enabled criteria")
 
-    analysis, scores = analyze(config, models.analysis_llm, criteria, turns)
+    analysis, scores = analyze(
+        config, models.llm, criteria, plain, database.manager_name(task.call_id)
+    )
 
     source = Path(task.audio_path)
     target = _done_path(config, source)
     metadata = {
         "asr_model": models.asr.model_name,
-        "roles_model": models.roles_llm.model_name,
-        "analysis_model": models.analysis_llm.model_name,
-        "prompt_label": config.prompt_label,
+        "analysis_model": models.llm.model_name,
+        "prompt_label": config.prompt.label,
         "processing_seconds": int(time.monotonic() - started),
     }
     database.save_analysis(task.call_id, analysis, scores, metadata, str(target))

@@ -1,8 +1,18 @@
+import math
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.constants import (
+    PROMPT_CRITERIA_PLACEHOLDER,
+    PROMPT_MANAGER_PLACEHOLDER,
+    PROMPT_TRANSCRIPT_PLACEHOLDER,
+)
+
+TOKEN_BLOCK = 16
+JSON_OVERHEAD_TOKENS = 64
+LIST_FIELD_COUNT = 3
+PROMPT_PLACEHOLDERS = (
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
@@ -31,15 +41,42 @@ class WorkerConfig:
 
 
 @dataclass(frozen=True)
+class TranscriptConfig:
+    language: str
+    beam_size: int
+    condition_on_previous_text: bool
+    hallucination_silence_threshold: float
+    word_timestamps: bool
+    vad_filter: bool
+    min_silence_duration_ms: int
+    speech_pad_ms: int
+    break_silence_ms: int
+
+
+@dataclass(frozen=True)
 class AsrConfig:
     repo_id: str
     local_dir: Path
     device: str
     compute_type: str
-    language: str
-    beam_size: int
-    min_silence_duration_ms: int
     unload_after: bool
+    transcript: TranscriptConfig
+
+
+@dataclass(frozen=True)
+class OutputConfig:
+    list_items: int
+    tokens_per_item: int
+    summary_tokens: int
+
+    @property
+    def max_new_tokens(self) -> int:
+        total = (
+            self.summary_tokens
+            + LIST_FIELD_COUNT * self.list_items * self.tokens_per_item
+            + JSON_OVERHEAD_TOKENS
+        )
+        return math.ceil(total / TOKEN_BLOCK) * TOKEN_BLOCK
 
 
 @dataclass(frozen=True)
@@ -50,15 +87,16 @@ class LlmConfig:
     torch_dtype: str
     load_in_4bit: bool
     max_input_tokens: int
-    max_new_tokens: int
     temperature: float
     top_p: float
     top_k: int
     unload_after: bool
+    output: OutputConfig
 
 
 @dataclass(frozen=True)
 class PromptConfig:
+    label: str
     system: str
     user: str
 
@@ -84,18 +122,15 @@ class Config:
     storage: StorageConfig
     worker: WorkerConfig
     asr: AsrConfig
-    roles_llm: LlmConfig
-    analysis_llm: LlmConfig
-    prompt_label: str
-    roles_prompt: PromptConfig
-    analysis_prompt: PromptConfig
+    llm: LlmConfig
+    prompt: PromptConfig
     logging: LoggingConfig
     criteria: list[Criterion]
 
 
-def _section(raw: dict, name: str) -> dict:
+def _section(raw: dict, name: str, parent: str = "") -> dict:
     if name not in raw:
-        raise ConfigError(f"missing required section [{name}]")
+        raise ConfigError(f"missing required section [{parent}{name}]")
     return raw[name]
 
 
@@ -126,33 +161,68 @@ def _read_text_file(path: str | Path, where: str) -> str:
     return text
 
 
-def _load_llm(raw: dict, name: str) -> LlmConfig:
-    section = _section(raw, name)
-    return LlmConfig(
-        repo_id=_require(section, "repo_id", name),
-        local_dir=Path(_require(section, "local_dir", name)).resolve(),
-        device=_require(section, "device", name),
-        torch_dtype=_require(section, "torch_dtype", name),
-        load_in_4bit=_require(section, "load_in_4bit", name),
-        max_input_tokens=_require(section, "max_input_tokens", name),
-        max_new_tokens=_require(section, "max_new_tokens", name),
-        temperature=_require(section, "temperature", name),
-        top_p=_require(section, "top_p", name),
-        top_k=_require(section, "top_k", name),
-        unload_after=_require(section, "unload_after", name),
+def _load_asr(raw: dict) -> AsrConfig:
+    section = _section(raw, "asr")
+    transcript_raw = _section(section, "transcript", "asr.")
+    where = "asr.transcript"
+    return AsrConfig(
+        repo_id=_require(section, "repo_id", "asr"),
+        local_dir=Path(_require(section, "local_dir", "asr")).resolve(),
+        device=_require(section, "device", "asr"),
+        compute_type=_require(section, "compute_type", "asr"),
+        unload_after=_require(section, "unload_after", "asr"),
+        transcript=TranscriptConfig(
+            language=_require(transcript_raw, "language", where),
+            beam_size=_require(transcript_raw, "beam_size", where),
+            condition_on_previous_text=_require(
+                transcript_raw, "condition_on_previous_text", where
+            ),
+            hallucination_silence_threshold=_require(
+                transcript_raw, "hallucination_silence_threshold", where
+            ),
+            word_timestamps=_require(transcript_raw, "word_timestamps", where),
+            vad_filter=_require(transcript_raw, "vad_filter", where),
+            min_silence_duration_ms=_require(transcript_raw, "min_silence_duration_ms", where),
+            speech_pad_ms=_require(transcript_raw, "speech_pad_ms", where),
+            break_silence_ms=_require(transcript_raw, "break_silence_ms", where),
+        ),
     )
 
 
-def _load_prompt(section: dict, name: str, placeholders: tuple[str, ...]) -> PromptConfig:
-    user_path = _require(section, f"{name}_user_file", "prompt")
+def _load_llm(raw: dict) -> LlmConfig:
+    section = _section(raw, "llm")
+    output_raw = _section(section, "output", "llm.")
+    return LlmConfig(
+        repo_id=_require(section, "repo_id", "llm"),
+        local_dir=Path(_require(section, "local_dir", "llm")).resolve(),
+        device=_require(section, "device", "llm"),
+        torch_dtype=_require(section, "torch_dtype", "llm"),
+        load_in_4bit=_require(section, "load_in_4bit", "llm"),
+        max_input_tokens=_require(section, "max_input_tokens", "llm"),
+        temperature=_require(section, "temperature", "llm"),
+        top_p=_require(section, "top_p", "llm"),
+        top_k=_require(section, "top_k", "llm"),
+        unload_after=_require(section, "unload_after", "llm"),
+        output=OutputConfig(
+            list_items=_require(output_raw, "list_items", "llm.output"),
+            tokens_per_item=_require(output_raw, "tokens_per_item", "llm.output"),
+            summary_tokens=_require(output_raw, "summary_tokens", "llm.output"),
+        ),
+    )
+
+
+def _load_prompt(raw: dict) -> PromptConfig:
+    section = _section(raw, "prompt")
+    user_path = _require(section, "user_file", "prompt")
     user = _read_text_file(user_path, "prompt")
-    for placeholder in placeholders:
+    for placeholder in PROMPT_PLACEHOLDERS:
         if "{" + placeholder + "}" not in user:
             raise ConfigError(
                 f"user prompt {user_path} must contain the {{{placeholder}}} placeholder"
             )
     return PromptConfig(
-        system=_read_text_file(_require(section, f"{name}_system_file", "prompt"), "prompt"),
+        label=_require(section, "label", "prompt"),
+        system=_read_text_file(_require(section, "system_file", "prompt"), "prompt"),
         user=user,
     )
 
@@ -198,12 +268,10 @@ def load_config(path: str | Path) -> Config:
     storage_raw = _section(raw, "storage")
     worker_raw = _section(raw, "worker")
     criteria_raw = _section(raw, "criteria")
-    models_raw = _section(raw, "models")
-    asr_raw = _section(raw, "asr")
-    prompt_raw = _section(raw, "prompt")
+    huggingface_raw = _section(raw, "huggingface")
     logging_raw = _section(raw, "logging")
 
-    read_secret_file(_require(models_raw, "hf_token_file", "models"))
+    read_secret_file(_require(huggingface_raw, "token_file", "huggingface"))
 
     database = DatabaseConfig(dsn=read_secret_file(_require(database_raw, "dsn_file", "database")))
 
@@ -215,23 +283,8 @@ def load_config(path: str | Path) -> Config:
         max_attempts=_require(worker_raw, "max_attempts", "worker"),
     )
 
-    asr = AsrConfig(
-        repo_id=_require(asr_raw, "repo_id", "asr"),
-        local_dir=Path(_require(asr_raw, "local_dir", "asr")).resolve(),
-        device=_require(asr_raw, "device", "asr"),
-        compute_type=_require(asr_raw, "compute_type", "asr"),
-        language=_require(asr_raw, "language", "asr"),
-        beam_size=_require(asr_raw, "beam_size", "asr"),
-        min_silence_duration_ms=_require(asr_raw, "min_silence_duration_ms", "asr"),
-        unload_after=_require(asr_raw, "unload_after", "asr"),
-    )
-
-    roles_prompt = _load_prompt(
-        prompt_raw, "roles", (PROMPT_MANAGER_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER)
-    )
-    analysis_prompt = _load_prompt(
-        prompt_raw, "analysis", (PROMPT_CRITERIA_PLACEHOLDER, PROMPT_TRANSCRIPT_PLACEHOLDER)
-    )
+    asr = _load_asr(raw)
+    llm = _load_llm(raw)
 
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
@@ -240,11 +293,7 @@ def load_config(path: str | Path) -> Config:
         external_level=_require(logging_raw, "external_level", "logging"),
     )
 
-    roles_llm = _load_llm(raw, "roles_llm")
-    analysis_llm = _load_llm(raw, "analysis_llm")
-
-    models = {"asr": asr, "roles_llm": roles_llm, "analysis_llm": analysis_llm}
-    unloading = [name for name, model in models.items() if model.unload_after]
+    unloading = [name for name, model in (("asr", asr), ("llm", llm)) if model.unload_after]
     if worker.count > 1 and unloading:
         raise ConfigError(
             f"unload_after is set in {', '.join(unloading)} but [worker] count is "
@@ -257,11 +306,8 @@ def load_config(path: str | Path) -> Config:
         storage=storage,
         worker=worker,
         asr=asr,
-        roles_llm=roles_llm,
-        analysis_llm=analysis_llm,
-        prompt_label=_require(prompt_raw, "label", "prompt"),
-        roles_prompt=roles_prompt,
-        analysis_prompt=analysis_prompt,
+        llm=llm,
+        prompt=_load_prompt(raw),
         logging=logging_config,
         criteria=_load_criteria(_require(criteria_raw, "file", "criteria")),
     )

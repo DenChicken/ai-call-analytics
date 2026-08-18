@@ -44,11 +44,7 @@ def main() -> int:
         if restored:
             logger.info("restored %s interrupted jobs", restored)
 
-        models = Models(
-            asr=Asr(config.asr),
-            roles_llm=Llm(config.roles_llm),
-            analysis_llm=Llm(config.analysis_llm),
-        )
+        models = Models(asr=Asr(config.asr), llm=Llm(config.llm))
     except Exception:
         logger.exception("initialization failed")
         database.close()

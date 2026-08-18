@@ -11,14 +11,12 @@ from src.constants import (
     MILLISECONDS_PER_SECOND,
     RELEASED_STATUS,
     STAGE_PRIORITY,
-    STATUS_ATTRIBUTED,
     STATUS_DONE,
     STATUS_TRANSCRIBED,
 )
-from src.transcript import Segment, Turn, Word
+from src.transcript import Segment
 
 SEGMENTS_KEY = "segments"
-WORDS_KEY = "words"
 
 
 @dataclass(frozen=True)
@@ -162,6 +160,8 @@ class Database:
         self,
         call_id: int,
         segments: list[Segment],
+        plain: str,
+        transcript: str,
         model: str,
         language: str,
         duration_seconds: float,
@@ -172,12 +172,16 @@ class Database:
                 with connection.cursor() as cursor:
                     cursor.execute(
                         """
-                        INSERT INTO asr_results (call_id, model, language, duration_ms, raw)
-                        VALUES (%s, %s, %s, %s, %s)
+                        INSERT INTO asr_results (
+                            call_id, model, language, duration_ms, plain, transcript, raw
+                        )
+                        VALUES (%s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (call_id) DO UPDATE
                         SET model = EXCLUDED.model,
                             language = EXCLUDED.language,
                             duration_ms = EXCLUDED.duration_ms,
+                            plain = EXCLUDED.plain,
+                            transcript = EXCLUDED.transcript,
                             raw = EXCLUDED.raw,
                             created_at = now()
                         """,
@@ -186,52 +190,19 @@ class Database:
                             model,
                             language,
                             int(duration_seconds * MILLISECONDS_PER_SECOND),
+                            plain,
+                            transcript,
                             json.dumps(payload, ensure_ascii=False),
                         ),
                     )
                     _advance(cursor, call_id, STATUS_TRANSCRIBED)
 
-    def load_segments(self, call_id: int) -> list[Segment]:
+    def load_plain(self, call_id: int) -> str | None:
         with self._pool.connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("SELECT raw FROM asr_results WHERE call_id = %s", (call_id,))
+                cursor.execute("SELECT plain FROM asr_results WHERE call_id = %s", (call_id,))
                 row = cursor.fetchone()
-        if row is None:
-            return []
-        return [
-            Segment(**{**entry, WORDS_KEY: [Word(**word) for word in entry[WORDS_KEY]]})
-            for entry in row["raw"][SEGMENTS_KEY]
-        ]
-
-    def save_turns(self, call_id: int, turns: list[Turn]) -> None:
-        with self._pool.connection() as connection:
-            with connection.transaction():
-                with connection.cursor() as cursor:
-                    cursor.execute("DELETE FROM dialog_turns WHERE call_id = %s", (call_id,))
-                    cursor.executemany(
-                        """
-                        INSERT INTO dialog_turns (call_id, idx, role, start_ms, end_ms, text)
-                        VALUES (%s, %s, %s, %s, %s, %s)
-                        """,
-                        [
-                            (call_id, idx, turn.role, turn.start_ms, turn.end_ms, turn.text)
-                            for idx, turn in enumerate(turns)
-                        ],
-                    )
-                    _advance(cursor, call_id, STATUS_ATTRIBUTED)
-
-    def load_turns(self, call_id: int) -> list[Turn]:
-        with self._pool.connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """
-                    SELECT role, start_ms, end_ms, text FROM dialog_turns
-                    WHERE call_id = %s ORDER BY idx
-                    """,
-                    (call_id,),
-                )
-                rows = cursor.fetchall()
-        return [Turn(**row) for row in rows]
+        return row["plain"] if row else None
 
     def save_analysis(
         self,
@@ -248,10 +219,9 @@ class Database:
                         """
                         INSERT INTO analyses (
                             call_id, call_type, summary, strengths, weaknesses, recommendations,
-                            asr_model, roles_model, analysis_model, prompt_label,
-                            processing_seconds
+                            asr_model, analysis_model, prompt_label, processing_seconds
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                         ON CONFLICT (call_id) DO UPDATE
                         SET call_type = EXCLUDED.call_type,
                             summary = EXCLUDED.summary,
@@ -259,7 +229,6 @@ class Database:
                             weaknesses = EXCLUDED.weaknesses,
                             recommendations = EXCLUDED.recommendations,
                             asr_model = EXCLUDED.asr_model,
-                            roles_model = EXCLUDED.roles_model,
                             analysis_model = EXCLUDED.analysis_model,
                             prompt_label = EXCLUDED.prompt_label,
                             processing_seconds = EXCLUDED.processing_seconds
@@ -272,7 +241,6 @@ class Database:
                             json.dumps(analysis["weaknesses"], ensure_ascii=False),
                             json.dumps(analysis["recommendations"], ensure_ascii=False),
                             metadata["asr_model"],
-                            metadata["roles_model"],
                             metadata["analysis_model"],
                             metadata["prompt_label"],
                             metadata["processing_seconds"],

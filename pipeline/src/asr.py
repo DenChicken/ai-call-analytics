@@ -9,9 +9,6 @@ from src.config import AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND
 from src.transcript import Segment, Word
 
-WORD_TIMESTAMPS = True
-VAD_FILTER = True
-
 logger = logging.getLogger(__name__)
 
 
@@ -55,15 +52,21 @@ class Asr:
 
     def transcribe(self, audio_path: Path) -> tuple[list[Segment], float]:
         logger.info("transcribing %s", audio_path.name)
+        transcript = self._config.transcript
         with self._lock:
             model = self._ensure_loaded()
             raw_segments, info = model.transcribe(
                 str(audio_path),
-                language=self._config.language,
-                beam_size=self._config.beam_size,
-                word_timestamps=WORD_TIMESTAMPS,
-                vad_filter=VAD_FILTER,
-                vad_parameters={"min_silence_duration_ms": self._config.min_silence_duration_ms},
+                language=transcript.language,
+                beam_size=transcript.beam_size,
+                condition_on_previous_text=transcript.condition_on_previous_text,
+                hallucination_silence_threshold=transcript.hallucination_silence_threshold,
+                word_timestamps=transcript.word_timestamps,
+                vad_filter=transcript.vad_filter,
+                vad_parameters={
+                    "min_silence_duration_ms": transcript.min_silence_duration_ms,
+                    "speech_pad_ms": transcript.speech_pad_ms,
+                },
             )
             segments = [
                 Segment(

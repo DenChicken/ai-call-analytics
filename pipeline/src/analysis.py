@@ -11,48 +11,28 @@ from src.constants import (
     UNKNOWN_MANAGER,
 )
 from src.llm import Llm
-from src.schema import Dialog, build_analysis_model
-from src.transcript import (
-    Segment,
-    Turn,
-    build_turns,
-    render_criteria,
-    render_dialog,
-    render_segments,
-)
+from src.schema import build_analysis_model
+from src.transcript import render_criteria
 
 logger = logging.getLogger(__name__)
-
-
-def attribute_roles(
-    config: Config, llm: Llm, segments: list[Segment], manager_name: str | None
-) -> list[Turn]:
-    prompt = config.roles_prompt.user.format(
-        **{
-            PROMPT_MANAGER_PLACEHOLDER: manager_name or UNKNOWN_MANAGER,
-            PROMPT_TRANSCRIPT_PLACEHOLDER: render_segments(segments),
-        }
-    )
-    raw = llm.generate(config.roles_prompt.system, prompt, Dialog.model_json_schema())
-    turns = build_turns(Dialog.model_validate(raw).dialog, segments[-1].end_ms)
-    logger.info("%s segments split into %s turns", len(segments), len(turns))
-    return turns
 
 
 def analyze(
     config: Config,
     llm: Llm,
     criteria: list[Criterion],
-    turns: list[Turn],
+    plain: str,
+    manager_name: str | None,
 ) -> tuple[dict, dict[str, int]]:
-    model = build_analysis_model(criteria)
-    prompt = config.analysis_prompt.user.format(
+    model = build_analysis_model(criteria, config.llm.output)
+    prompt = config.prompt.user.format(
         **{
             PROMPT_CRITERIA_PLACEHOLDER: render_criteria(criteria),
-            PROMPT_TRANSCRIPT_PLACEHOLDER: render_dialog(turns),
+            PROMPT_MANAGER_PLACEHOLDER: manager_name or UNKNOWN_MANAGER,
+            PROMPT_TRANSCRIPT_PLACEHOLDER: plain,
         }
     )
-    raw = llm.generate(config.analysis_prompt.system, prompt, model.model_json_schema())
+    raw = llm.generate(config.prompt.system, prompt, model.model_json_schema())
     payload = model.model_validate(raw).model_dump()
     scores = payload.pop(SCORES_FIELD)
     call_type = payload[CALL_TYPE_FIELD]

@@ -48,8 +48,7 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT processing_jobs_status_check CHECK (
         status IN (
-            'pending', 'transcribing', 'transcribed', 'attributing',
-            'attributed', 'analyzing', 'done', 'failed'
+            'pending', 'transcribing', 'transcribed', 'analyzing', 'done', 'failed'
         )
     )
 );
@@ -71,7 +70,6 @@ CREATE TABLE IF NOT EXISTS analyses (
     weaknesses          JSONB NOT NULL DEFAULT '[]'::jsonb,
     recommendations     JSONB NOT NULL DEFAULT '[]'::jsonb,
     asr_model           TEXT NOT NULL,
-    roles_model         TEXT NOT NULL,
     analysis_model      TEXT NOT NULL,
     prompt_label        TEXT NOT NULL,
     processing_seconds  INTEGER NOT NULL,
@@ -84,19 +82,10 @@ CREATE TABLE IF NOT EXISTS asr_results (
     model       TEXT NOT NULL,
     language    TEXT NOT NULL,
     duration_ms INTEGER NOT NULL,
+    plain       TEXT NOT NULL,
+    transcript  TEXT NOT NULL,
     raw         JSONB NOT NULL,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
-CREATE TABLE IF NOT EXISTS dialog_turns (
-    call_id   BIGINT NOT NULL REFERENCES calls(id) ON DELETE CASCADE,
-    idx       INTEGER NOT NULL,
-    role      TEXT NOT NULL,
-    start_ms  INTEGER NOT NULL,
-    end_ms    INTEGER NOT NULL,
-    text      TEXT NOT NULL,
-    PRIMARY KEY (call_id, idx),
-    CONSTRAINT dialog_turns_role_check CHECK (role IN ('manager', 'client'))
 );
 
 CREATE TABLE IF NOT EXISTS criterion_scores (

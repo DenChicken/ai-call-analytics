@@ -12,51 +12,48 @@ max_attempts = 3
 [criteria]
 file = "./configs/pipeline/criteria.toml"
 
-[models]
-hf_token_file = "./secrets/hf_token"
+[huggingface]
+token_file = "./secrets/hf_token"
 
 [asr]
 repo_id = "Systran/faster-whisper-large-v3"
 local_dir = "./models/faster-whisper-large-v3"
 device = "cuda"
 compute_type = "float16"
+unload_after = false
+
+[asr.transcript]
 language = "ru"
 beam_size = 5
-min_silence_duration_ms = 350
-unload_after = false
+condition_on_previous_text = true
+hallucination_silence_threshold = 2.0
+word_timestamps = true
+vad_filter = true
+min_silence_duration_ms = 300
+speech_pad_ms = 400
+break_silence_ms = 700
 
-[roles_llm]
+[llm]
 repo_id = "Qwen/Qwen3-4B-Instruct-2507"
 local_dir = "./models/Qwen3-4B-Instruct-2507"
 device = "cuda"
 torch_dtype = "bfloat16"
 load_in_4bit = false
 max_input_tokens = 32000
-max_new_tokens = 8192
-temperature = 0.0
-top_p = 0.8
-top_k = 20
-unload_after = false
-
-[analysis_llm]
-repo_id = "Qwen/Qwen3-4B-Instruct-2507"
-local_dir = "./models/Qwen3-4B-Instruct-2507"
-device = "cuda"
-torch_dtype = "bfloat16"
-load_in_4bit = false
-max_input_tokens = 32000
-max_new_tokens = 2048
 temperature = 0.7
 top_p = 0.8
 top_k = 20
 unload_after = false
 
+[llm.output]
+list_items = 5
+tokens_per_item = 40
+summary_tokens = 160
+
 [prompt]
-label = "v1"
-roles_system_file = "./configs/pipeline/prompts/roles-system-example.txt"
-roles_user_file = "./configs/pipeline/prompts/roles-user-example.txt"
-analysis_system_file = "./configs/pipeline/prompts/analysis-system-example.txt"
-analysis_user_file = "./configs/pipeline/prompts/analysis-user-example.txt"
+label = "v3"
+system_file = "./configs/pipeline/prompts/system-example.txt"
+user_file = "./configs/pipeline/prompts/user-example.txt"
 
 [logging]
 level = "INFO"
