@@ -12,6 +12,9 @@ max_attempts = 1
 [criteria]
 file = "./configs/pipeline/criteria.example.toml"
 
+[types]
+file = "./configs/pipeline/types.example.toml"
+
 [huggingface]
 token_file = "./secrets/hf_token"
 

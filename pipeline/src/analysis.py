@@ -1,9 +1,8 @@
 import logging
 
-from src.config import Config, Criterion
+from src.config import Config, Reference
 from src.constants import (
     CALL_TYPE_FIELD,
-    CALL_TYPE_SALES,
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
@@ -20,11 +19,12 @@ logger = logging.getLogger(__name__)
 def analyze(
     config: Config,
     llm: Llm,
-    criteria: list[Criterion],
+    criteria: list[Reference],
+    call_types: list[Reference],
     plain: str,
     manager_name: str | None,
 ) -> tuple[dict, dict[str, int]]:
-    model = build_analysis_model(criteria, config.llm.output)
+    model = build_analysis_model(criteria, call_types, config.llm.output)
     prompt = config.prompt.user.format(
         **{
             PROMPT_CRITERIA_PLACEHOLDER: render_criteria(criteria),
@@ -35,8 +35,5 @@ def analyze(
     raw = llm.generate(config.prompt.system, prompt, model.model_json_schema())
     payload = model.model_validate(raw).model_dump()
     scores = payload.pop(SCORES_FIELD)
-    call_type = payload[CALL_TYPE_FIELD]
-    if call_type != CALL_TYPE_SALES:
-        logger.info("call classified as %s, scores dropped", call_type)
-        scores = {}
+    logger.info("call classified as %s", payload[CALL_TYPE_FIELD])
     return payload, scores

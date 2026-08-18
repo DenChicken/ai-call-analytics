@@ -39,8 +39,9 @@ PROMPT_MANAGER_PLACEHOLDER = "manager"
 UNKNOWN_MANAGER = "имя неизвестно"
 
 CALL_TYPE_FIELD = "call_type"
-CALL_TYPE_SALES = "sales"
-CALL_TYPE_NOT_SALES = "not_sales"
 SCORES_FIELD = "scores"
+
+CRITERIA_TABLE = "criteria"
+CALL_TYPES_TABLE = "call_types"
 
 MILLISECONDS_PER_SECOND = 1000

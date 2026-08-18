@@ -4,10 +4,12 @@ from dataclasses import asdict, dataclass
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
-from src.config import Criterion
+from src.config import Reference
 from src.constants import (
+    CALL_TYPES_TABLE,
     CLAIMABLE_STATUSES,
     CLAIMED_STATUS,
+    CRITERIA_TABLE,
     MILLISECONDS_PER_SECOND,
     RELEASED_STATUS,
     STAGE_PRIORITY,
@@ -17,6 +19,7 @@ from src.constants import (
 from src.transcript import Segment
 
 SEGMENTS_KEY = "segments"
+REFERENCE_TABLES = (CRITERIA_TABLE, CALL_TYPES_TABLE)
 
 
 @dataclass(frozen=True)
@@ -40,27 +43,48 @@ class Database:
     def close(self) -> None:
         self._pool.close()
 
-    def sync_criteria(self, criteria: list[Criterion]) -> int:
-        codes = [criterion.code for criterion in criteria]
+    def sync_reference(self, table: str, entries: list[Reference]) -> int:
+        if table not in REFERENCE_TABLES:
+            raise ValueError(f"unknown reference table: {table}")
+        codes = [entry.code for entry in entries]
         with self._pool.connection() as connection:
             with connection.transaction():
                 with connection.cursor() as cursor:
                     cursor.executemany(
-                        """
-                        INSERT INTO criteria (code, label, description, enabled)
-                        VALUES (%s, %s, %s, TRUE)
+                        f"""
+                        INSERT INTO {table} (code, label, description, position, enabled)
+                        VALUES (%s, %s, %s, %s, TRUE)
                         ON CONFLICT (code) DO UPDATE
                         SET label = EXCLUDED.label,
                             description = EXCLUDED.description,
+                            position = EXCLUDED.position,
                             enabled = TRUE
                         """,
-                        [(c.code, c.label, c.description) for c in criteria],
+                        [
+                            (e.code, e.label, e.description, position)
+                            for position, e in enumerate(entries)
+                        ],
                     )
                     cursor.execute(
-                        "UPDATE criteria SET enabled = FALSE WHERE enabled AND NOT (code = ANY(%s))",
+                        f"UPDATE {table} SET enabled = FALSE "
+                        "WHERE enabled AND NOT (code = ANY(%s))",
                         (codes,),
                     )
                     return cursor.rowcount
+
+    def enabled_reference(self, table: str) -> list[Reference]:
+        if table not in REFERENCE_TABLES:
+            raise ValueError(f"unknown reference table: {table}")
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"SELECT code, label, description FROM {table} WHERE enabled ORDER BY position"
+                )
+                rows = cursor.fetchall()
+        return [
+            Reference(code=row["code"], label=row["label"], description=row["description"])
+            for row in rows
+        ]
 
     def reset_interrupted(self) -> int:
         restored = 0
@@ -129,18 +153,6 @@ class Database:
                     """,
                     (status, error, call_id),
                 )
-
-    def enabled_criteria(self) -> list[Criterion]:
-        with self._pool.connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "SELECT code, label, description FROM criteria WHERE enabled ORDER BY code"
-                )
-                rows = cursor.fetchall()
-        return [
-            Criterion(code=row["code"], label=row["label"], description=row["description"])
-            for row in rows
-        ]
 
     def manager_name(self, call_id: int) -> str | None:
         with self._pool.connection() as connection:

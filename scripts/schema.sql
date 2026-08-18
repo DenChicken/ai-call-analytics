@@ -59,12 +59,21 @@ CREATE TABLE IF NOT EXISTS criteria (
     code         TEXT PRIMARY KEY,
     label        TEXT NOT NULL,
     description  TEXT NOT NULL,
+    position     SMALLINT NOT NULL,
+    enabled      BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+CREATE TABLE IF NOT EXISTS call_types (
+    code         TEXT PRIMARY KEY,
+    label        TEXT NOT NULL,
+    description  TEXT NOT NULL,
+    position     SMALLINT NOT NULL,
     enabled      BOOLEAN NOT NULL DEFAULT TRUE
 );
 
 CREATE TABLE IF NOT EXISTS analyses (
     call_id             BIGINT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
-    call_type           TEXT NOT NULL,
+    call_type           TEXT NOT NULL REFERENCES call_types(code),
     summary             TEXT NOT NULL,
     strengths           JSONB NOT NULL DEFAULT '[]'::jsonb,
     weaknesses          JSONB NOT NULL DEFAULT '[]'::jsonb,
@@ -73,8 +82,7 @@ CREATE TABLE IF NOT EXISTS analyses (
     analysis_model      TEXT NOT NULL,
     prompt_label        TEXT NOT NULL,
     processing_seconds  INTEGER NOT NULL,
-    created_at          TIMESTAMPTZ NOT NULL DEFAULT now(),
-    CONSTRAINT analyses_call_type_check CHECK (call_type IN ('sales', 'not_sales'))
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS asr_results (

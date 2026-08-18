@@ -6,7 +6,12 @@ import threading
 from src import shutdown
 from src.asr import Asr
 from src.config import Config, ConfigError, load_config
-from src.constants import SHUTDOWN_EXIT_CODE, WORKER_THREAD_NAME
+from src.constants import (
+    CALL_TYPES_TABLE,
+    CRITERIA_TABLE,
+    SHUTDOWN_EXIT_CODE,
+    WORKER_THREAD_NAME,
+)
 from src.database import Database
 from src.llm import Llm
 from src.logging_setup import setup_logging
@@ -37,8 +42,12 @@ def main() -> int:
 
     database = Database(config.database.dsn, config.worker.count)
     try:
-        disabled = database.sync_criteria(config.criteria)
-        logger.info("criteria synced: %s enabled, %s disabled", len(config.criteria), disabled)
+        for table, entries in (
+            (CRITERIA_TABLE, config.criteria),
+            (CALL_TYPES_TABLE, config.call_types),
+        ):
+            disabled = database.sync_reference(table, entries)
+            logger.info("%s synced: %s enabled, %s disabled", table, len(entries), disabled)
 
         restored = database.reset_interrupted()
         if restored:

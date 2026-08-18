@@ -7,7 +7,13 @@ from src import shutdown
 from src.analysis import analyze
 from src.asr import Asr
 from src.config import Config
-from src.constants import DONE_DIR_TEMPLATE, STATUS_FAILED, STATUS_PENDING
+from src.constants import (
+    CALL_TYPES_TABLE,
+    CRITERIA_TABLE,
+    DONE_DIR_TEMPLATE,
+    STATUS_FAILED,
+    STATUS_PENDING,
+)
 from src.database import Database, Task
 from src.llm import Llm
 from src.transcript import render_plain, render_transcript
@@ -75,12 +81,16 @@ def _analyze(
     if not plain:
         raise ValueError("stored transcription is empty")
 
-    criteria = database.enabled_criteria()
+    criteria = database.enabled_reference(CRITERIA_TABLE)
     if not criteria:
         raise ValueError("no enabled criteria")
 
+    call_types = database.enabled_reference(CALL_TYPES_TABLE)
+    if not call_types:
+        raise ValueError("no enabled call types")
+
     analysis, scores = analyze(
-        config, models.llm, criteria, plain, database.manager_name(task.call_id)
+        config, models.llm, criteria, call_types, plain, database.manager_name(task.call_id)
     )
 
     source = Path(task.audio_path)

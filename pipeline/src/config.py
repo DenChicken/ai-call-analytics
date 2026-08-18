@@ -12,6 +12,9 @@ from src.constants import (
 TOKEN_BLOCK = 16
 JSON_OVERHEAD_TOKENS = 64
 LIST_FIELD_COUNT = 3
+REFERENCE_CODE = "code"
+REFERENCE_LABEL = "label"
+REFERENCE_DESCRIPTION = "description"
 PROMPT_PLACEHOLDERS = (
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
@@ -110,7 +113,7 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
-class Criterion:
+class Reference:
     code: str
     label: str
     description: str
@@ -125,7 +128,8 @@ class Config:
     llm: LlmConfig
     prompt: PromptConfig
     logging: LoggingConfig
-    criteria: list[Criterion]
+    criteria: list[Reference]
+    call_types: list[Reference]
 
 
 def _section(raw: dict, name: str, parent: str = "") -> dict:
@@ -227,33 +231,36 @@ def _load_prompt(raw: dict) -> PromptConfig:
     )
 
 
-def _load_criteria(path: str | Path) -> list[Criterion]:
+def _load_reference(path: str | Path, entry_name: str) -> list[Reference]:
     path = Path(path)
     if not path.is_file():
-        raise ConfigError(f"criteria file not found: {path}")
+        raise ConfigError(f"{entry_name} file not found: {path}")
 
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
 
-    entries = raw.get("criterion", [])
+    entries = raw.get(entry_name, [])
     if not entries:
-        raise ConfigError(f"at least one [[criterion]] must be defined in {path}")
+        raise ConfigError(f"at least one [[{entry_name}]] must be defined in {path}")
 
-    criteria = []
+    references = []
     seen = set()
     for entry in entries:
-        code = _require(entry, "code", "criterion")
+        values = {
+            field: _require(entry, field, entry_name)
+            for field in (REFERENCE_CODE, REFERENCE_LABEL, REFERENCE_DESCRIPTION)
+        }
+        for field, value in values.items():
+            if not isinstance(value, str) or not value.strip():
+                raise ConfigError(
+                    f"{entry_name} {field} must be a non-empty string in {path}, got {value!r}"
+                )
+        code = values[REFERENCE_CODE]
         if code in seen:
-            raise ConfigError(f"duplicate criterion code '{code}' in {path}")
+            raise ConfigError(f"duplicate {entry_name} code '{code}' in {path}")
         seen.add(code)
-        criteria.append(
-            Criterion(
-                code=code,
-                label=_require(entry, "label", "criterion"),
-                description=_require(entry, "description", "criterion"),
-            )
-        )
-    return criteria
+        references.append(Reference(**values))
+    return references
 
 
 def load_config(path: str | Path) -> Config:
@@ -268,6 +275,7 @@ def load_config(path: str | Path) -> Config:
     storage_raw = _section(raw, "storage")
     worker_raw = _section(raw, "worker")
     criteria_raw = _section(raw, "criteria")
+    types_raw = _section(raw, "types")
     huggingface_raw = _section(raw, "huggingface")
     logging_raw = _section(raw, "logging")
 
@@ -309,5 +317,6 @@ def load_config(path: str | Path) -> Config:
         llm=llm,
         prompt=_load_prompt(raw),
         logging=logging_config,
-        criteria=_load_criteria(_require(criteria_raw, "file", "criteria")),
+        criteria=_load_reference(_require(criteria_raw, "file", "criteria"), "criterion"),
+        call_types=_load_reference(_require(types_raw, "file", "types"), "type"),
     )
