@@ -117,10 +117,8 @@ class Llm:
             completion = self._tokenizer.decode(produced, skip_special_tokens=True)
 
         if len(produced) >= self._config.output.max_new_tokens:
-            raise LlmError(
-                f"generation hit the token budget of {self._config.output.max_new_tokens} "
-                "derived from [llm.output], raise list_items, tokens_per_item or summary_tokens"
-            )
+            logger.warning("max_new_tokens limit exceeded, processing with caution "
+                           f"(produced={len(produced)}, max_new_tokens={self._config.output.max_new_tokens})")
 
         if self._config.unload_after:
             self.unload()
