@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
-from src.config import Reference
-from src.constants import CRITERIA_LINE_TEMPLATE, TRANSCRIPT_BREAK_TEMPLATE
+from src.constants import TRANSCRIPT_BREAK_TEMPLATE
 
 
 @dataclass(frozen=True)
@@ -37,13 +36,3 @@ def render_transcript(segments: list[Segment], break_silence_ms: int) -> str:
             lines.append(segment.text)
         previous_end_ms = segment.end_ms
     return "\n".join(TRANSCRIPT_BREAK_TEMPLATE.format(text=line) for line in lines)
-
-
-def render_criteria(criteria: list[Reference]) -> str:
-    return "\n".join(
-        CRITERIA_LINE_TEMPLATE.format(
-            label=criterion.label,
-            description=criterion.description,
-        )
-        for criterion in criteria
-    )

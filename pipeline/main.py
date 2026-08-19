@@ -36,12 +36,14 @@ def main() -> int:
         return 1
 
     setup_logging(config.logging)
+    _log_startup(config)
     config.storage.done_dir.mkdir(parents=True, exist_ok=True)
 
     shutdown.install_handlers()
 
-    database = Database(config.database.dsn, config.worker.count)
+    database = None
     try:
+        database = Database(config.database.dsn, config.worker.count)
         for table, entries in (
             (CRITERIA_TABLE, config.criteria),
             (CALL_TYPES_TABLE, config.call_types),
@@ -56,12 +58,30 @@ def main() -> int:
         models = Models(asr=Asr(config.asr), llm=Llm(config.llm))
     except Exception:
         logger.exception("initialization failed")
-        database.close()
+        if database is not None:
+            database.close()
         return 1
 
     _run_workers(config, database, models)
     database.close()
-    return SHUTDOWN_EXIT_CODE if shutdown.is_stopping() else 0
+    stopping = shutdown.is_stopping()
+    logger.info("pipeline %s", "stopped on request" if stopping else "finished")
+    return SHUTDOWN_EXIT_CODE if stopping else 0
+
+
+def _log_startup(config: Config) -> None:
+    logger.info(
+        "pipeline starting: asr=%s llm=%s prompt=%s workers=%s",
+        config.asr.repo_id,
+        config.llm.repo_id,
+        config.prompt.label,
+        config.worker.count,
+    )
+    logger.debug("asr config: %s", config.asr)
+    logger.debug("llm config: %s", config.llm)
+    logger.debug("worker config: %s", config.worker)
+    logger.debug("criteria from config: %s", [entry.code for entry in config.criteria])
+    logger.debug("call types from config: %s", [entry.code for entry in config.call_types])
 
 
 def _run_workers(config: Config, database: Database, models: Models) -> None:

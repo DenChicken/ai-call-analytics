@@ -1,4 +1,5 @@
 import json
+import logging
 from dataclasses import asdict, dataclass
 
 from psycopg.rows import dict_row
@@ -6,20 +7,32 @@ from psycopg_pool import ConnectionPool
 
 from src.config import Reference
 from src.constants import (
+    CALL_TYPE_FIELD,
     CALL_TYPES_TABLE,
     CLAIMABLE_STATUSES,
     CLAIMED_STATUS,
     CRITERIA_TABLE,
+    METADATA_ANALYSIS_MODEL,
+    METADATA_ASR_MODEL,
+    METADATA_PROCESSING_SECONDS,
+    METADATA_PROMPT_LABEL,
     MILLISECONDS_PER_SECOND,
+    RECOMMENDATIONS_FIELD,
     RELEASED_STATUS,
     STAGE_PRIORITY,
     STATUS_DONE,
     STATUS_TRANSCRIBED,
+    STRENGTHS_FIELD,
+    SUMMARY_FIELD,
+    WEAKNESSES_FIELD,
 )
 from src.transcript import Segment
 
 SEGMENTS_KEY = "segments"
 REFERENCE_TABLES = (CRITERIA_TABLE, CALL_TYPES_TABLE)
+POOL_STARTUP_TIMEOUT_SECONDS = 10
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -32,6 +45,7 @@ class Task:
 
 class Database:
     def __init__(self, dsn: str, pool_size: int):
+        logger.debug("opening connection pool with up to %s connections", pool_size)
         self._pool = ConnectionPool(
             dsn,
             min_size=1,
@@ -39,6 +53,8 @@ class Database:
             kwargs={"row_factory": dict_row, "autocommit": False},
             open=True,
         )
+        self._pool.wait(timeout=POOL_STARTUP_TIMEOUT_SECONDS)
+        logger.info("connected to the database")
 
     def close(self) -> None:
         self._pool.close()
@@ -135,6 +151,14 @@ class Database:
                     )
                     attempts = cursor.fetchone()["attempts"]
 
+        logger.debug(
+            "claimed call %s: %s -> %s, attempt %s of %s",
+            row["call_id"],
+            row["status"],
+            CLAIMED_STATUS[row["status"]],
+            attempts,
+            max_attempts,
+        )
         return Task(
             call_id=row["call_id"],
             audio_path=row["audio_path"],
@@ -208,6 +232,13 @@ class Database:
                         ),
                     )
                     _advance(cursor, call_id, STATUS_TRANSCRIBED)
+        logger.debug(
+            "saved asr result for call %s: %s segments, plain %s chars, transcript %s lines",
+            call_id,
+            len(segments),
+            len(plain),
+            transcript.count("\n") + 1,
+        )
 
     def load_plain(self, call_id: int) -> str | None:
         with self._pool.connection() as connection:
@@ -247,15 +278,15 @@ class Database:
                         """,
                         (
                             call_id,
-                            analysis["call_type"],
-                            analysis["summary"],
-                            json.dumps(analysis["strengths"], ensure_ascii=False),
-                            json.dumps(analysis["weaknesses"], ensure_ascii=False),
-                            json.dumps(analysis["recommendations"], ensure_ascii=False),
-                            metadata["asr_model"],
-                            metadata["analysis_model"],
-                            metadata["prompt_label"],
-                            metadata["processing_seconds"],
+                            analysis[CALL_TYPE_FIELD],
+                            analysis[SUMMARY_FIELD],
+                            json.dumps(analysis[STRENGTHS_FIELD], ensure_ascii=False),
+                            json.dumps(analysis[WEAKNESSES_FIELD], ensure_ascii=False),
+                            json.dumps(analysis[RECOMMENDATIONS_FIELD], ensure_ascii=False),
+                            metadata[METADATA_ASR_MODEL],
+                            metadata[METADATA_ANALYSIS_MODEL],
+                            metadata[METADATA_PROMPT_LABEL],
+                            metadata[METADATA_PROCESSING_SECONDS],
                         ),
                     )
 
@@ -272,6 +303,13 @@ class Database:
                         "UPDATE calls SET audio_path = %s WHERE id = %s", (audio_path, call_id)
                     )
                     _advance(cursor, call_id, STATUS_DONE)
+        logger.debug(
+            "saved analysis for call %s: type=%s, %s scores, audio at %s",
+            call_id,
+            analysis[CALL_TYPE_FIELD],
+            len(scores),
+            audio_path,
+        )
 
 
 def _advance(cursor, call_id: int, status: str) -> None:

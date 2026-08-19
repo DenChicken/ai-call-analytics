@@ -1,12 +1,13 @@
 import gc
 import logging
 import threading
+import time
 from pathlib import Path
 
 from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
-from src.constants import MILLISECONDS_PER_SECOND
+from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
 from src.transcript import Segment, Word
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,20 @@ class Asr:
     def transcribe(self, audio_path: Path) -> tuple[list[Segment], float]:
         logger.info("transcribing %s", audio_path.name)
         transcript = self._config.transcript
+        logger.debug(
+            "asr parameters: language=%s beam_size=%s condition_on_previous_text=%s "
+            "hallucination_silence_threshold=%s word_timestamps=%s vad_filter=%s "
+            "min_silence_duration_ms=%s speech_pad_ms=%s",
+            transcript.language,
+            transcript.beam_size,
+            transcript.condition_on_previous_text,
+            transcript.hallucination_silence_threshold,
+            transcript.word_timestamps,
+            transcript.vad_filter,
+            transcript.min_silence_duration_ms,
+            transcript.speech_pad_ms,
+        )
+        started = time.monotonic()
         with self._lock:
             model = self._ensure_loaded()
             raw_segments, info = model.transcribe(
@@ -89,7 +104,37 @@ class Asr:
                 for segment in raw_segments
                 if (text := segment.text.strip())
             ]
-        logger.info("transcribed %s into %s segments", audio_path.name, len(segments))
+        elapsed = time.monotonic() - started
+        logger.info(
+            "transcribed %s into %s segments: audio %.0fs, took %.0fs (%.1fx realtime)",
+            audio_path.name,
+            len(segments),
+            info.duration,
+            elapsed,
+            info.duration / elapsed if elapsed else 0,
+        )
+        if logger.isEnabledFor(logging.DEBUG):
+            for index, segment in enumerate(segments):
+                logger.debug(
+                    "segment %s/%s [%.1f-%.1fs] compression=%.2f logprob=%.2f no_speech=%.2f: %s",
+                    index + 1,
+                    len(segments),
+                    segment.start_ms / MILLISECONDS_PER_SECOND,
+                    segment.end_ms / MILLISECONDS_PER_SECOND,
+                    segment.compression_ratio,
+                    segment.avg_logprob,
+                    segment.no_speech_prob,
+                    segment.text,
+                )
+        suspicious = [s for s in segments if s.compression_ratio > SUSPICIOUS_COMPRESSION_RATIO]
+        if suspicious:
+            logger.warning(
+                "%s of %s segments look like hallucinations (compression_ratio > %s): %s",
+                len(suspicious),
+                len(segments),
+                SUSPICIOUS_COMPRESSION_RATIO,
+                [s.text for s in suspicious],
+            )
         if self._config.unload_after:
             self.unload()
         return segments, info.duration

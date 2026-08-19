@@ -1,3 +1,4 @@
+import logging
 import signal
 import threading
 
@@ -5,6 +6,8 @@ import threading
 class ShutdownRequested(Exception):
     pass
 
+
+logger = logging.getLogger(__name__)
 
 _stop = threading.Event()
 
@@ -17,6 +20,8 @@ def install_handlers() -> None:
 
 
 def _handle(signum, frame) -> None:
+    if not _stop.is_set():
+        logger.info("received %s, finishing current work and stopping", signal.Signals(signum).name)
     _stop.set()
 
 
