@@ -113,27 +113,13 @@ class Asr:
             elapsed,
             info.duration / elapsed if elapsed else 0,
         )
-        if logger.isEnabledFor(logging.DEBUG):
-            for index, segment in enumerate(segments):
-                logger.debug(
-                    "segment %s/%s [%.1f-%.1fs] compression=%.2f logprob=%.2f no_speech=%.2f: %s",
-                    index + 1,
-                    len(segments),
-                    segment.start_ms / MILLISECONDS_PER_SECOND,
-                    segment.end_ms / MILLISECONDS_PER_SECOND,
-                    segment.compression_ratio,
-                    segment.avg_logprob,
-                    segment.no_speech_prob,
-                    segment.text,
-                )
         suspicious = [s for s in segments if s.compression_ratio > SUSPICIOUS_COMPRESSION_RATIO]
         if suspicious:
             logger.warning(
-                "%s of %s segments look like hallucinations (compression_ratio > %s): %s",
+                "%s of %s segments look like hallucinations (compression_ratio > %s)",
                 len(suspicious),
                 len(segments),
                 SUSPICIOUS_COMPRESSION_RATIO,
-                [s.text for s in suspicious],
             )
         if self._config.unload_after:
             self.unload()

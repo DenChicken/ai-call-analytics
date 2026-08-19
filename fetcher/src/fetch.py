@@ -21,7 +21,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
     cursor = database.get_cursor(source_id)
     logger.debug("source %s: listing calls since cursor %s", source.name, cursor)
 
-    batch = source.list_calls(cursor, config.fetch.min_call_duration_seconds)
+    batch = source.list_calls(cursor)
     if batch.cursor is None:
         logger.info("source %s: nothing new since cursor %s", source.name, cursor)
         return

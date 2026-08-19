@@ -53,7 +53,7 @@ class BitrixClient:
 
     def call(self, method: str, params: dict) -> dict:
         url = self._rest_url + method + JSON_SUFFIX
-        logger.debug("calling %s with %s", method, params)
+        logger.debug("calling %s", method)
 
         for attempt in range(self._network.max_retries):
             self._limiter.wait()

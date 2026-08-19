@@ -8,8 +8,6 @@ from src.constants import (
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
     SCORES_FIELD,
-    SUMMARY_FIELD,
-    TEXT_LIST_FIELDS,
     UNKNOWN_MANAGER,
 )
 from src.llm import Llm
@@ -37,11 +35,10 @@ def analyze(
     manager_name: str | None,
 ) -> tuple[dict, dict[str, int]]:
     logger.debug(
-        "analyzing %s characters against %s criteria and %s call types, manager: %s",
+        "analyzing %s characters against %s criteria and %s call types",
         len(plain),
         len(criteria),
         len(call_types),
-        manager_name or UNKNOWN_MANAGER,
     )
     model = build_analysis_model(criteria, call_types, config.llm.output.list_items)
     prompt = config.prompt.user.format(
@@ -54,15 +51,10 @@ def analyze(
     raw = llm.generate(config.prompt.system, prompt, model.model_json_schema())
     payload = model.model_validate(raw).model_dump()
     scores = payload.pop(SCORES_FIELD)
-    met = sorted(code for code, score in scores.items() if score)
     logger.info(
-        "call classified as %s, %s of %s criteria met: %s",
+        "call classified as %s, %s of %s criteria met",
         payload[CALL_TYPE_FIELD],
-        len(met),
+        sum(scores.values()),
         len(scores),
-        ", ".join(met) or "none",
     )
-    logger.debug("summary: %s", payload[SUMMARY_FIELD])
-    for field in TEXT_LIST_FIELDS:
-        logger.debug("%s: %s", field, payload[field])
     return payload, scores

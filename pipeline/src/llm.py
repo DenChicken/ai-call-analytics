@@ -96,8 +96,6 @@ class Llm:
                     "and was truncated, raise it in the config"
                 )
             logger.info("generating from %s input tokens", prompt_tokens)
-            logger.debug("system prompt:\n%s", system_prompt)
-            logger.debug("user prompt:\n%s", user_prompt)
 
             prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
                 self._tokenizer, JsonSchemaParser(schema, config=parser_config())
@@ -137,7 +135,6 @@ class Llm:
             elapsed,
             len(produced) / elapsed if elapsed else 0,
         )
-        logger.debug("raw completion:\n%s", completion)
 
         if self._config.unload_after:
             self.unload()

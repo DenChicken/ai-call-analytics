@@ -22,6 +22,7 @@ class StorageConfig:
 class FetchConfig:
     interval_seconds: int
     min_call_duration_seconds: int
+    max_call_duration_seconds: int
     initial_lookback_days: int
     max_records_per_cycle: int
     download_cooldown_seconds: float
@@ -133,10 +134,17 @@ def load_config(path: str | Path) -> Config:
     fetch = FetchConfig(
         interval_seconds=_require(fetch_raw, "interval_seconds", "fetch"),
         min_call_duration_seconds=_require(fetch_raw, "min_call_duration_seconds", "fetch"),
+        max_call_duration_seconds=_require(fetch_raw, "max_call_duration_seconds", "fetch"),
         initial_lookback_days=_require(fetch_raw, "initial_lookback_days", "fetch"),
         max_records_per_cycle=_require(fetch_raw, "max_records_per_cycle", "fetch"),
         download_cooldown_seconds=_require(fetch_raw, "download_cooldown_seconds", "fetch"),
     )
+
+    if fetch.max_call_duration_seconds <= fetch.min_call_duration_seconds:
+        raise ConfigError(
+            f"max_call_duration_seconds ({fetch.max_call_duration_seconds}) must be greater "
+            f"than min_call_duration_seconds ({fetch.min_call_duration_seconds}) in [fetch]"
+        )
 
     network = NetworkConfig(
         connect_timeout=_require(network_raw, "connect_timeout", "network"),

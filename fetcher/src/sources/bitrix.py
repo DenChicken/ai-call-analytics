@@ -63,6 +63,8 @@ class BitrixSource(Source):
         self._name = source_config.name
         self._initial_lookback_days = fetch.initial_lookback_days
         self._max_records_per_cycle = fetch.max_records_per_cycle
+        self._min_duration_seconds = fetch.min_call_duration_seconds
+        self._max_duration_seconds = fetch.max_call_duration_seconds
         self._portal_url = str(require_option(source_config, "portal_url")).rstrip("/")
         self._client = BitrixClient(
             read_secret_file(require_option(source_config, "rest_url_file")), network
@@ -76,19 +78,40 @@ class BitrixSource(Source):
     def close(self) -> None:
         self._client.close()
 
-    def list_calls(self, cursor: str | None, min_duration_seconds: int) -> CallBatch:
+    def list_calls(self, cursor: str | None) -> CallBatch:
         records = self._fetch_statistics(cursor)
         if not records:
             return CallBatch(calls=[], cursor=None)
-        usable = [
-            record
-            for record in records
-            if record.get("RECORD_FILE_ID")
-            and int(record.get("CALL_DURATION") or 0) >= min_duration_seconds
-        ]
-        skipped = len(records) - len(usable)
-        if skipped:
-            logger.info("skipped %s records without recording or too short", skipped)
+
+        no_recording = 0
+        too_short = 0
+        too_long = 0
+        usable = []
+        for record in records:
+            duration = int(record.get("CALL_DURATION") or 0)
+            if not record.get("RECORD_FILE_ID"):
+                no_recording += 1
+            elif duration < self._min_duration_seconds:
+                too_short += 1
+            elif duration > self._max_duration_seconds:
+                too_long += 1
+                logger.warning(
+                    "call %s skipped: %ss exceeds max_call_duration_seconds of %ss",
+                    record.get("CALL_ID"),
+                    duration,
+                    self._max_duration_seconds,
+                )
+            else:
+                usable.append(record)
+
+        if no_recording or too_short or too_long:
+            logger.info(
+                "skipped %s records: %s without recording, %s too short, %s too long",
+                no_recording + too_short + too_long,
+                no_recording,
+                too_short,
+                too_long,
+            )
 
         agents = self._resolve_agents(usable)
         subjects = self._resolve_subjects(usable)
