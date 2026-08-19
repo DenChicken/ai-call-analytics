@@ -1,4 +1,5 @@
 import json
+import logging
 
 import psycopg
 from psycopg.rows import dict_row
@@ -6,10 +7,13 @@ from psycopg.rows import dict_row
 from src.constants import STATUS_PENDING
 from src.source import Agent, Call
 
+logger = logging.getLogger(__name__)
+
 
 class Database:
     def __init__(self, dsn: str):
         self._connection = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
+        logger.info("connected to the database")
 
     def close(self) -> None:
         self._connection.close()
@@ -46,6 +50,7 @@ class Database:
                 (value, source_id),
             )
         self._connection.commit()
+        logger.debug("cursor for source %s set to %s", source_id, value)
 
     def existing_external_ids(self, source_id: int, external_ids: list[str]) -> set[str]:
         if not external_ids:
@@ -143,10 +148,17 @@ class Database:
                 )
                 inserted = cursor.fetchone()
                 if inserted is None:
+                    logger.debug("call %s already stored, insert skipped", call.external_id)
                     return False
 
                 cursor.execute(
                     "INSERT INTO processing_jobs (call_id, status) VALUES (%s, %s)",
                     (call_id, STATUS_PENDING),
                 )
+        logger.debug(
+            "stored call %s as id %s, job queued, cursor moved to %s",
+            call.external_id,
+            call_id,
+            cursor_value,
+        )
         return True

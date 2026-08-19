@@ -53,6 +53,7 @@ class BitrixClient:
 
     def call(self, method: str, params: dict) -> dict:
         url = self._rest_url + method + JSON_SUFFIX
+        logger.debug("calling %s with %s", method, params)
 
         for attempt in range(self._network.max_retries):
             self._limiter.wait()
@@ -106,9 +107,14 @@ class BitrixClient:
         return results
 
     def download(self, url: str, target: Path) -> None:
+        started = time.monotonic()
+        written = 0
         with self._client.stream("GET", url, timeout=self._network.download_timeout) as response:
             response.raise_for_status()
             with target.open("wb") as handle:
                 for chunk in response.iter_bytes():
                     shutdown.check()
-                    handle.write(chunk)
+                    written += handle.write(chunk)
+        logger.debug(
+            "downloaded %s bytes to %s in %.1fs", written, target.name, time.monotonic() - started
+        )

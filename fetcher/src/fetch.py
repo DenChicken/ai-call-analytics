@@ -9,9 +9,17 @@ from src.source import Source
 logger = logging.getLogger(__name__)
 
 
+def _warn_once(already_skipped: bool) -> None:
+    if not already_skipped:
+        logger.warning(
+            "cursor stops advancing after this call: skipped calls are retried next cycle"
+        )
+
+
 def run_once(config: Config, database: Database, source: Source) -> None:
     source_id = database.get_source_id(source.name)
     cursor = database.get_cursor(source_id)
+    logger.debug("source %s: listing calls since cursor %s", source.name, cursor)
 
     batch = source.list_calls(cursor, config.fetch.min_call_duration_seconds)
     if batch.cursor is None:
@@ -36,6 +44,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
 
     stored = 0
     skipped = False
+    advanced_to = cursor
     total = len(new_calls)
     try:
         for number, call in enumerate(new_calls, start=1):
@@ -59,6 +68,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
             except Exception as error:
                 logger.error("failed to download call %s: %s", call.external_id, error)
                 temp_path.unlink(missing_ok=True)
+                _warn_once(skipped)
                 skipped = True
                 continue
 
@@ -70,16 +80,30 @@ def run_once(config: Config, database: Database, source: Source) -> None:
             except Exception as error:
                 logger.error("failed to store call %s: %s", call.external_id, error)
                 final_path.unlink(missing_ok=True)
+                _warn_once(skipped)
                 skipped = True
                 continue
 
             if inserted:
                 stored += 1
+                if cursor_value is not None:
+                    advanced_to = cursor_value
             else:
                 logger.info("call %s stored by another run, removing file", call.external_id)
                 final_path.unlink(missing_ok=True)
 
             if config.fetch.download_cooldown_seconds:
                 shutdown.sleep(config.fetch.download_cooldown_seconds)
+
+        if not skipped:
+            database.set_cursor(source_id, batch.cursor)
+            advanced_to = batch.cursor
     finally:
-        logger.info("source %s: stored %s of %s new calls", source.name, stored, total)
+        logger.info(
+            "source %s: stored %s of %s new calls, cursor %s -> %s",
+            source.name,
+            stored,
+            total,
+            cursor,
+            advanced_to,
+        )
