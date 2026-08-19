@@ -2,13 +2,20 @@ import gc
 import json
 import logging
 import threading
+import time
 
 import torch
 from lmformatenforcer import JsonSchemaParser
 from lmformatenforcer.integrations.transformers import (
     build_transformers_prefix_allowed_tokens_fn,
 )
-from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    BitsAndBytesConfig,
+    MaxTimeCriteria,
+    StoppingCriteriaList,
+)
 
 from src.config import LlmConfig
 from src.schema import parser_config
@@ -104,21 +111,23 @@ class Llm:
                 else {"do_sample": False}
             )
 
+            output = self._config.output
+            started = time.monotonic()
             with torch.inference_mode():
                 generated = self._model.generate(
                     **inputs,
-                    max_new_tokens=self._config.output.max_new_tokens,
+                    max_new_tokens=output.max_new_tokens,
                     prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                    stopping_criteria=StoppingCriteriaList(
+                        [MaxTimeCriteria(output.timeout_seconds)]
+                    ),
                     pad_token_id=self._tokenizer.eos_token_id,
                     **sampling,
                 )
 
             produced = generated[0][prompt_tokens:]
+            elapsed = time.monotonic() - started
             completion = self._tokenizer.decode(produced, skip_special_tokens=True)
-
-        if len(produced) >= self._config.output.max_new_tokens:
-            logger.warning("max_new_tokens limit exceeded, processing with caution "
-                           f"(produced={len(produced)}, max_new_tokens={self._config.output.max_new_tokens})")
 
         if self._config.unload_after:
             self.unload()
@@ -126,7 +135,13 @@ class Llm:
         try:
             return json.loads(completion)
         except json.JSONDecodeError as error:
-            raise LlmError(f"model returned invalid json: {error}") from error
+            cut_off = len(produced) >= output.max_new_tokens or elapsed >= output.timeout_seconds
+            reason = (
+                f"generation was cut off after {len(produced)} tokens and {elapsed:.0f}s"
+                if cut_off
+                else "model returned invalid json"
+            )
+            raise LlmError(f"{reason}: {error}") from error
 
 
 def _quantization_config(config: LlmConfig) -> BitsAndBytesConfig | None:

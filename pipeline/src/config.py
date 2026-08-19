@@ -1,4 +1,3 @@
-import math
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -9,9 +8,6 @@ from src.constants import (
     PROMPT_TRANSCRIPT_PLACEHOLDER,
 )
 
-TOKEN_BLOCK = 16
-JSON_OVERHEAD_TOKENS = 64
-LIST_FIELD_COUNT = 3
 REFERENCE_CODE = "code"
 REFERENCE_LABEL = "label"
 REFERENCE_DESCRIPTION = "description"
@@ -69,17 +65,8 @@ class AsrConfig:
 @dataclass(frozen=True)
 class OutputConfig:
     list_items: int
-    tokens_per_item: int
-    summary_tokens: int
-
-    @property
-    def max_new_tokens(self) -> int:
-        total = (
-            self.summary_tokens
-            + LIST_FIELD_COUNT * self.list_items * self.tokens_per_item
-            + JSON_OVERHEAD_TOKENS
-        )
-        return math.ceil(total / TOKEN_BLOCK) * TOKEN_BLOCK
+    max_new_tokens: int
+    timeout_seconds: float
 
 
 @dataclass(frozen=True)
@@ -209,8 +196,8 @@ def _load_llm(raw: dict) -> LlmConfig:
         unload_after=_require(section, "unload_after", "llm"),
         output=OutputConfig(
             list_items=_require(output_raw, "list_items", "llm.output"),
-            tokens_per_item=_require(output_raw, "tokens_per_item", "llm.output"),
-            summary_tokens=_require(output_raw, "summary_tokens", "llm.output"),
+            max_new_tokens=_require(output_raw, "max_new_tokens", "llm.output"),
+            timeout_seconds=_require(output_raw, "timeout_seconds", "llm.output"),
         ),
     )
 

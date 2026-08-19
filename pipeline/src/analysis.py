@@ -24,7 +24,7 @@ def analyze(
     plain: str,
     manager_name: str | None,
 ) -> tuple[dict, dict[str, int]]:
-    model = build_analysis_model(criteria, call_types, config.llm.output)
+    model = build_analysis_model(criteria, call_types, config.llm.output.list_items)
     prompt = config.prompt.user.format(
         **{
             PROMPT_CRITERIA_PLACEHOLDER: render_criteria(criteria),

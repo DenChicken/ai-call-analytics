@@ -50,8 +50,8 @@ unload_after = false
 
 [llm.output]
 list_items = 3
-tokens_per_item = 120
-summary_tokens = 360
+max_new_tokens = 2048
+timeout_seconds = 900
 
 [prompt]
 label = "v3"
