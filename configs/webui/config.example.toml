@@ -1,0 +1,17 @@
+[database]
+dsn_file = "../../secrets/database_dsn"
+
+[storage]
+root_dir = "../../data"
+
+[display]
+timezone = "Asia/Tbilisi"
+refresh_seconds = 5
+page_size = 25
+queue_size = 10
+
+[logging]
+level = "INFO"
+dir = "../../logs"
+external_logs = false
+external_level = "WARNING"

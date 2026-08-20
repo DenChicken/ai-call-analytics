@@ -1,7 +1,7 @@
 import logging
 
 from src import shutdown
-from src.config import Config
+from src.config import Config, storage_path
 from src.constants import TEMP_FILE_SUFFIX
 from src.database import Database
 from src.source import Source
@@ -75,7 +75,12 @@ def run_once(config: Config, database: Database, source: Source) -> None:
             try:
                 cursor_value = None if skipped else call.cursor
                 inserted = database.insert_call_with_job(
-                    call_id, source_id, call, agent_id, str(final_path), cursor_value
+                    call_id,
+                    source_id,
+                    call,
+                    agent_id,
+                    storage_path(config.storage.root_dir, final_path),
+                    cursor_value,
                 )
             except Exception as error:
                 logger.error("failed to store call %s: %s", call.external_id, error)

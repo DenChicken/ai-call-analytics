@@ -29,6 +29,7 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
+    root_dir: Path
     done_dir: Path
 
 
@@ -131,6 +132,25 @@ def _require(section: dict, key: str, where: str):
     return section[key]
 
 
+def resolve_path(base_dir: Path, value: str | Path) -> Path:
+    path = Path(value)
+    return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
+
+
+def storage_path(root_dir: Path, path: Path) -> str:
+    return path.resolve().relative_to(root_dir).as_posix()
+
+
+def resolve_inside(root_dir: Path, value: str | Path, key: str, where: str) -> Path:
+    path = resolve_path(root_dir, value)
+    if not path.is_relative_to(root_dir):
+        raise ConfigError(
+            f"'{key}' in [{where}] resolves to {path}, which is outside "
+            f"root_dir {root_dir}: paths stored in the database must stay inside the root"
+        )
+    return path
+
+
 def read_secret_file(path: str | Path) -> str:
     path = Path(path)
     if not path.is_file():
@@ -152,13 +172,13 @@ def _read_text_file(path: str | Path, where: str) -> str:
     return text
 
 
-def _load_asr(raw: dict) -> AsrConfig:
+def _load_asr(raw: dict, base_dir: Path) -> AsrConfig:
     section = _section(raw, "asr")
     transcript_raw = _section(section, "transcript", "asr.")
     where = "asr.transcript"
     return AsrConfig(
         repo_id=_require(section, "repo_id", "asr"),
-        local_dir=Path(_require(section, "local_dir", "asr")).resolve(),
+        local_dir=resolve_path(base_dir, _require(section, "local_dir", "asr")),
         device=_require(section, "device", "asr"),
         compute_type=_require(section, "compute_type", "asr"),
         unload_after=_require(section, "unload_after", "asr"),
@@ -180,12 +200,12 @@ def _load_asr(raw: dict) -> AsrConfig:
     )
 
 
-def _load_llm(raw: dict) -> LlmConfig:
+def _load_llm(raw: dict, base_dir: Path) -> LlmConfig:
     section = _section(raw, "llm")
     output_raw = _section(section, "output", "llm.")
     return LlmConfig(
         repo_id=_require(section, "repo_id", "llm"),
-        local_dir=Path(_require(section, "local_dir", "llm")).resolve(),
+        local_dir=resolve_path(base_dir, _require(section, "local_dir", "llm")),
         device=_require(section, "device", "llm"),
         torch_dtype=_require(section, "torch_dtype", "llm"),
         load_in_4bit=_require(section, "load_in_4bit", "llm"),
@@ -202,9 +222,9 @@ def _load_llm(raw: dict) -> LlmConfig:
     )
 
 
-def _load_prompt(raw: dict) -> PromptConfig:
+def _load_prompt(raw: dict, base_dir: Path) -> PromptConfig:
     section = _section(raw, "prompt")
-    user_path = _require(section, "user_file", "prompt")
+    user_path = resolve_path(base_dir, _require(section, "user_file", "prompt"))
     user = _read_text_file(user_path, "prompt")
     for placeholder in PROMPT_PLACEHOLDERS:
         if "{" + placeholder + "}" not in user:
@@ -213,7 +233,9 @@ def _load_prompt(raw: dict) -> PromptConfig:
             )
     return PromptConfig(
         label=_require(section, "label", "prompt"),
-        system=_read_text_file(_require(section, "system_file", "prompt"), "prompt"),
+        system=_read_text_file(
+            resolve_path(base_dir, _require(section, "system_file", "prompt")), "prompt"
+        ),
         user=user,
     )
 
@@ -258,6 +280,8 @@ def load_config(path: str | Path) -> Config:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
 
+    base_dir = path.resolve().parent
+
     database_raw = _section(raw, "database")
     storage_raw = _section(raw, "storage")
     worker_raw = _section(raw, "worker")
@@ -266,11 +290,23 @@ def load_config(path: str | Path) -> Config:
     huggingface_raw = _section(raw, "huggingface")
     logging_raw = _section(raw, "logging")
 
-    read_secret_file(_require(huggingface_raw, "token_file", "huggingface"))
+    read_secret_file(
+        resolve_path(base_dir, _require(huggingface_raw, "token_file", "huggingface"))
+    )
 
-    database = DatabaseConfig(dsn=read_secret_file(_require(database_raw, "dsn_file", "database")))
+    database = DatabaseConfig(
+        dsn=read_secret_file(
+            resolve_path(base_dir, _require(database_raw, "dsn_file", "database"))
+        )
+    )
 
-    storage = StorageConfig(done_dir=Path(_require(storage_raw, "done_dir", "storage")).resolve())
+    root_dir = resolve_path(base_dir, _require(storage_raw, "root_dir", "storage"))
+    storage = StorageConfig(
+        root_dir=root_dir,
+        done_dir=resolve_inside(
+            root_dir, _require(storage_raw, "done_dir", "storage"), "done_dir", "storage"
+        ),
+    )
 
     worker = WorkerConfig(
         count=_require(worker_raw, "count", "worker"),
@@ -278,12 +314,12 @@ def load_config(path: str | Path) -> Config:
         max_attempts=_require(worker_raw, "max_attempts", "worker"),
     )
 
-    asr = _load_asr(raw)
-    llm = _load_llm(raw)
+    asr = _load_asr(raw, base_dir)
+    llm = _load_llm(raw, base_dir)
 
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
-        dir=Path(_require(logging_raw, "dir", "logging")),
+        dir=resolve_path(base_dir, _require(logging_raw, "dir", "logging")),
         external_logs=_require(logging_raw, "external_logs", "logging"),
         external_level=_require(logging_raw, "external_level", "logging"),
     )
@@ -302,8 +338,12 @@ def load_config(path: str | Path) -> Config:
         worker=worker,
         asr=asr,
         llm=llm,
-        prompt=_load_prompt(raw),
+        prompt=_load_prompt(raw, base_dir),
         logging=logging_config,
-        criteria=_load_reference(_require(criteria_raw, "file", "criteria"), "criterion"),
-        call_types=_load_reference(_require(types_raw, "file", "types"), "type"),
+        criteria=_load_reference(
+            resolve_path(base_dir, _require(criteria_raw, "file", "criteria")), "criterion"
+        ),
+        call_types=_load_reference(
+            resolve_path(base_dir, _require(types_raw, "file", "types")), "type"
+        ),
     )

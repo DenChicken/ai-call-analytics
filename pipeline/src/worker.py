@@ -6,7 +6,7 @@ from pathlib import Path
 from src import shutdown
 from src.analysis import analyze
 from src.asr import Asr
-from src.config import Config
+from src.config import Config, storage_path
 from src.constants import (
     CALL_TYPE_FIELD,
     CALL_TYPES_TABLE,
@@ -73,7 +73,7 @@ def run(config: Config, database: Database, models: Models) -> None:
 def _transcribe(
     config: Config, database: Database, models: Models, task: Task, started: float
 ) -> None:
-    audio_path = Path(task.audio_path)
+    audio_path = config.storage.root_dir / task.audio_path
     if not audio_path.is_file():
         raise FileNotFoundError(f"audio file not found: {audio_path}")
 
@@ -117,7 +117,7 @@ def _analyze(
         config, models.llm, criteria, call_types, plain, database.manager_name(task.call_id)
     )
 
-    source = Path(task.audio_path)
+    source = config.storage.root_dir / task.audio_path
     target = _done_path(config, source)
     metadata = {
         METADATA_ASR_MODEL: models.asr.model_name,
@@ -125,7 +125,13 @@ def _analyze(
         METADATA_PROMPT_LABEL: config.prompt.label,
         METADATA_PROCESSING_SECONDS: int(time.monotonic() - started),
     }
-    database.save_analysis(task.call_id, analysis, scores, metadata, str(target))
+    database.save_analysis(
+        task.call_id,
+        analysis,
+        scores,
+        metadata,
+        storage_path(config.storage.root_dir, target),
+    )
     if target != source:
         source.replace(target)
     logger.info(

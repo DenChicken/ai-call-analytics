@@ -103,3 +103,12 @@ CREATE TABLE IF NOT EXISTS criterion_scores (
     PRIMARY KEY (call_id, criterion_code),
     CONSTRAINT criterion_scores_score_check CHECK (score IN (0, 1))
 );
+
+CREATE INDEX IF NOT EXISTS criterion_scores_code_idx ON criterion_scores (criterion_code, call_id);
+
+CREATE TABLE IF NOT EXISTS users (
+    id             SMALLSERIAL PRIMARY KEY,
+    login          TEXT NOT NULL UNIQUE,
+    password_hash  TEXT NOT NULL,
+    created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);

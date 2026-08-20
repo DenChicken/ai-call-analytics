@@ -2,7 +2,14 @@ import logging
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from src.config import FetchConfig, NetworkConfig, SourceConfig, read_secret_file, require_option
+from src.config import (
+    FetchConfig,
+    NetworkConfig,
+    SourceConfig,
+    read_secret_file,
+    require_option,
+    resolve_path,
+)
 from src.constants import (
     DIRECTION_CALLBACK,
     DIRECTION_INBOUND,
@@ -67,7 +74,12 @@ class BitrixSource(Source):
         self._max_duration_seconds = fetch.max_call_duration_seconds
         self._portal_url = str(require_option(source_config, "portal_url")).rstrip("/")
         self._client = BitrixClient(
-            read_secret_file(require_option(source_config, "rest_url_file")), network
+            read_secret_file(
+                resolve_path(
+                    source_config.base_dir, require_option(source_config, "rest_url_file")
+                )
+            ),
+            network,
         )
         self._agents: dict[str, Agent] = {}
 

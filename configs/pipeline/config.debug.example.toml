@@ -1,8 +1,9 @@
 [database]
-dsn_file = "./secrets/database_dsn"
+dsn_file = "../../secrets/database_dsn"
 
 [storage]
-done_dir = "./data/done"
+root_dir = "../../data"
+done_dir = "done"
 
 [worker]
 count = 1
@@ -10,17 +11,17 @@ poll_interval_seconds = 15
 max_attempts = 1
 
 [criteria]
-file = "./configs/pipeline/criteria.example.toml"
+file = "criteria.example.toml"
 
 [types]
-file = "./configs/pipeline/types.example.toml"
+file = "types.example.toml"
 
 [huggingface]
-token_file = "./secrets/hf_token"
+token_file = "../../secrets/hf_token"
 
 [asr]
 repo_id = "Systran/faster-whisper-large-v3"
-local_dir = "./models/faster-whisper-large-v3"
+local_dir = "../../models/faster-whisper-large-v3"
 device = "cpu"
 compute_type = "int8"
 unload_after = true
@@ -38,7 +39,7 @@ break_silence_ms = 250
 
 [llm]
 repo_id = "Qwen/Qwen3-1.7B"
-local_dir = "./models/Qwen3-1.7B"
+local_dir = "../../models/Qwen3-1.7B"
 device = "cpu"
 torch_dtype = "bfloat16"
 load_in_4bit = false
@@ -55,11 +56,11 @@ timeout_seconds = 900
 
 [prompt]
 label = "v3"
-system_file = "./configs/pipeline/prompts/system-example.txt"
-user_file = "./configs/pipeline/prompts/user-example.txt"
+system_file = "prompts/system-example.txt"
+user_file = "prompts/user-example.txt"
 
 [logging]
 level = "DEBUG"
-dir = "./logs"
+dir = "../../logs"
 external_logs = false
 external_level = "WARNING"

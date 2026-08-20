@@ -1,9 +1,10 @@
 [database]
-dsn_file = "./secrets/database_dsn"
+dsn_file = "../../secrets/database_dsn"
 
 [storage]
-pending_dir = "./data/pending"
-temp_dir = "./data/temp"
+root_dir = "../../data"
+pending_dir = "pending"
+temp_dir = "temp"
 
 [fetch]
 interval_seconds = 30
@@ -26,10 +27,10 @@ requests_per_second = 2
 name = "crm_main"
 kind = "bitrix24"
 portal_url = "https://example.bitrix24.ru"
-rest_url_file = "./secrets/crm_main_rest_url"
+rest_url_file = "../../secrets/crm_main_rest_url"
 
 [logging]
 level = "DEBUG"
-dir = "./logs"
+dir = "../../logs"
 external_logs = false
 external_level = "WARNING"
