@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import reflex as rx
 
 from src import context, formatting
-from src.constants import PERIOD_WEEK
+from src.constants import PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_WEEK
 from src.database import build_window
 from src.state.auth import AuthState
 
@@ -30,7 +30,7 @@ class ManagerRow:
     agent_id: int
     name: str
     calls: int
-    score: int
+    score: float
     score_label: str
     points: int
     delta: str
@@ -52,9 +52,13 @@ class ManagersState(AuthState):
             return AuthState.require_session
         self._refresh()
 
+    @rx.var
+    def period_label(self) -> str:
+        return PERIOD_LABELS[self.period]
+
     @rx.event
-    def set_period(self, period: str | list[str]):
-        self.period = period if isinstance(period, str) else period[0]
+    def set_period(self, label: str):
+        self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
 
     @rx.event
@@ -72,22 +76,21 @@ class ManagersState(AuthState):
         self._refresh()
 
     def _refresh(self) -> None:
-        rows = collect(self.period)
+        rows = collect(self.period, self.utc_offset)
         self.rows = sorted_rows(
             filtered_rows(rows, self.search), self.sort_by, self.descending
         )
 
 
-def collect(period: str) -> list[ManagerRow]:
+def collect(period: str, offset_hours: int) -> list[ManagerRow]:
     database = context.database()
-    timezone = context.config().display.timezone
 
-    since, until = formatting.period_bounds(period, timezone)
+    since, until = formatting.period_bounds(period, offset_hours)
     previous_since, previous_until = formatting.previous_bounds(since, until)
     types = [entry["code"] for entry in database.call_types()]
 
-    window = build_window(since, until, types, timezone)
-    previous = build_window(previous_since, previous_until, types, timezone)
+    window = build_window(since, until, types)
+    previous = build_window(previous_since, previous_until, types)
     earlier = {row["agent_id"]: row["ratio"] for row in database.agent_totals(previous)}
 
     rows = []
@@ -98,11 +101,11 @@ def collect(period: str) -> list[ManagerRow]:
                 agent_id=row["agent_id"],
                 name=row["display_name"],
                 calls=row["calls"],
-                score=formatting.percent(row["ratio"]),
-                score_label=f"{formatting.percent(row['ratio'])}%",
+                score=formatting.share(row["ratio"]),
+                score_label=formatting.share_label(row["ratio"]),
                 points=points,
                 delta=formatting.delta_label(points),
-                last_call=formatting.moment(row["last_call"], timezone),
+                last_call=formatting.moment(row["last_call"], offset_hours),
                 last_call_key=row["last_call"].timestamp() if row["last_call"] else 0,
             )
         )

@@ -1,12 +1,33 @@
 import reflex as rx
 
-from src.constants import PERIOD_LABELS, POSITIVE_SIGN, TRANSITION_ARROW
+from src.constants import PERIOD_LABELS, POSITIVE_SIGN
 
 KPI_MIN_WIDTH = "12rem"
 KPI_ICON_SIZE = 16
+TABLE_SIZE = "1"
+PERIOD_WIDTH = "7.5rem"
+MENU_ICON_SIZE = 12
+MENU_MAX_HEIGHT = "18rem"
+MENU_LABEL_PADDING = "0.25rem 0.5rem"
+MENU_ITEM_PADDING = "0.35rem 0.5rem"
+REFRESH_ICON_SIZE = 14
+CARD_HEADER_PADDING = "0.75rem 1rem"
+CARD_BODY_PADDING = "1rem"
 DELTA_POSITIVE_COLOR = "grass"
 DELTA_NEGATIVE_COLOR = "tomato"
 DELTA_NEUTRAL_COLOR = "gray"
+MUTED_COLOR = "var(--gray-9)"
+CARD_HEADER_BACKGROUND = "var(--gray-a2)"
+CARD_BORDER = "1px solid var(--gray-a5)"
+TRUNCATE_STYLE = {
+    "overflow": "hidden",
+    "text_overflow": "ellipsis",
+    "white_space": "nowrap",
+}
+
+
+def truncated(value: rx.Var | str, **props) -> rx.Component:
+    return rx.text(value, **TRUNCATE_STYLE, **props)
 
 
 def kpi_card(
@@ -15,18 +36,21 @@ def kpi_card(
     return rx.card(
         rx.vstack(
             rx.hstack(
-                rx.icon(icon, size=KPI_ICON_SIZE, color="var(--gray-9)"),
+                rx.icon(icon, size=KPI_ICON_SIZE, color=MUTED_COLOR),
                 rx.text(title, size="2", color_scheme="gray"),
                 spacing="2",
                 align="center",
             ),
             rx.hstack(
-                rx.heading(value, size="7"),
+                rx.heading(value, size="7", **TRUNCATE_STYLE),
                 note if note is not None else rx.fragment(),
                 spacing="3",
                 align="baseline",
+                width="100%",
             ),
             spacing="2",
+            height="100%",
+            justify="between",
         ),
         min_width=KPI_MIN_WIDTH,
         flex="1",
@@ -37,6 +61,7 @@ def delta_text(points: rx.Var, label: rx.Var) -> rx.Component:
     return rx.text(
         label,
         size="2",
+        white_space="nowrap",
         color_scheme=rx.cond(
             points > 0,
             DELTA_POSITIVE_COLOR,
@@ -49,6 +74,7 @@ def signed_count(value: rx.Var) -> rx.Component:
     return rx.text(
         rx.cond(value > 0, f"{POSITIVE_SIGN}{value}", value.to_string()),
         size="2",
+        white_space="nowrap",
         color_scheme=rx.cond(
             value > 0,
             DELTA_POSITIVE_COLOR,
@@ -58,32 +84,100 @@ def signed_count(value: rx.Var) -> rx.Component:
 
 
 def period_picker(current: rx.Var, on_change) -> rx.Component:
-    return rx.segmented_control.root(
-        *[
-            rx.segmented_control.item(label, value=code)
-            for code, label in PERIOD_LABELS.items()
-        ],
+    return rx.select(
+        list(PERIOD_LABELS.values()),
         value=current,
         on_change=on_change,
         size="1",
+        width=PERIOD_WIDTH,
     )
 
 
-def transition_text(before: rx.Var, after: rx.Var) -> rx.Component:
-    return rx.text(
-        f"{before}% {TRANSITION_ARROW} {after}%",
+def checkbox_menu(
+    label: str, summary: rx.Var, items: rx.Var, checked, on_change
+) -> rx.Component:
+    return rx.menu.root(
+        rx.menu.trigger(
+            rx.button(
+                rx.icon("list-filter", size=MENU_ICON_SIZE),
+                rx.text(summary, size="1", white_space="nowrap"),
+                rx.icon("chevron-down", size=MENU_ICON_SIZE),
+                variant="soft",
+                size="1",
+                color_scheme="gray",
+            )
+        ),
+        rx.menu.content(
+            rx.text(label, size="1", color_scheme="gray", padding=MENU_LABEL_PADDING),
+            rx.foreach(
+                items,
+                lambda entry: rx.box(
+                    rx.checkbox(
+                        entry.label,
+                        checked=checked(entry),
+                        on_change=lambda value: on_change(entry, value),
+                        size="1",
+                    ),
+                    padding=MENU_ITEM_PADDING,
+                    width="100%",
+                ),
+            ),
+            max_height=MENU_MAX_HEIGHT,
+            overflow_y="auto",
+        ),
+    )
+
+
+def scrollable_table(*children: rx.Component, size: str = TABLE_SIZE) -> rx.Component:
+    return rx.box(
+        rx.table.root(*children, width="100%", size=size),
+        width="100%",
+        overflow_x="auto",
+    )
+
+
+def status_badge(label: rx.Var, color: rx.Var, error: rx.Var) -> rx.Component:
+    return rx.cond(
+        error != "",
+        rx.tooltip(rx.badge(label, color_scheme=color), content=error),
+        rx.badge(label, color_scheme=color),
+    )
+
+
+def refresh_button(on_click) -> rx.Component:
+    return rx.icon_button(
+        rx.icon("refresh-cw", size=REFRESH_ICON_SIZE),
+        on_click=on_click,
+        variant="ghost",
         size="1",
         color_scheme="gray",
     )
 
 
-def section_card(title: str, *children: rx.Component) -> rx.Component:
+def section_card(
+    title: str, *children: rx.Component, actions: rx.Component | None = None
+) -> rx.Component:
     return rx.card(
         rx.vstack(
-            rx.text(title, size="2", weight="medium"),
-            *children,
-            spacing="3",
+            rx.hstack(
+                rx.text(title, size="2", weight="bold"),
+                rx.spacer(),
+                actions if actions is not None else rx.fragment(),
+                width="100%",
+                align="center",
+                padding=CARD_HEADER_PADDING,
+                border_bottom=CARD_BORDER,
+                background=CARD_HEADER_BACKGROUND,
+            ),
+            rx.box(
+                rx.vstack(*children, spacing="3", width="100%"),
+                padding=CARD_BODY_PADDING,
+                width="100%",
+            ),
+            spacing="0",
             width="100%",
         ),
+        padding="0",
         width="100%",
+        overflow="hidden",
     )

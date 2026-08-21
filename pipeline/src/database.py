@@ -166,16 +166,23 @@ class Database:
             attempts=attempts,
         )
 
-    def release_task(self, call_id: int, status: str, error: str | None = None) -> None:
+    def release_task(
+        self,
+        call_id: int,
+        status: str,
+        error_code: str | None = None,
+        error: str | None = None,
+    ) -> None:
         with self._pool.connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
                     UPDATE processing_jobs
-                    SET status = %s, claimed_at = NULL, last_error = %s, updated_at = now()
+                    SET status = %s, claimed_at = NULL, error_code = %s,
+                        last_error = %s, updated_at = now()
                     WHERE call_id = %s
                     """,
-                    (status, error, call_id),
+                    (status, error_code, error, call_id),
                 )
 
     def manager_name(self, call_id: int) -> str | None:
@@ -197,7 +204,6 @@ class Database:
         call_id: int,
         segments: list[Segment],
         plain: str,
-        transcript: str,
         model: str,
         language: str,
         duration_seconds: float,
@@ -209,15 +215,14 @@ class Database:
                     cursor.execute(
                         """
                         INSERT INTO asr_results (
-                            call_id, model, language, duration_ms, plain, transcript, raw
+                            call_id, model, language, duration_ms, plain, raw
                         )
-                        VALUES (%s, %s, %s, %s, %s, %s, %s)
+                        VALUES (%s, %s, %s, %s, %s, %s)
                         ON CONFLICT (call_id) DO UPDATE
                         SET model = EXCLUDED.model,
                             language = EXCLUDED.language,
                             duration_ms = EXCLUDED.duration_ms,
                             plain = EXCLUDED.plain,
-                            transcript = EXCLUDED.transcript,
                             raw = EXCLUDED.raw,
                             created_at = now()
                         """,
@@ -227,17 +232,15 @@ class Database:
                             language,
                             int(duration_seconds * MILLISECONDS_PER_SECOND),
                             plain,
-                            transcript,
                             json.dumps(payload, ensure_ascii=False),
                         ),
                     )
                     _advance(cursor, call_id, STATUS_TRANSCRIBED)
         logger.debug(
-            "saved asr result for call %s: %s segments, plain %s chars, transcript %s lines",
+            "saved asr result for call %s: %s segments, plain %s chars",
             call_id,
             len(segments),
             len(plain),
-            transcript.count("\n") + 1,
         )
 
     def load_plain(self, call_id: int) -> str | None:
@@ -316,7 +319,8 @@ def _advance(cursor, call_id: int, status: str) -> None:
     cursor.execute(
         """
         UPDATE processing_jobs
-        SET status = %s, attempts = 0, claimed_at = NULL, last_error = NULL, updated_at = now()
+        SET status = %s, attempts = 0, claimed_at = NULL,
+            error_code = NULL, last_error = NULL, updated_at = now()
         WHERE call_id = %s
         """,
         (status, call_id),

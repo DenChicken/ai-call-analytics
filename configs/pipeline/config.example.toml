@@ -35,7 +35,6 @@ word_timestamps = true
 vad_filter = true
 min_silence_duration_ms = 300
 speech_pad_ms = 400
-break_silence_ms = 700
 
 [llm]
 repo_id = "Qwen/Qwen3-4B-Instruct-2507"

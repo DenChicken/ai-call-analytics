@@ -1,8 +1,14 @@
 import reflex as rx
 
-from src.components.common import kpi_card, period_picker, section_card
-from src.components.layout import page_layout
-from src.constants import ROUTE_CALL, ROUTE_MANAGERS
+from src.components.common import (
+    scrollable_table,
+    kpi_card,
+    period_picker,
+    section_card,
+    truncated,
+)
+from src.components.layout import page_layout, sticky_header
+from src.constants import ROUTE_CALL, ROUTE_MANAGERS, SHARE_MAX
 from src.state.manager import (
     CHART_DAY_KEY,
     CHART_LABEL_KEY,
@@ -10,58 +16,79 @@ from src.state.manager import (
     ManagerState,
 )
 
-KPI_SCORE = "Средний балл за период"
+KPI_SCORE = "Средний балл"
 KPI_CALLS = "Звонков"
 KPI_BEST = "Лучший разговор"
 KPI_WORST = "Худший разговор"
-TREND_TITLE = "Изменение среднего балла"
-RADAR_TITLE = "Радар по критериям"
-CRITERIA_TITLE = "Средние оценки по критериям"
+TREND_TITLE = "Средний балл по дням"
+CRITERIA_TREND_TITLE = "Критерии по дням"
+RADAR_TITLE = "Критерии за период"
+CRITERIA_TITLE = "Средние оценки за период"
 CALLS_TITLE = "Разговоры"
 EMPTY_TREND = "Нет данных за период"
 EMPTY_CALLS = "За период нет звонков"
-BACK_LABEL = "К списку менеджеров"
+CRM_LABEL = "Профиль в CRM"
+OPEN_LABEL = "открыть"
 
 CHART_HEIGHT = 260
-PROGRESS_MAX = 100
+CRITERIA_CHART_HEIGHT = 320
+CRITERIA_BAR_SIZE = 16
+CRITERIA_LABEL_WIDTH = 200
+CHART_MARGIN = {"left": 10, "right": 20}
+TICK_COUNT = 6
 RADAR_OPACITY = 0.5
 BACK_ICON_SIZE = 16
+CRM_ICON_SIZE = 14
+NAME_MAX_WIDTH = "22rem"
+BAR_COLOR = "var(--accent-9)"
+LEGEND_WIDTH = "13rem"
+LEGEND_DOT_SIZE = "0.6rem"
+LEGEND_HIDDEN_OPACITY = 0.55
+SHOW_ALL_LABEL = "Все"
+HIDE_ALL_LABEL = "Ничего"
+TOGGLE_TEXT_STYLE = {
+    "overflow": "hidden",
+    "text_overflow": "ellipsis",
+    "white_space": "nowrap",
+}
 
 COLUMNS = ("Дата", "Клиент", "Длительность", "Балл", "Тип")
 
 
 def _header() -> rx.Component:
-    return rx.vstack(
+    return sticky_header(
         rx.link(
-            rx.hstack(
-                rx.icon("arrow-left", size=BACK_ICON_SIZE),
-                rx.text(BACK_LABEL, size="2"),
-                spacing="2",
-                align="center",
-            ),
+            rx.icon("arrow-left", size=BACK_ICON_SIZE),
             href=ROUTE_MANAGERS,
-            underline="none",
             color_scheme="gray",
         ),
-        rx.hstack(
-            rx.vstack(
-                rx.heading(ManagerState.name, size="7"),
-                rx.cond(
-                    ManagerState.email != "",
-                    rx.text(ManagerState.email, size="2", color_scheme="gray"),
-                    rx.fragment(),
+        truncated(ManagerState.name, size="5", weight="bold", max_width=NAME_MAX_WIDTH),
+        rx.cond(
+            ManagerState.profile_link != "",
+            rx.link(
+                rx.hstack(
+                    rx.icon("external-link", size=CRM_ICON_SIZE),
+                    rx.text(CRM_LABEL, size="1"),
+                    spacing="1",
+                    align="center",
                 ),
-                spacing="1",
-                align="start",
+                href=ManagerState.profile_link,
+                is_external=True,
+                underline="none",
+                color_scheme="gray",
             ),
-            rx.spacer(),
-            period_picker(ManagerState.period, ManagerState.set_period),
-            width="100%",
-            align="center",
+            rx.fragment(),
         ),
-        spacing="3",
-        width="100%",
-        align="start",
+        rx.spacer(),
+        period_picker(ManagerState.period_label, ManagerState.set_period),
+    )
+
+
+def _call_link(label: rx.Var, call_id: rx.Var) -> rx.Component:
+    return rx.cond(
+        call_id > 0,
+        rx.link(rx.text(OPEN_LABEL, size="1"), href=f"{ROUTE_CALL}/{call_id}"),
+        rx.fragment(),
     )
 
 
@@ -73,51 +100,160 @@ def _kpi_row() -> rx.Component:
             KPI_BEST,
             ManagerState.best_call,
             "trending-up",
-            rx.cond(
-                ManagerState.best_call_id > 0,
-                rx.link(
-                    rx.text("открыть", size="1"),
-                    href=f"{ROUTE_CALL}/{ManagerState.best_call_id}",
-                ),
-                rx.fragment(),
-            ),
+            _call_link(ManagerState.best_call, ManagerState.best_call_id),
         ),
         kpi_card(
             KPI_WORST,
             ManagerState.worst_call,
             "trending-down",
-            rx.cond(
-                ManagerState.worst_call_id > 0,
-                rx.link(
-                    rx.text("открыть", size="1"),
-                    href=f"{ROUTE_CALL}/{ManagerState.worst_call_id}",
-                ),
-                rx.fragment(),
-            ),
+            _call_link(ManagerState.worst_call, ManagerState.worst_call_id),
         ),
         spacing="3",
         width="100%",
         wrap="wrap",
+        align="stretch",
     )
 
 
-def _trend_chart() -> rx.Component:
+def _score_chart() -> rx.Component:
     return rx.cond(
         ManagerState.trend.length() > 0,
-        rx.recharts.line_chart(
-            rx.recharts.line(
-                data_key=CHART_SCORE_KEY,
-                stroke="var(--accent-9)",
-                type_="monotone",
-                connect_nulls=False,
-            ),
+        rx.recharts.bar_chart(
+            rx.recharts.bar(data_key=CHART_SCORE_KEY, fill=BAR_COLOR),
             rx.recharts.x_axis(data_key=CHART_DAY_KEY),
-            rx.recharts.y_axis(domain=[0, PROGRESS_MAX]),
+            rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
             rx.recharts.graphing_tooltip(),
-            rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+            rx.recharts.cartesian_grid(stroke_dasharray="3 3", vertical=False),
             data=ManagerState.trend,
             height=CHART_HEIGHT,
             width="100%",
+        ),
+        rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
+    )
+
+
+def _line_toggle(line) -> rx.Component:
+    hidden = ManagerState.hidden_lines.contains(line.code)
+    return rx.hstack(
+        rx.box(
+            width=LEGEND_DOT_SIZE,
+            height=LEGEND_DOT_SIZE,
+            border_radius="50%",
+            background=rx.cond(hidden, "var(--gray-6)", line.color),
+            flex_shrink="0",
+        ),
+        rx.text(
+            line.label,
+            size="1",
+            color=rx.cond(hidden, "var(--gray-9)", "var(--gray-12)"),
+            **TOGGLE_TEXT_STYLE,
+        ),
+        on_click=ManagerState.toggle_line(line.code),
+        spacing="2",
+        align="center",
+        width="100%",
+        padding="0.25rem 0.5rem",
+        border_radius="var(--radius-2)",
+        cursor="pointer",
+        opacity=rx.cond(hidden, LEGEND_HIDDEN_OPACITY, 1),
+        _hover={"background": "var(--gray-a3)"},
+    )
+
+
+def _line_panel() -> rx.Component:
+    return rx.vstack(
+        rx.hstack(
+            rx.button(
+                SHOW_ALL_LABEL,
+                on_click=ManagerState.show_all_lines,
+                variant="ghost",
+                size="1",
+                color_scheme="gray",
+            ),
+            rx.button(
+                HIDE_ALL_LABEL,
+                on_click=ManagerState.hide_all_lines,
+                variant="ghost",
+                size="1",
+                color_scheme="gray",
+            ),
+            spacing="2",
+            width="100%",
+        ),
+        rx.scroll_area(
+            rx.vstack(
+                rx.foreach(ManagerState.criteria_lines, _line_toggle),
+                spacing="0",
+                width="100%",
+            ),
+            height=CRITERIA_CHART_HEIGHT,
+            type="auto",
+            width="100%",
+        ),
+        spacing="2",
+        width=LEGEND_WIDTH,
+        flex_shrink="0",
+    )
+
+
+def _criteria_chart() -> rx.Component:
+    return rx.cond(
+        ManagerState.criteria_trend.length() > 0,
+        rx.hstack(
+            rx.box(
+                rx.recharts.line_chart(
+                    rx.foreach(
+                        ManagerState.criteria_lines,
+                        lambda line: rx.recharts.line(
+                            data_key=line.code,
+                            name=line.label,
+                            stroke=line.color,
+                            type_="monotone",
+                            connect_nulls=False,
+                            dot=True,
+                            hide=ManagerState.hidden_lines.contains(line.code),
+                        ),
+                    ),
+                    rx.recharts.x_axis(data_key=CHART_DAY_KEY),
+                    rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+                    rx.recharts.graphing_tooltip(),
+                    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+                    data=ManagerState.criteria_trend,
+                    height=CRITERIA_CHART_HEIGHT,
+                    width="100%",
+                ),
+                width="100%",
+            ),
+            _line_panel(),
+            spacing="3",
+            width="100%",
+            align="start",
+        ),
+        rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
+    )
+
+
+def _criteria_bars() -> rx.Component:
+    return rx.cond(
+        ManagerState.criteria.length() > 0,
+        rx.recharts.bar_chart(
+            rx.recharts.bar(
+                data_key=CHART_SCORE_KEY, fill=BAR_COLOR, bar_size=CRITERIA_BAR_SIZE
+            ),
+            rx.recharts.x_axis(type_="number", domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+            rx.recharts.y_axis(
+                data_key=CHART_LABEL_KEY,
+                type_="category",
+                width=CRITERIA_LABEL_WIDTH,
+                interval=0,
+            ),
+            rx.recharts.graphing_tooltip(),
+            rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
+            data=ManagerState.radar,
+            layout="vertical",
+            height=ManagerState.criteria_chart_height,
+            width="100%",
+            margin=CHART_MARGIN,
         ),
         rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
     )
@@ -133,73 +269,61 @@ def _radar_chart() -> rx.Component:
         ),
         rx.recharts.polar_grid(),
         rx.recharts.polar_angle_axis(data_key=CHART_LABEL_KEY),
+        rx.recharts.polar_radius_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+        rx.recharts.graphing_tooltip(),
         data=ManagerState.radar,
         height=CHART_HEIGHT,
         width="100%",
     )
 
 
-def _criterion_row(entry) -> rx.Component:
-    return rx.hstack(
-        rx.text(entry.label, size="2", width="14rem", flex_shrink="0"),
-        rx.progress(value=entry.score, max=PROGRESS_MAX, width="100%"),
-        rx.text(entry.score_label, size="2", width="3rem", text_align="right"),
-        spacing="3",
-        align="center",
-        width="100%",
-    )
-
-
 def _call_row(row) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.link(row.started_at, href=f"{ROUTE_CALL}/{row.call_id}")),
-        rx.table.cell(row.client),
-        rx.table.cell(row.duration),
+        rx.table.cell(
+            rx.link(
+                rx.text(row.started_at, size="2"),
+                href=f"{ROUTE_CALL}/{row.call_id}",
+            )
+        ),
+        rx.table.cell(rx.text(row.client, size="2")),
+        rx.table.cell(rx.text(row.duration, size="2")),
         rx.table.cell(rx.badge(row.score)),
-        rx.table.cell(row.call_type),
+        rx.table.cell(rx.text(row.call_type, size="2")),
     )
 
 
 def manager_page() -> rx.Component:
     return page_layout(
         rx.vstack(
-            _header(),
             _kpi_row(),
             rx.hstack(
-                section_card(TREND_TITLE, _trend_chart()),
+                section_card(TREND_TITLE, _score_chart()),
                 section_card(RADAR_TITLE, _radar_chart()),
                 spacing="3",
                 width="100%",
-                align="start",
+                align="stretch",
                 wrap="wrap",
             ),
-            section_card(
-                CRITERIA_TITLE,
-                rx.vstack(
-                    rx.foreach(ManagerState.criteria, _criterion_row),
-                    spacing="2",
-                    width="100%",
-                ),
-            ),
+            section_card(CRITERIA_TREND_TITLE, _criteria_chart()),
+            section_card(CRITERIA_TITLE, _criteria_bars()),
             section_card(
                 CALLS_TITLE,
                 rx.cond(
                     ManagerState.calls_rows.length() > 0,
-                    rx.table.root(
+                    scrollable_table(
                         rx.table.header(
                             rx.table.row(
                                 *[rx.table.column_header_cell(name) for name in COLUMNS]
                             )
                         ),
                         rx.table.body(rx.foreach(ManagerState.calls_rows, _call_row)),
-                        width="100%",
-                        size="2",
-                    ),
+                        ),
                     rx.text(EMPTY_CALLS, size="2", color_scheme="gray"),
                 ),
             ),
             spacing="4",
             width="100%",
         ),
+        header=_header(),
         on_mount=ManagerState.load,
     )

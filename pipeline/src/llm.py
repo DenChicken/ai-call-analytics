@@ -18,6 +18,12 @@ from transformers import (
 )
 
 from src.config import LlmConfig
+from src.constants import (
+    ERROR_LLM_INVALID_OUTPUT,
+    ERROR_LLM_PROMPT_TOO_LONG,
+    ERROR_LLM_TRUNCATED,
+)
+from src.errors import StageError
 from src.schema import parser_config
 
 ROLE_SYSTEM = "system"
@@ -28,10 +34,6 @@ TENSOR_FORMAT = "pt"
 CUDA_DEVICE = "cuda"
 
 logger = logging.getLogger(__name__)
-
-
-class LlmError(Exception):
-    pass
 
 
 class Llm:
@@ -91,9 +93,10 @@ class Llm:
             ).to(self._model.device)
             prompt_tokens = inputs["input_ids"].shape[1]
             if prompt_tokens >= self._config.max_input_tokens:
-                raise LlmError(
+                raise StageError(
+                    ERROR_LLM_PROMPT_TOO_LONG,
                     f"prompt hit the max_input_tokens limit of {self._config.max_input_tokens} "
-                    "and was truncated, raise it in the config"
+                    "and was truncated, raise it in the config",
                 )
             logger.info("generating from %s input tokens", prompt_tokens)
 
@@ -143,12 +146,13 @@ class Llm:
             return json.loads(completion)
         except json.JSONDecodeError as error:
             cut_off = len(produced) >= output.max_new_tokens or elapsed >= output.timeout_seconds
+            code = ERROR_LLM_TRUNCATED if cut_off else ERROR_LLM_INVALID_OUTPUT
             reason = (
                 f"generation was cut off after {len(produced)} tokens and {elapsed:.0f}s"
                 if cut_off
                 else "model returned invalid json"
             )
-            raise LlmError(f"{reason}: {error}") from error
+            raise StageError(code, f"{reason}: {error}") from error
 
 
 def _quantization_config(config: LlmConfig) -> BitsAndBytesConfig | None:

@@ -1,31 +1,90 @@
 import reflex as rx
 
 from src.components.common import (
-    delta_text,
+    checkbox_menu,
     kpi_card,
     period_picker,
+    refresh_button,
+    scrollable_table,
     section_card,
     signed_count,
-    transition_text,
+    status_badge,
+    truncated,
 )
-from src.components.layout import page_layout
-from src.constants import ROUTE_CALL
-from src.state.dashboard import DashboardState
+from src.components.layout import page_layout, sticky_header
+from src.constants import ROUTE_CALL, ROUTE_CALLS, ROUTE_MANAGER
+from src.state.dashboard import (
+    CHART_AFTER_KEY,
+    CHART_BEFORE_KEY,
+    CHART_LABEL_KEY,
+    DashboardState,
+)
 
 TITLE = "Дашборд"
-KPI_PROCESSED = "Обработано звонков"
-KPI_QUEUED = "В очереди обработки"
+KPI_PROCESSED = "Звонков за период"
+KPI_ANALYZED = "Проанализировано"
+KPI_QUEUED = "В очереди"
 KPI_BEST = "Лучший менеджер"
 KPI_WORST = "Худший менеджер"
 CRITERIA_TITLE = "Изменение критериев"
 QUEUE_TITLE = "Очередь обработки"
 RECENT_TITLE = "Завершённые анализы"
-TYPES_TITLE = "Типы звонков"
+TYPES_LABEL = "Типы звонков"
+ALL_CALLS_LABEL = "Все звонки"
 EMPTY_QUEUE = "Очередь пуста"
-EMPTY_RECENT = "Пока нет завершённых анализов"
+EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
 FAILED_LABEL = "с ошибкой"
-PROGRESS_MAX = 100
+
+CHART_HEIGHT = 320
+CHART_BAR_BEFORE = "var(--gray-8)"
+CHART_BAR_AFTER = "var(--accent-9)"
+LEGEND_BEFORE = "Прошлый период"
+LEGEND_AFTER = "Текущий период"
+CRITERIA_MAX_HEIGHT = "24rem"
+CHART_LABEL_WIDTH = 180
+CHART_MARGIN = {"left": 10, "right": 20}
+PERCENT_MAX = 100
+LINK_ICON_SIZE = 14
+NAME_MAX_WIDTH = "9rem"
+
+
+def _header() -> rx.Component:
+    return sticky_header(
+        rx.heading(TITLE, size="6"),
+        rx.spacer(),
+        checkbox_menu(
+            TYPES_LABEL,
+            DashboardState.types_summary,
+            DashboardState.available_types,
+            lambda entry: DashboardState.selected_types.contains(entry.code),
+            lambda entry, value: DashboardState.toggle_type(entry.code, value),
+        ),
+        period_picker(DashboardState.period_label, DashboardState.set_period),
+    )
+
+
+def _manager_kpi(title: str, name: rx.Var, manager_id: rx.Var, score: rx.Var, icon: str,
+                 color: str) -> rx.Component:
+    return kpi_card(
+        title,
+        rx.cond(
+            manager_id > 0,
+            rx.link(
+                truncated(name, size="6", weight="bold", max_width=NAME_MAX_WIDTH),
+                href=f"{ROUTE_MANAGER}/{manager_id}",
+                underline="none",
+                color="inherit",
+            ),
+            rx.heading(name, size="7"),
+        ),
+        icon,
+        rx.cond(
+            score != "",
+            rx.text(score, size="2", color_scheme=color, white_space="nowrap"),
+            rx.fragment(),
+        ),
+    )
 
 
 def _kpi_row() -> rx.Component:
@@ -33,8 +92,13 @@ def _kpi_row() -> rx.Component:
         kpi_card(
             KPI_PROCESSED,
             DashboardState.processed.to_string(),
-            "circle-check",
+            "phone",
             signed_count(DashboardState.processed_delta),
+        ),
+        kpi_card(
+            KPI_ANALYZED,
+            DashboardState.analyzed_today.to_string(),
+            "circle-check",
         ),
         kpi_card(
             KPI_QUEUED,
@@ -46,128 +110,179 @@ def _kpi_row() -> rx.Component:
                     f"{DashboardState.failed} {FAILED_LABEL}",
                     size="2",
                     color_scheme="tomato",
+                    white_space="nowrap",
                 ),
                 rx.fragment(),
             ),
         ),
-        kpi_card(KPI_BEST, DashboardState.best_manager, "trending-up",
-                 rx.text(DashboardState.best_score, size="2", color_scheme="grass")),
-        kpi_card(KPI_WORST, DashboardState.worst_manager, "trending-down",
-                 rx.text(DashboardState.worst_score, size="2", color_scheme="tomato")),
+        _manager_kpi(
+            KPI_BEST,
+            DashboardState.best_manager,
+            DashboardState.best_manager_id,
+            DashboardState.best_score,
+            "trending-up",
+            "grass",
+        ),
+        _manager_kpi(
+            KPI_WORST,
+            DashboardState.worst_manager,
+            DashboardState.worst_manager_id,
+            DashboardState.worst_score,
+            "trending-down",
+            "tomato",
+        ),
         spacing="3",
         width="100%",
         wrap="wrap",
+        align="stretch",
     )
 
 
-def _criteria_row(entry) -> rx.Component:
-    return rx.hstack(
-        rx.text(entry.label, size="2", width="16rem", flex_shrink="0"),
-        rx.progress(value=entry.after, max=PROGRESS_MAX, width="100%"),
-        transition_text(entry.before, entry.after),
-        delta_text(entry.points, entry.delta),
-        spacing="3",
-        align="center",
-        width="100%",
+def _criteria_chart() -> rx.Component:
+    return rx.cond(
+        DashboardState.criteria_chart.length() > 0,
+        rx.scroll_area(
+            rx.recharts.bar_chart(
+                rx.recharts.bar(
+                    data_key=CHART_BEFORE_KEY,
+                    fill=CHART_BAR_BEFORE,
+                    name=LEGEND_BEFORE,
+                ),
+                rx.recharts.bar(
+                    data_key=CHART_AFTER_KEY,
+                    fill=CHART_BAR_AFTER,
+                    name=LEGEND_AFTER,
+                ),
+                rx.recharts.x_axis(type_="number", domain=[0, PERCENT_MAX]),
+                rx.recharts.y_axis(
+                    data_key=CHART_LABEL_KEY, type_="category", width=CHART_LABEL_WIDTH
+                ),
+                rx.recharts.graphing_tooltip(),
+                rx.recharts.legend(),
+                rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
+                data=DashboardState.criteria_chart,
+                layout="vertical",
+                height=CHART_HEIGHT,
+                width="100%",
+                margin=CHART_MARGIN,
+            ),
+            max_height=CRITERIA_MAX_HEIGHT,
+            type="auto",
+            width="100%",
+        ),
+        rx.text(EMPTY_CRITERIA, size="2", color_scheme="gray"),
+    )
+
+
+def _manager_link(name: rx.Var, manager_id: rx.Var) -> rx.Component:
+    return rx.cond(
+        manager_id > 0,
+        rx.link(
+            truncated(name, size="2", max_width=NAME_MAX_WIDTH),
+            href=f"{ROUTE_MANAGER}/{manager_id}",
+        ),
+        truncated(name, size="2", max_width=NAME_MAX_WIDTH),
     )
 
 
 def _queue_row(row) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.link(row.call_id, href=f"{ROUTE_CALL}/{row.call_id}")),
-        rx.table.cell(row.started_at),
-        rx.table.cell(row.agent_name),
-        rx.table.cell(rx.badge(row.status_label, color_scheme=row.status_color)),
-        rx.table.cell(rx.text(row.error, size="1", color_scheme="gray")),
+        rx.table.cell(
+            rx.link(
+                rx.text(row.started_at, size="2"),
+                href=f"{ROUTE_CALL}/{row.call_id}",
+            )
+        ),
+        rx.table.cell(_manager_link(row.agent_name, row.agent_id)),
+        rx.table.cell(rx.text(row.client, size="2")),
+        rx.table.cell(status_badge(row.status_label, row.status_color, row.error)),
     )
 
 
 def _recent_row(row) -> rx.Component:
     return rx.table.row(
-        rx.table.cell(rx.link(row.call_id, href=f"{ROUTE_CALL}/{row.call_id}")),
-        rx.table.cell(row.finished_at),
-        rx.table.cell(row.agent_name),
+        rx.table.cell(
+            rx.link(
+                rx.text(row.started_at, size="2"),
+                href=f"{ROUTE_CALL}/{row.call_id}",
+            )
+        ),
+        rx.table.cell(rx.text(row.analyzed_at, size="2")),
+        rx.table.cell(_manager_link(row.agent_name, row.agent_id)),
         rx.table.cell(rx.badge(row.score)),
     )
 
 
-def _type_filters() -> rx.Component:
-    return rx.hstack(
-        rx.text(TYPES_TITLE, size="2", color_scheme="gray"),
-        rx.foreach(
-            DashboardState.available_types,
-            lambda entry: rx.checkbox(
-                entry.label,
-                checked=DashboardState.selected_types.contains(entry.code),
-                on_change=lambda checked: DashboardState.toggle_type(entry.code, checked),
-                size="2",
-            ),
+def _all_calls_link() -> rx.Component:
+    return rx.link(
+        rx.hstack(
+            rx.text(ALL_CALLS_LABEL, size="1"),
+            rx.icon("arrow-right", size=LINK_ICON_SIZE),
+            spacing="1",
+            align="center",
         ),
-        spacing="4",
-        align="center",
-        wrap="wrap",
+        href=ROUTE_CALLS,
+        underline="none",
+        color_scheme="gray",
+    )
+
+
+def _table(rows, columns: tuple, builder, empty: str) -> rx.Component:
+    return rx.cond(
+        rows.length() > 0,
+        scrollable_table(
+            rx.table.header(
+                rx.table.row(*[rx.table.column_header_cell(name) for name in columns])
+            ),
+            rx.table.body(rx.foreach(rows, builder)),
+        ),
+        rx.text(empty, size="2", color_scheme="gray"),
     )
 
 
 def dashboard_page() -> rx.Component:
     return page_layout(
         rx.vstack(
-            rx.hstack(
-                rx.heading(TITLE, size="7"),
-                rx.spacer(),
-                period_picker(DashboardState.period, DashboardState.set_period),
-                width="100%",
-                align="center",
-            ),
-            _type_filters(),
             _kpi_row(),
-            section_card(
-                CRITERIA_TITLE,
-                rx.cond(
-                    DashboardState.criteria_deltas.length() > 0,
-                    rx.vstack(
-                        rx.foreach(DashboardState.criteria_deltas, _criteria_row),
-                        spacing="2",
-                        width="100%",
-                    ),
-                    rx.text(EMPTY_CRITERIA, size="2", color_scheme="gray"),
-                ),
-            ),
+            section_card(CRITERIA_TITLE, _criteria_chart()),
             rx.hstack(
                 section_card(
                     QUEUE_TITLE,
-                    rx.cond(
-                        DashboardState.queue_rows.length() > 0,
-                        rx.table.root(
-                            rx.table.body(
-                                rx.foreach(DashboardState.queue_rows, _queue_row)
-                            ),
-                            width="100%",
-                            size="1",
-                        ),
-                        rx.text(EMPTY_QUEUE, size="2", color_scheme="gray"),
+                    _table(
+                        DashboardState.queue_rows,
+                        ("Звонок", "Менеджер", "Клиент", "Статус"),
+                        _queue_row,
+                        EMPTY_QUEUE,
+                    ),
+                    actions=rx.hstack(
+                        _all_calls_link(),
+                        refresh_button(DashboardState.refresh),
+                        spacing="2",
+                        align="center",
                     ),
                 ),
                 section_card(
                     RECENT_TITLE,
-                    rx.cond(
-                        DashboardState.recent_rows.length() > 0,
-                        rx.table.root(
-                            rx.table.body(
-                                rx.foreach(DashboardState.recent_rows, _recent_row)
-                            ),
-                            width="100%",
-                            size="1",
-                        ),
-                        rx.text(EMPTY_RECENT, size="2", color_scheme="gray"),
+                    _table(
+                        DashboardState.recent_rows,
+                        ("Звонок", "Анализ", "Менеджер", "Балл"),
+                        _recent_row,
+                        EMPTY_RECENT,
+                    ),
+                    actions=rx.hstack(
+                        _all_calls_link(),
+                        refresh_button(DashboardState.refresh),
+                        spacing="2",
+                        align="center",
                     ),
                 ),
                 spacing="3",
                 width="100%",
-                align="start",
+                align="stretch",
             ),
             spacing="4",
             width="100%",
         ),
+        header=_header(),
         on_mount=DashboardState.load,
     )

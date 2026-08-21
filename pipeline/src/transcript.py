@@ -1,7 +1,5 @@
 from dataclasses import dataclass
 
-from src.constants import TRANSCRIPT_BREAK_TEMPLATE
-
 
 @dataclass(frozen=True)
 class Word:
@@ -24,15 +22,3 @@ class Segment:
 
 def render_plain(segments: list[Segment]) -> str:
     return " ".join(segment.text for segment in segments)
-
-
-def render_transcript(segments: list[Segment], break_silence_ms: int) -> str:
-    lines = []
-    previous_end_ms = None
-    for segment in segments:
-        if previous_end_ms is not None and segment.start_ms - previous_end_ms <= break_silence_ms:
-            lines[-1] = f"{lines[-1]} {segment.text}"
-        else:
-            lines.append(segment.text)
-        previous_end_ms = segment.end_ms
-    return "\n".join(TRANSCRIPT_BREAK_TEMPLATE.format(text=line) for line in lines)

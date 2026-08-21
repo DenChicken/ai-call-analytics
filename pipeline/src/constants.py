@@ -30,7 +30,6 @@ STAGE_PRIORITY = (STATUS_TRANSCRIBED, STATUS_PENDING)
 
 DONE_DIR_TEMPLATE = "%Y-%m/%d"
 
-TRANSCRIPT_BREAK_TEMPLATE = "— {text}"
 CRITERIA_LINE_TEMPLATE = "- {label}: {description}"
 
 PROMPT_CRITERIA_PLACEHOLDER = "criteria"
@@ -47,6 +46,18 @@ RECOMMENDATIONS_FIELD = "recommendations"
 
 CRITERIA_TABLE = "criteria"
 CALL_TYPES_TABLE = "call_types"
+
+ERROR_AUDIO_MISSING = "audio_missing"
+ERROR_ASR_EMPTY = "asr_empty"
+ERROR_TRANSCRIPT_EMPTY = "transcript_empty"
+ERROR_LLM_TRUNCATED = "llm_truncated"
+ERROR_LLM_PROMPT_TOO_LONG = "llm_prompt_too_long"
+ERROR_LLM_INVALID_OUTPUT = "llm_invalid_output"
+ERROR_NO_CRITERIA = "no_criteria"
+ERROR_NO_CALL_TYPES = "no_call_types"
+ERROR_OUT_OF_MEMORY = "out_of_memory"
+ERROR_DATABASE = "database"
+ERROR_UNKNOWN = "unknown"
 
 METADATA_ASR_MODEL = "asr_model"
 METADATA_ANALYSIS_MODEL = "analysis_model"

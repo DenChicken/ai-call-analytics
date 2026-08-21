@@ -1,12 +1,11 @@
 import reflex as rx
 
-from src.components.common import section_card
-from src.components.layout import page_layout
-from src.constants import ROUTE_DASHBOARD, ROUTE_MANAGER
+from src.components.common import section_card, status_badge, truncated
+from src.components.layout import page_layout, sticky_header
+from src.constants import AUDIO_ELEMENT_ID, ROUTE_CALLS, ROUTE_MANAGER
 from src.state.call import CallState
 
 TITLE = "Разговор"
-BACK_LABEL = "К дашборду"
 NOT_FOUND = "Звонок не найден"
 SCORES_TITLE = "Оценки по критериям"
 TRANSCRIPT_TITLE = "Стенограмма"
@@ -36,74 +35,80 @@ META_ANALYZED = "Проанализирован"
 
 BACK_ICON_SIZE = 16
 MARK_ICON_SIZE = 16
+CRM_ICON_SIZE = 14
+NAME_MAX_WIDTH = "12rem"
 TRANSCRIPT_HEIGHT = "22rem"
-AUDIO_HEIGHT = "3rem"
 TIME_WIDTH = "3rem"
 MET_COLOR = "grass"
 UNMET_COLOR = "gray"
 
 
-def _field(label: str, value: rx.Var | str) -> rx.Component:
+def _field(label: str, value) -> rx.Component:
     return rx.vstack(
         rx.text(label, size="1", color_scheme="gray"),
-        rx.text(value, size="2", weight="medium"),
+        value if isinstance(value, rx.Component) else rx.text(value, size="2", weight="medium"),
         spacing="1",
         align="start",
     )
 
 
 def _header() -> rx.Component:
-    return rx.vstack(
+    return sticky_header(
         rx.link(
-            rx.hstack(
-                rx.icon("arrow-left", size=BACK_ICON_SIZE),
-                rx.text(BACK_LABEL, size="2"),
-                spacing="2",
-                align="center",
-            ),
-            href=ROUTE_DASHBOARD,
-            underline="none",
+            rx.icon("arrow-left", size=BACK_ICON_SIZE),
+            href=ROUTE_CALLS,
             color_scheme="gray",
         ),
-        rx.hstack(
-            rx.heading(TITLE, size="7"),
-            rx.badge(CallState.status_label, color_scheme=CallState.status_color),
-            rx.spacer(),
-            rx.cond(
-                CallState.crm_link != "",
-                rx.link(
-                    rx.button(CRM_LABEL, variant="soft", size="2"),
-                    href=CallState.crm_link,
-                    is_external=True,
-                ),
-                rx.fragment(),
-            ),
-            width="100%",
-            align="center",
-            spacing="3",
-        ),
+        rx.heading(TITLE, size="5"),
+        status_badge(CallState.status_label, CallState.status_color, CallState.error),
+        rx.spacer(),
         rx.cond(
-            CallState.error != "",
-            rx.callout(CallState.error, color_scheme="red", size="1", width="100%"),
+            CallState.crm_link != "",
+            rx.link(
+                rx.hstack(
+                    rx.icon("external-link", size=CRM_ICON_SIZE),
+                    rx.text(CRM_LABEL, size="1"),
+                    spacing="1",
+                    align="center",
+                ),
+                href=CallState.crm_link,
+                is_external=True,
+                underline="none",
+                color_scheme="gray",
+            ),
             rx.fragment(),
         ),
-        spacing="3",
-        width="100%",
-        align="start",
     )
 
 
 def _summary_row() -> rx.Component:
     return rx.card(
         rx.hstack(
-            rx.link(
+            rx.cond(
+                CallState.manager_id > 0,
+                rx.link(
+                    _field(
+                        FIELD_MANAGER,
+                        truncated(
+                            CallState.agent_name,
+                            size="2",
+                            weight="medium",
+                            max_width=NAME_MAX_WIDTH,
+                        ),
+                    ),
+                    href=f"{ROUTE_MANAGER}/{CallState.manager_id}",
+                    underline="none",
+                    color="inherit",
+                ),
                 _field(FIELD_MANAGER, CallState.agent_name),
-                href=f"{ROUTE_MANAGER}/{CallState.manager_id}",
-                underline="none",
-                color="inherit",
             ),
             _field(FIELD_CLIENT, CallState.client),
-            _field(FIELD_DATE, CallState.started_at),
+            rx.vstack(
+                rx.text(FIELD_DATE, size="1", color_scheme="gray"),
+                rx.text(CallState.started_at, size="2", weight="medium"),
+                spacing="1",
+                align="start",
+            ),
             _field(FIELD_DURATION, CallState.duration),
             _field(FIELD_TYPE, CallState.call_type),
             _field(FIELD_SCORE, CallState.score_label),
@@ -135,7 +140,15 @@ def _score_row(row) -> rx.Component:
 
 def _segment_row(segment) -> rx.Component:
     return rx.hstack(
-        rx.text(segment.time, size="1", color_scheme="gray", width=TIME_WIDTH, flex_shrink="0"),
+        rx.button(
+            segment.time,
+            on_click=CallState.seek(segment.seconds),
+            variant="ghost",
+            size="1",
+            color_scheme="gray",
+            width=TIME_WIDTH,
+            flex_shrink="0",
+        ),
         rx.text(segment.text, size="2"),
         spacing="3",
         align="start",
@@ -203,7 +216,13 @@ def _found_view() -> rx.Component:
                     AUDIO_TITLE,
                     rx.cond(
                         CallState.audio_url != "",
-                        rx.audio(src=CallState.audio_url, width="100%", height=AUDIO_HEIGHT),
+                        rx.el.audio(
+                            src=CallState.audio_url,
+                            id=AUDIO_ELEMENT_ID,
+                            controls=True,
+                            preload="metadata",
+                            width="100%",
+                        ),
                         rx.text(NO_AUDIO, size="2", color_scheme="gray"),
                     ),
                 ),

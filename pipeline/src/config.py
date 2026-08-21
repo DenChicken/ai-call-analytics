@@ -50,7 +50,6 @@ class TranscriptConfig:
     vad_filter: bool
     min_silence_duration_ms: int
     speech_pad_ms: int
-    break_silence_ms: int
 
 
 @dataclass(frozen=True)
@@ -195,7 +194,6 @@ def _load_asr(raw: dict, base_dir: Path) -> AsrConfig:
             vad_filter=_require(transcript_raw, "vad_filter", where),
             min_silence_duration_ms=_require(transcript_raw, "min_silence_duration_ms", where),
             speech_pad_ms=_require(transcript_raw, "speech_pad_ms", where),
-            break_silence_ms=_require(transcript_raw, "break_silence_ms", where),
         ),
     )
 

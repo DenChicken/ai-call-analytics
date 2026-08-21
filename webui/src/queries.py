@@ -140,15 +140,18 @@ QUEUE_JOBS = """
 SELECT j.call_id,
        j.status,
        j.attempts,
-       j.last_error,
+       j.error_code,
        j.updated_at,
        c.started_at,
-       c.audio_path,
+       c.client_number,
+       c.agent_id,
        ag.display_name AS agent_name
 FROM processing_jobs j
 JOIN calls c ON c.id = j.call_id
 LEFT JOIN agents ag ON ag.id = c.agent_id
+LEFT JOIN analyses a ON a.call_id = c.id
 WHERE j.status = ANY(%(statuses)s)
+  AND (a.call_type IS NULL OR a.call_type = ANY(%(types)s))
 ORDER BY j.updated_at DESC
 LIMIT %(limit)s
 """
@@ -160,19 +163,84 @@ SELECT status, count(*) AS total FROM processing_jobs GROUP BY status
 RECENT_ANALYSES = """
 SELECT c.id,
        c.started_at,
+       c.client_number,
+       c.agent_id,
        ag.display_name AS agent_name,
        a.created_at,
+       a.call_type,
+       t.label AS call_type_label,
        m.met,
        m.total
 FROM analyses a
 JOIN calls c ON c.id = a.call_id
 LEFT JOIN agents ag ON ag.id = c.agent_id
+LEFT JOIN call_types t ON t.code = a.call_type
 JOIN LATERAL (
     SELECT coalesce(sum(s.score), 0) AS met, count(*) AS total
     FROM criterion_scores s WHERE s.call_id = c.id
 ) m ON TRUE
+WHERE a.call_type = ANY(%(types)s)
 ORDER BY a.created_at DESC
 LIMIT %(limit)s
+"""
+
+ANALYSES_TODAY = """
+SELECT count(*) AS total
+FROM analyses a
+WHERE a.created_at >= %(since)s AND a.created_at < %(until)s
+  AND a.call_type = ANY(%(types)s)
+"""
+
+CALLS_LIST_JOIN = """
+FROM calls c
+LEFT JOIN agents ag ON ag.id = c.agent_id
+LEFT JOIN analyses a ON a.call_id = c.id
+LEFT JOIN call_types t ON t.code = a.call_type
+LEFT JOIN processing_jobs j ON j.call_id = c.id
+"""
+
+CALLS_LIST_WHERE = """
+WHERE c.started_at >= %(since)s AND c.started_at < %(until)s
+  AND (%(agent_id)s::bigint IS NULL OR c.agent_id = %(agent_id)s)
+  AND (%(statuses)s::text[] IS NULL OR j.status = ANY(%(statuses)s))
+  AND (a.call_type IS NULL OR a.call_type = ANY(%(types)s))
+"""
+
+CALLS_LIST = f"""
+SELECT c.id,
+       c.started_at,
+       c.duration_seconds,
+       c.client_number,
+       c.agent_id,
+       ag.display_name AS agent_name,
+       a.call_type,
+       t.label AS call_type_label,
+       a.created_at AS analyzed_at,
+       j.status,
+       j.error_code,
+       m.met,
+       m.total
+{CALLS_LIST_JOIN}
+JOIN LATERAL (
+    SELECT coalesce(sum(s.score), 0) AS met, count(*) AS total
+    FROM criterion_scores s WHERE s.call_id = c.id
+) m ON TRUE
+{CALLS_LIST_WHERE}
+ORDER BY c.started_at DESC
+LIMIT %(limit)s OFFSET %(offset)s
+"""
+
+CALLS_LIST_COUNT = f"""
+SELECT count(*) AS total
+{CALLS_LIST_JOIN}
+{CALLS_LIST_WHERE}
+"""
+
+AGENTS_WITH_CALLS = """
+SELECT ag.id, ag.display_name
+FROM agents ag
+WHERE EXISTS (SELECT 1 FROM calls c WHERE c.agent_id = ag.id)
+ORDER BY ag.display_name
 """
 
 AGENT_BY_ID = """
@@ -201,11 +269,10 @@ SELECT c.id,
        a.prompt_label,
        a.processing_seconds,
        a.created_at AS analyzed_at,
-       r.transcript,
        r.language,
        r.duration_ms,
        j.status,
-       j.last_error
+       j.error_code
 FROM calls c
 LEFT JOIN agents ag ON ag.id = c.agent_id
 LEFT JOIN analyses a ON a.call_id = c.id

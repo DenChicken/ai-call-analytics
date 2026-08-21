@@ -1,15 +1,19 @@
 import logging
 
+from pydantic import ValidationError
+
 from src.config import Config, Reference
 from src.constants import (
     CALL_TYPE_FIELD,
     CRITERIA_LINE_TEMPLATE,
+    ERROR_LLM_INVALID_OUTPUT,
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
     SCORES_FIELD,
     UNKNOWN_MANAGER,
 )
+from src.errors import StageError
 from src.llm import Llm
 from src.schema import build_analysis_model
 
@@ -49,7 +53,12 @@ def analyze(
         }
     )
     raw = llm.generate(config.prompt.system, prompt, model.model_json_schema())
-    payload = model.model_validate(raw).model_dump()
+    try:
+        payload = model.model_validate(raw).model_dump()
+    except ValidationError as error:
+        raise StageError(
+            ERROR_LLM_INVALID_OUTPUT, f"model output does not match the schema: {error}"
+        ) from error
     scores = payload.pop(SCORES_FIELD)
     logger.info(
         "call classified as %s, %s of %s criteria met",

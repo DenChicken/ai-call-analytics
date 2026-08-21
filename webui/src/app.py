@@ -10,12 +10,14 @@ from src.constants import (
     AUDIO_MEDIA_TYPE,
     AUDIO_ROUTE,
     ROUTE_CALL,
+    ROUTE_CALLS,
     ROUTE_DASHBOARD,
     ROUTE_LOGIN,
     ROUTE_MANAGER,
     ROUTE_MANAGERS,
 )
 from src.pages.call import call_page
+from src.pages.calls import calls_page
 from src.pages.dashboard import dashboard_page
 from src.pages.login import login_page
 from src.pages.manager import manager_page
@@ -42,6 +44,7 @@ app = rx.App(api_transformer=api)
 
 app.add_page(login_page, route=ROUTE_LOGIN, title=APP_TITLE)
 app.add_page(dashboard_page, route=ROUTE_DASHBOARD, title=APP_TITLE)
+app.add_page(calls_page, route=ROUTE_CALLS, title=APP_TITLE)
 app.add_page(managers_page, route=ROUTE_MANAGERS, title=APP_TITLE)
 app.add_page(
     manager_page, route=f"{ROUTE_MANAGER}/[{PARAM_AGENT_ID}]", title=APP_TITLE

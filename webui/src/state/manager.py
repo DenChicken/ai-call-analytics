@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import reflex as rx
 
 from src import context, formatting
-from src.constants import EMPTY_VALUE, PERIOD_MONTH
+from src.constants import EMPTY_VALUE, PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_MONTH
 from src.database import build_window
 from src.state.auth import AuthState
 
@@ -13,6 +13,22 @@ logger = logging.getLogger(__name__)
 CHART_DAY_KEY = "day"
 CHART_SCORE_KEY = "score"
 CHART_LABEL_KEY = "label"
+CRITERIA_ROW_HEIGHT = 34
+CRITERIA_CHART_PADDING = 48
+CRITERION_LINE_COLORS = (
+    "var(--indigo-9)",
+    "var(--grass-9)",
+    "var(--tomato-9)",
+    "var(--amber-9)",
+    "var(--cyan-9)",
+    "var(--plum-9)",
+    "var(--orange-9)",
+    "var(--teal-9)",
+    "var(--crimson-9)",
+    "var(--brown-9)",
+    "var(--blue-9)",
+    "var(--gold-9)",
+)
 PARAM_AGENT_ID = "agent_id"
 UNKNOWN_AGENT_ID = 0
 
@@ -26,7 +42,7 @@ def _route_agent_id(params: dict) -> int:
 class CriterionScore:
     code: str
     label: str
-    score: int
+    score: float
     score_label: str
 
 
@@ -38,6 +54,13 @@ class CallRow:
     duration: str
     score: str
     call_type: str
+
+
+@dataclass
+class CriterionLine:
+    code: str
+    label: str
+    color: str
 
 
 @dataclass
@@ -53,6 +76,8 @@ class ManagerData:
     worst_call_id: int
     criteria: list[CriterionScore]
     trend: list[dict]
+    criteria_trend: list[dict]
+    criteria_lines: list[CriterionLine]
     calls_rows: list[CallRow]
 
 
@@ -72,7 +97,31 @@ class ManagerState(AuthState):
     criteria: list[CriterionScore] = []
     radar: list[dict] = []
     trend: list[dict] = []
+    criteria_trend: list[dict] = []
+    criteria_lines: list[CriterionLine] = []
+    hidden_lines: list[str] = []
     calls_rows: list[CallRow] = []
+
+    @rx.var
+    def criteria_chart_height(self) -> int:
+        return len(self.criteria) * CRITERIA_ROW_HEIGHT + CRITERIA_CHART_PADDING
+
+    @rx.event
+    def toggle_line(self, code: str):
+        hidden = {str(entry) for entry in self.hidden_lines}
+        if code in hidden:
+            hidden.discard(code)
+        else:
+            hidden.add(code)
+        self.hidden_lines = sorted(hidden)
+
+    @rx.event
+    def show_all_lines(self):
+        self.hidden_lines = []
+
+    @rx.event
+    def hide_all_lines(self):
+        self.hidden_lines = [entry.code for entry in self.criteria_lines]
 
     current_agent_id: int = 0
 
@@ -83,13 +132,17 @@ class ManagerState(AuthState):
         self.current_agent_id = _route_agent_id(self.router.page.params)
         self._refresh()
 
+    @rx.var
+    def period_label(self) -> str:
+        return PERIOD_LABELS[self.period]
+
     @rx.event
-    def set_period(self, period: str | list[str]):
-        self.period = period if isinstance(period, str) else period[0]
+    def set_period(self, label: str):
+        self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
 
     def _refresh(self) -> None:
-        data = collect(self.current_agent_id, self.period)
+        data = collect(self.current_agent_id, self.period, self.utc_offset)
         self.name = data.name
         self.email = data.email
         self.profile_link = data.profile_link
@@ -105,35 +158,39 @@ class ManagerState(AuthState):
             for entry in data.criteria
         ]
         self.trend = data.trend
+        self.criteria_trend = data.criteria_trend
+        self.criteria_lines = data.criteria_lines
         self.calls_rows = data.calls_rows
 
 
-def collect(agent_id: int, period: str) -> ManagerData:
+def collect(agent_id: int, period: str, offset_hours: int) -> ManagerData:
     database = context.database()
     display = context.config().display
-    timezone = display.timezone
 
-    since, until = formatting.period_bounds(period, timezone)
+    since, until = formatting.period_bounds(period, offset_hours)
     types = [entry["code"] for entry in database.call_types()]
-    window = build_window(since, until, types, timezone, agent_id=agent_id)
+    window = build_window(since, until, types, agent_id=agent_id)
 
     agent = database.agent(agent_id)
     totals = database.period_totals(window)
     extremes = database.extreme_calls(window)
+    criteria = _criteria(database, window)
 
     return ManagerData(
         name=agent["display_name"] if agent else EMPTY_VALUE,
         email=agent["email"] or "" if agent else "",
         profile_link=agent["profile_link"] or "" if agent else "",
-        score=f"{formatting.percent(totals['ratio'])}%" if totals["calls"] else EMPTY_VALUE,
+        score=formatting.share_label(totals["ratio"], totals["calls"]),
         calls=totals["calls"],
         best_call=_extreme_label(extremes.get("best")),
         best_call_id=extremes["best"]["id"] if "best" in extremes else 0,
         worst_call=_extreme_label(extremes.get("worst")),
         worst_call_id=extremes["worst"]["id"] if "worst" in extremes else 0,
-        criteria=_criteria(database, window),
+        criteria=criteria,
         trend=_trend(database, window),
-        calls_rows=_calls(database, window, display.page_size, timezone),
+        criteria_trend=_criteria_trend(database, window, criteria),
+        criteria_lines=_criteria_lines(criteria),
+        calls_rows=_calls(database, window, display.page_size, offset_hours),
     )
 
 
@@ -150,28 +207,51 @@ def _criteria(database, window: dict) -> list[CriterionScore]:
         CriterionScore(
             code=code,
             label=label,
-            score=formatting.percent(ratios.get(code)),
-            score_label=f"{formatting.percent(ratios.get(code))}%",
+            score=formatting.share(ratios.get(code)),
+            score_label=formatting.share_label(ratios.get(code)),
         )
         for code, label in labels.items()
     ]
+
+
+def _criteria_lines(criteria: list[CriterionScore]) -> list[CriterionLine]:
+    return [
+        CriterionLine(
+            code=entry.code,
+            label=entry.label,
+            color=CRITERION_LINE_COLORS[index % len(CRITERION_LINE_COLORS)],
+        )
+        for index, entry in enumerate(criteria)
+    ]
+
+
+def _criteria_trend(
+    database, window: dict, criteria: list[CriterionScore]
+) -> list[dict]:
+    codes = [entry.code for entry in criteria]
+    days: dict[str, dict] = {}
+    for row in database.criteria_daily_ratios(window):
+        day = formatting.day_label(row["day"])
+        point = days.setdefault(day, {CHART_DAY_KEY: day, **dict.fromkeys(codes)})
+        point[row["code"]] = formatting.share(row["ratio"])
+    return list(days.values())
 
 
 def _trend(database, window: dict) -> list[dict]:
     return [
         {
             CHART_DAY_KEY: formatting.day_label(row["day"]),
-            CHART_SCORE_KEY: formatting.percent(row["ratio"]),
+            CHART_SCORE_KEY: formatting.share(row["ratio"]),
         }
         for row in database.agent_daily_ratios(window)
     ]
 
 
-def _calls(database, window: dict, limit: int, timezone: str) -> list[CallRow]:
+def _calls(database, window: dict, limit: int, offset_hours: int) -> list[CallRow]:
     return [
         CallRow(
             call_id=row["id"],
-            started_at=formatting.moment(row["started_at"], timezone),
+            started_at=formatting.moment(row["started_at"], offset_hours),
             client=row["client_number"] or EMPTY_VALUE,
             duration=formatting.duration(row["duration_seconds"]),
             score=formatting.fraction(row["met"], row["total"]),

@@ -3,11 +3,13 @@ from dataclasses import dataclass, field
 
 import reflex as rx
 
-from src import context, formatting
+from src import context, errors, formatting
 from src.constants import (
+    AUDIO_ELEMENT_ID,
     AUDIO_ROUTE,
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
+    MILLISECONDS_PER_SECOND,
     STATUS_COLORS,
     STATUS_LABELS,
 )
@@ -19,6 +21,10 @@ PARAM_CALL_ID = "call_id"
 UNKNOWN_CALL_ID = 0
 SEGMENT_START_KEY = "start_ms"
 SEGMENT_TEXT_KEY = "text"
+SEEK_SCRIPT = (
+    "const player = document.getElementById('{element}');"
+    "if (player) {{ player.currentTime = {seconds}; player.play(); }}"
+)
 
 
 def _route_call_id(params: dict) -> int:
@@ -37,6 +43,7 @@ class ScoreRow:
 @dataclass
 class SegmentRow:
     time: str
+    seconds: int
     text: str
 
 
@@ -99,12 +106,16 @@ class CallState(AuthState):
     analyzed_at: str = EMPTY_VALUE
 
     @rx.event
+    def seek(self, seconds: int):
+        return rx.call_script(SEEK_SCRIPT.format(element=AUDIO_ELEMENT_ID, seconds=seconds))
+
+    @rx.event
     def load(self):
         if not self.session_login:
             return AuthState.require_session
 
         self.current_call_id = _route_call_id(self.router.page.params)
-        data = collect(self.current_call_id)
+        data = collect(self.current_call_id, self.utc_offset)
 
         self.found = data.found
         self.status = data.status
@@ -133,9 +144,8 @@ class CallState(AuthState):
         self.analyzed_at = data.analyzed_at
 
 
-def collect(call_id: int) -> CallData:
+def collect(call_id: int, offset_hours: int) -> CallData:
     database = context.database()
-    timezone = context.config().display.timezone
 
     details = database.call_details(call_id)
     if details is None:
@@ -172,11 +182,11 @@ def collect(call_id: int) -> CallData:
         status=status,
         status_label=STATUS_LABELS.get(status, status or EMPTY_VALUE),
         status_color=STATUS_COLORS.get(status, DEFAULT_STATUS_COLOR),
-        error=_first_line(details.get("last_error")),
+        error=errors.describe(details.get("error_code")),
         agent_name=details["agent_name"] or EMPTY_VALUE,
         manager_id=details["agent_id"] or 0,
         client=details["client_number"] or EMPTY_VALUE,
-        started_at=formatting.moment(details["started_at"], timezone),
+        started_at=formatting.moment(details["started_at"], offset_hours),
         duration=formatting.duration(details["duration_seconds"]),
         call_type=details["call_type_label"] or details["call_type"] or EMPTY_VALUE,
         crm_link=details["crm_link"] or "",
@@ -192,18 +202,15 @@ def collect(call_id: int) -> CallData:
         analysis_model=details["analysis_model"] or EMPTY_VALUE,
         prompt_label=details["prompt_label"] or EMPTY_VALUE,
         processing_seconds=formatting.duration(details["processing_seconds"]),
-        analyzed_at=formatting.moment(details["analyzed_at"], timezone),
+        analyzed_at=formatting.moment(details["analyzed_at"], offset_hours),
     )
-
-
-def _first_line(value: str | None) -> str:
-    return value.splitlines()[0] if value else ""
 
 
 def _segments(database, call_id: int) -> list[SegmentRow]:
     return [
         SegmentRow(
             time=formatting.timestamp(segment[SEGMENT_START_KEY]),
+            seconds=segment[SEGMENT_START_KEY] // MILLISECONDS_PER_SECOND,
             text=segment[SEGMENT_TEXT_KEY],
         )
         for segment in database.call_segments(call_id)

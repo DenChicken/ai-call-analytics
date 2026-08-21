@@ -9,6 +9,7 @@ LOGIN_LABEL = "Логин"
 PASSWORD_LABEL = "Пароль"
 SUBMIT_LABEL = "Войти"
 CARD_WIDTH = "22rem"
+FULL_HEIGHT = "100vh"
 
 
 def login_page() -> rx.Component:
@@ -48,5 +49,5 @@ def login_page() -> rx.Component:
             ),
             width=CARD_WIDTH,
         ),
-        height="100vh",
+        height=FULL_HEIGHT,
     )
