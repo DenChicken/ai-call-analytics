@@ -2,6 +2,30 @@ USER_BY_LOGIN = """
 SELECT id, login, password_hash FROM users WHERE login = %(login)s
 """
 
+USERS_COUNT = """
+SELECT count(*) AS total FROM users
+"""
+
+SESSION_CREATE = """
+INSERT INTO sessions (token, user_id, expires_at)
+VALUES (%(token)s, %(user_id)s, now() + make_interval(secs => %(max_age)s))
+"""
+
+SESSION_USER = """
+SELECT u.id, u.login
+FROM sessions s
+JOIN users u ON u.id = s.user_id
+WHERE s.token = %(token)s AND s.expires_at > now()
+"""
+
+SESSION_DELETE = """
+DELETE FROM sessions WHERE token = %(token)s
+"""
+
+SESSIONS_PURGE = """
+DELETE FROM sessions WHERE expires_at <= now()
+"""
+
 CRITERIA_ALL = """
 SELECT code, label, description, enabled, position FROM criteria ORDER BY position
 """
@@ -68,17 +92,23 @@ FROM calls c
 {CALL_WHERE}
 """
 
-AGENT_TOTALS = f"""
+AGENT_TOTALS = """
 SELECT c.agent_id,
        ag.display_name,
        count(*) AS calls,
-       coalesce(avg(m.ratio), 0)::float AS ratio,
+       count(a.call_id) AS analyzed,
+       avg(m.ratio)::float AS ratio,
        max(c.started_at) AS last_call
 FROM calls c
-{CALL_JOIN}
 JOIN agents ag ON ag.id = c.agent_id
-{CALL_SCORE_RATIO}
-{CALL_WHERE}
+LEFT JOIN analyses a ON a.call_id = c.id
+LEFT JOIN LATERAL (
+    SELECT avg(s.score)::float AS ratio
+    FROM criterion_scores s WHERE s.call_id = c.id
+) m ON TRUE
+WHERE c.started_at >= %(since)s AND c.started_at < %(until)s
+  AND (a.call_type IS NULL OR a.call_type = ANY(%(types)s))
+  AND (%(agent_id)s::bigint IS NULL OR c.agent_id = %(agent_id)s)
 GROUP BY c.agent_id, ag.display_name
 """
 

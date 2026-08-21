@@ -17,6 +17,10 @@ DELTA_POSITIVE_COLOR = "grass"
 DELTA_NEGATIVE_COLOR = "tomato"
 DELTA_NEUTRAL_COLOR = "gray"
 MUTED_COLOR = "var(--gray-9)"
+EMPTY_ICON = "inbox"
+EMPTY_ICON_SIZE = 28
+EMPTY_ICON_COLOR = "var(--gray-7)"
+EMPTY_PADDING = "2.5rem 1rem"
 CARD_HEADER_BACKGROUND = "var(--gray-a2)"
 CARD_BORDER = "1px solid var(--gray-a5)"
 TRUNCATE_STYLE = {
@@ -125,6 +129,37 @@ def checkbox_menu(
             max_height=MENU_MAX_HEIGHT,
             overflow_y="auto",
         ),
+    )
+
+
+def empty_state(message: str, icon: str = EMPTY_ICON, hint: str = "") -> rx.Component:
+    return rx.center(
+        rx.vstack(
+            rx.icon(icon, size=EMPTY_ICON_SIZE, color=EMPTY_ICON_COLOR),
+            rx.text(message, size="2", color_scheme="gray"),
+            rx.cond(
+                hint != "",
+                rx.text(hint, size="1", color_scheme="gray"),
+                rx.fragment(),
+            ),
+            spacing="2",
+            align="center",
+        ),
+        width="100%",
+        padding=EMPTY_PADDING,
+    )
+
+
+def empty_state(message: str, icon: str = EMPTY_ICON) -> rx.Component:
+    return rx.center(
+        rx.vstack(
+            rx.icon(icon, size=EMPTY_ICON_SIZE, color=EMPTY_ICON_COLOR),
+            rx.text(message, size="2", color_scheme="gray"),
+            spacing="3",
+            align="center",
+        ),
+        width="100%",
+        padding=EMPTY_PADDING,
     )
 
 

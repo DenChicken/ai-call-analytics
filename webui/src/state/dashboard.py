@@ -18,21 +18,24 @@ from src.constants import (
     TYPES_SUMMARY_TEMPLATE,
 )
 from src.database import build_window
-from src.state.auth import AuthState
+from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
 CHART_LABEL_KEY = "label"
 CHART_BEFORE_KEY = "before"
 CHART_AFTER_KEY = "after"
+CRITERIA_PREVIEW_COUNT = 6
+CRITERIA_GROUP_HEIGHT = 52
+CRITERIA_CHART_PADDING = 64
 
 
 @dataclass
 class CriterionDelta:
     code: str
     label: str
-    before: int
-    after: int
+    before: float
+    after: float
     points: int
     delta: str
 
@@ -103,6 +106,7 @@ class DashboardState(AuthState):
 
     criteria_deltas: list[CriterionDelta] = []
     criteria_chart: list[dict] = []
+    criteria_expanded: bool = False
     queue_rows: list[QueueRow] = []
     recent_rows: list[AnalysisRow] = []
     watching: bool = False
@@ -140,6 +144,24 @@ class DashboardState(AuthState):
                     return
                 self._refresh()
 
+    @rx.event
+    def toggle_criteria(self):
+        self.criteria_expanded = not self.criteria_expanded
+
+    @rx.var
+    def visible_criteria(self) -> list[dict]:
+        if self.criteria_expanded:
+            return list(self.criteria_chart)
+        return list(self.criteria_chart)[:CRITERIA_PREVIEW_COUNT]
+
+    @rx.var
+    def criteria_hidden_count(self) -> int:
+        return max(len(self.criteria_chart) - CRITERIA_PREVIEW_COUNT, 0)
+
+    @rx.var
+    def criteria_chart_height(self) -> int:
+        return len(self.visible_criteria) * CRITERIA_GROUP_HEIGHT + CRITERIA_CHART_PADDING
+
     @rx.var
     def period_label(self) -> str:
         return PERIOD_LABELS[self.period]
@@ -166,6 +188,10 @@ class DashboardState(AuthState):
         self._refresh()
 
     def _refresh(self) -> None:
+        if not guarded(self, self._collect):
+            return
+
+    def _collect(self) -> None:
         data = collect(self.period, self.selected_types, self.utc_offset)
         self.processed = data.processed
         self.processed_delta = data.processed_delta
@@ -226,7 +252,8 @@ def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
 
 
 def _extremes(database, window: dict) -> tuple[tuple, tuple]:
-    agents = sorted(database.agent_totals(window), key=lambda row: row["ratio"])
+    scored = [row for row in database.agent_totals(window) if row["ratio"] is not None]
+    agents = sorted(scored, key=lambda row: row["ratio"])
     if not agents:
         empty = (EMPTY_VALUE, 0, "")
         return empty, empty
@@ -249,8 +276,8 @@ def _criteria_deltas(database, window: dict, previous: dict) -> list[CriterionDe
             CriterionDelta(
                 code=code,
                 label=labels.get(code, code),
-                before=formatting.percent(earlier.get(code)),
-                after=formatting.percent(ratio),
+                before=formatting.share(earlier.get(code)),
+                after=formatting.share(ratio),
                 points=points,
                 delta=formatting.delta_label(points),
             )

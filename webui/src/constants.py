@@ -42,11 +42,14 @@ REFLEX_RUN_COMMAND = "run"
 
 SESSION_COOKIE_NAME = "webui_session"
 SESSION_SAME_SITE = "strict"
+SESSION_TOKEN_BYTES = 32
 
 FIELD_LOGIN = "login"
 FIELD_PASSWORD = "password"
 
 LOGIN_ERROR_MESSAGE = "Неверный логин или пароль"
+INTERNAL_ERROR_MESSAGE = "Сервис временно недоступен"
+LOAD_ERROR_MESSAGE = "Не удалось загрузить данные"
 
 ROUTE_LOGIN = "/login"
 ROUTE_DASHBOARD = "/"

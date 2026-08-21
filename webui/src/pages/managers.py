@@ -1,9 +1,16 @@
 import reflex as rx
 
-from src.components.common import delta_text, period_picker, truncated, scrollable_table
+from src.components.common import (
+    delta_text,
+    empty_state,
+    period_picker,
+    scrollable_table,
+    truncated,
+)
 from src.components.layout import page_layout, sticky_header
 from src.constants import ROUTE_MANAGER
 from src.state.managers import (
+    SORT_ANALYZED,
     SORT_CALLS,
     SORT_DELTA,
     SORT_LABELS,
@@ -23,6 +30,7 @@ NAME_MAX_WIDTH = "16rem"
 COLUMNS = (
     (SORT_NAME, "left"),
     (SORT_CALLS, "right"),
+    (SORT_ANALYZED, "right"),
     (SORT_SCORE, "right"),
     (SORT_DELTA, "right"),
     (SORT_LAST_CALL, "right"),
@@ -59,6 +67,7 @@ def _row(row) -> rx.Component:
             ),
         ),
         rx.table.cell(row.calls, text_align="right"),
+        rx.table.cell(row.analyzed, text_align="right"),
         rx.table.cell(row.score_label, text_align="right"),
         rx.table.cell(delta_text(row.points, row.delta), text_align="right"),
         rx.table.cell(
@@ -79,8 +88,8 @@ def managers_page() -> rx.Component:
                         )
                     ),
                     rx.table.body(rx.foreach(ManagersState.rows, _row)),
-                    ),
-                rx.text(EMPTY_MESSAGE, size="2", color_scheme="gray"),
+                ),
+                empty_state(EMPTY_MESSAGE),
             ),
             spacing="4",
             width="100%",

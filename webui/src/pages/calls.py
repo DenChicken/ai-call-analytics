@@ -2,9 +2,10 @@ import reflex as rx
 
 from src.components.common import (
     checkbox_menu,
+    empty_state,
     period_picker,
-    scrollable_table,
     refresh_button,
+    scrollable_table,
     status_badge,
     truncated,
 )
@@ -125,10 +126,10 @@ def calls_page() -> rx.Component:
                             )
                         ),
                         rx.table.body(rx.foreach(CallsState.rows, _row)),
-                        ),
+                    ),
                     width="100%",
                 ),
-                rx.text(EMPTY_MESSAGE, size="2", color_scheme="gray"),
+                empty_state(EMPTY_MESSAGE),
             ),
             _pagination(),
             spacing="4",

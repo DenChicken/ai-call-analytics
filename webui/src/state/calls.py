@@ -17,7 +17,7 @@ from src.constants import (
     STATUSES_SUMMARY_TEMPLATE,
 )
 from src.database import build_filters
-from src.state.auth import AuthState
+from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +156,10 @@ class CallsState(AuthState):
         return [str(size) for size in PAGE_SIZES]
 
     def _refresh(self) -> None:
+        if not guarded(self, self._collect):
+            return
+
+    def _collect(self) -> None:
         rows, total = collect(
             self.period,
             self.agent_filter,

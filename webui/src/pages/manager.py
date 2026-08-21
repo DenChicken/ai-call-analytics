@@ -1,9 +1,10 @@
 import reflex as rx
 
 from src.components.common import (
-    scrollable_table,
+    empty_state,
     kpi_card,
     period_picker,
+    scrollable_table,
     section_card,
     truncated,
 )
@@ -128,7 +129,7 @@ def _score_chart() -> rx.Component:
             height=CHART_HEIGHT,
             width="100%",
         ),
-        rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
+        empty_state(EMPTY_TREND),
     )
 
 
@@ -229,7 +230,7 @@ def _criteria_chart() -> rx.Component:
             width="100%",
             align="start",
         ),
-        rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
+        empty_state(EMPTY_TREND),
     )
 
 
@@ -255,7 +256,7 @@ def _criteria_bars() -> rx.Component:
             width="100%",
             margin=CHART_MARGIN,
         ),
-        rx.text(EMPTY_TREND, size="2", color_scheme="gray"),
+        empty_state(EMPTY_TREND),
     )
 
 
@@ -318,7 +319,7 @@ def manager_page() -> rx.Component:
                         ),
                         rx.table.body(rx.foreach(ManagerState.calls_rows, _call_row)),
                         ),
-                    rx.text(EMPTY_CALLS, size="2", color_scheme="gray"),
+                    empty_state(EMPTY_CALLS),
                 ),
             ),
             spacing="4",

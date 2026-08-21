@@ -43,8 +43,33 @@ class Database:
         rows = self._fetch(query, params)
         return rows[0] if rows else None
 
+    def _execute(self, query: str, params: dict | None = None) -> None:
+        with self._pool.connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, params or {})
+
     def user_by_login(self, login: str) -> dict | None:
         return self._fetch_one(queries.USER_BY_LOGIN, {"login": login})
+
+    def users_count(self) -> int:
+        return self._fetch_one(queries.USERS_COUNT)["total"]
+
+    def create_session(self, token: str, user_id: int, max_age_seconds: int) -> None:
+        self._execute(
+            queries.SESSION_CREATE,
+            {"token": token, "user_id": user_id, "max_age": max_age_seconds},
+        )
+
+    def session_user(self, token: str) -> dict | None:
+        if not token:
+            return None
+        return self._fetch_one(queries.SESSION_USER, {"token": token})
+
+    def delete_session(self, token: str) -> None:
+        self._execute(queries.SESSION_DELETE, {"token": token})
+
+    def purge_sessions(self) -> None:
+        self._execute(queries.SESSIONS_PURGE)
 
     def criteria(self) -> list[dict]:
         return self._fetch(queries.CRITERIA_ALL)

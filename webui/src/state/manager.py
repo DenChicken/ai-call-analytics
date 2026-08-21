@@ -6,7 +6,7 @@ import reflex as rx
 from src import context, formatting
 from src.constants import EMPTY_VALUE, PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_MONTH
 from src.database import build_window
-from src.state.auth import AuthState
+from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
@@ -142,6 +142,10 @@ class ManagerState(AuthState):
         self._refresh()
 
     def _refresh(self) -> None:
+        if not guarded(self, self._collect):
+            return
+
+    def _collect(self) -> None:
         data = collect(self.current_agent_id, self.period, self.utc_offset)
         self.name = data.name
         self.email = data.email

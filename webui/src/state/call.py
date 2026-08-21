@@ -13,7 +13,7 @@ from src.constants import (
     STATUS_COLORS,
     STATUS_LABELS,
 )
-from src.state.auth import AuthState
+from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +115,10 @@ class CallState(AuthState):
             return AuthState.require_session
 
         self.current_call_id = _route_call_id(self.router.page.params)
+        if not guarded(self, self._collect):
+            return
+
+    def _collect(self) -> None:
         data = collect(self.current_call_id, self.utc_offset)
 
         self.found = data.found

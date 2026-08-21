@@ -10,6 +10,10 @@ from src.state.auth import AuthState
 
 BRAND = "Аналитика звонков"
 SIGN_OUT_LABEL = "Выйти"
+COLLAPSE_LABEL = "Свернуть панель"
+EXPAND_LABEL = "Развернуть панель"
+SIGN_OUT_VARIANT = "soft"
+TOGGLE_VARIANT = "ghost"
 SIDEBAR_WIDTH = "15rem"
 SIDEBAR_COLLAPSED_WIDTH = "4rem"
 SIDEBAR_PADDING = "0.75rem"
@@ -27,6 +31,7 @@ BORDER_STYLE = "1px solid var(--gray-a5)"
 HEADER_BACKGROUND = "var(--color-panel-solid)"
 HEADER_Z_INDEX = "10"
 FULL_HEIGHT = "100vh"
+FOOTER_ICON_PADDING = "0.25rem"
 
 CHART_FOCUS_RESET = {
     "& .recharts-wrapper, & .recharts-surface, & .recharts-wrapper *": {
@@ -67,6 +72,26 @@ def _nav_link(route: str, label: str, icon: str) -> rx.Component:
     )
 
 
+def _footer_button(icon, label, on_click, variant: str) -> rx.Component:
+    return rx.tooltip(
+        rx.button(
+            rx.icon(icon, size=FOOTER_ICON_SIZE, flex_shrink="0"),
+            rx.cond(
+                AuthState.sidebar_collapsed,
+                rx.fragment(),
+                rx.text(label, size="2", white_space="nowrap"),
+            ),
+            on_click=on_click,
+            variant=variant,
+            color_scheme="gray",
+            size="2",
+            width="100%",
+            justify=rx.cond(AuthState.sidebar_collapsed, "center", "start"),
+        ),
+        content=label,
+    )
+
+
 def _sidebar() -> rx.Component:
     return rx.vstack(
         rx.hstack(
@@ -76,21 +101,9 @@ def _sidebar() -> rx.Component:
                 rx.fragment(),
                 rx.text(BRAND, weight="bold", size="3", white_space="nowrap"),
             ),
-            rx.spacer(),
-            rx.icon_button(
-                rx.icon(
-                    rx.cond(
-                        AuthState.sidebar_collapsed, "panel-left-open", "panel-left-close"
-                    ),
-                    size=FOOTER_ICON_SIZE,
-                ),
-                on_click=AuthState.toggle_sidebar,
-                variant="ghost",
-                size="1",
-                color_scheme="gray",
-            ),
             spacing="2",
             align="center",
+            justify=rx.cond(AuthState.sidebar_collapsed, "center", "start"),
             width="100%",
             padding=SIDEBAR_PADDING,
         ),
@@ -103,7 +116,11 @@ def _sidebar() -> rx.Component:
         rx.cond(
             AuthState.sidebar_collapsed,
             rx.tooltip(
-                rx.icon("globe", size=FOOTER_ICON_SIZE, color=MUTED_COLOR),
+                rx.center(
+                    rx.icon("globe", size=FOOTER_ICON_SIZE, color=MUTED_COLOR),
+                    width="100%",
+                    padding=FOOTER_ICON_PADDING,
+                ),
                 content=AuthState.offset_label,
             ),
             rx.vstack(
@@ -134,16 +151,12 @@ def _sidebar() -> rx.Component:
                 align="center",
             ),
         ),
-        rx.tooltip(
-            rx.button(
-                rx.icon("log-out", size=FOOTER_ICON_SIZE),
-                rx.cond(AuthState.sidebar_collapsed, rx.fragment(), rx.text(SIGN_OUT_LABEL)),
-                on_click=AuthState.sign_out,
-                variant="soft",
-                width="100%",
-                size="2",
-            ),
-            content=SIGN_OUT_LABEL,
+        _footer_button("log-out", SIGN_OUT_LABEL, AuthState.sign_out, SIGN_OUT_VARIANT),
+        _footer_button(
+            rx.cond(AuthState.sidebar_collapsed, "chevrons-right", "chevrons-left"),
+            rx.cond(AuthState.sidebar_collapsed, EXPAND_LABEL, COLLAPSE_LABEL),
+            AuthState.toggle_sidebar,
+            TOGGLE_VARIANT,
         ),
         width=rx.cond(AuthState.sidebar_collapsed, SIDEBAR_COLLAPSED_WIDTH, SIDEBAR_WIDTH),
         height=FULL_HEIGHT,
@@ -184,6 +197,17 @@ def page_layout(
         rx.vstack(
             header if header is not None else rx.fragment(),
             rx.box(
+                rx.cond(
+                    AuthState.load_error != "",
+                    rx.callout(
+                        AuthState.load_error,
+                        color_scheme="red",
+                        size="1",
+                        width="100%",
+                        margin_bottom=CONTENT_PADDING,
+                    ),
+                    rx.fragment(),
+                ),
                 *children,
                 padding=CONTENT_PADDING,
                 width="100%",

@@ -1,6 +1,11 @@
 import reflex as rx
 
-from src.components.common import section_card, status_badge, truncated
+from src.components.common import (
+    empty_state,
+    section_card,
+    status_badge,
+    truncated,
+)
 from src.components.layout import page_layout, sticky_header
 from src.constants import AUDIO_ELEMENT_ID, ROUTE_CALLS, ROUTE_MANAGER
 from src.state.call import CallState
@@ -174,7 +179,7 @@ def _text_list(title: str, items) -> rx.Component:
                 spacing="2",
                 width="100%",
             ),
-            rx.text(NO_ANALYSIS, size="2", color_scheme="gray"),
+            empty_state(NO_ANALYSIS),
         ),
     )
 
@@ -208,7 +213,7 @@ def _found_view() -> rx.Component:
                         spacing="2",
                         width="100%",
                     ),
-                    rx.text(NO_ANALYSIS, size="2", color_scheme="gray"),
+                    empty_state(NO_ANALYSIS),
                 ),
             ),
             rx.vstack(
@@ -223,7 +228,7 @@ def _found_view() -> rx.Component:
                             preload="metadata",
                             width="100%",
                         ),
-                        rx.text(NO_AUDIO, size="2", color_scheme="gray"),
+                        empty_state(NO_AUDIO),
                     ),
                 ),
                 section_card(
@@ -239,7 +244,7 @@ def _found_view() -> rx.Component:
                             height=TRANSCRIPT_HEIGHT,
                             type="auto",
                         ),
-                        rx.text(NO_TRANSCRIPT, size="2", color_scheme="gray"),
+                        empty_state(NO_TRANSCRIPT),
                     ),
                 ),
                 spacing="3",
@@ -254,7 +259,7 @@ def _found_view() -> rx.Component:
             rx.cond(
                 CallState.summary != "",
                 rx.text(CallState.summary, size="2"),
-                rx.text(NO_ANALYSIS, size="2", color_scheme="gray"),
+                empty_state(NO_ANALYSIS),
             ),
         ),
         rx.hstack(

@@ -15,6 +15,7 @@ from src.constants import (
     ROUTE_LOGIN,
     ROUTE_MANAGER,
     ROUTE_MANAGERS,
+    SESSION_COOKIE_NAME,
 )
 from src.pages.call import call_page
 from src.pages.calls import calls_page
@@ -26,10 +27,15 @@ from src.pages.managers import managers_page
 PARAM_AGENT_ID = "agent_id"
 PARAM_CALL_ID = "call_id"
 NOT_FOUND_STATUS = 404
+UNAUTHORIZED_STATUS = 401
 
 async def serve_audio(request: Request) -> Response:
-    call_id = request.path_params[PARAM_CALL_ID]
-    details = context.database().call_details(int(call_id))
+    database = context.database()
+    token = request.cookies.get(SESSION_COOKIE_NAME, "")
+    if database.session_user(token) is None:
+        return Response(status_code=UNAUTHORIZED_STATUS)
+
+    details = database.call_details(int(request.path_params[PARAM_CALL_ID]))
     path = context.audio().locate(details["audio_path"]) if details else None
     if path is None:
         return Response(status_code=NOT_FOUND_STATUS)

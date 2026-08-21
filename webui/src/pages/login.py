@@ -10,6 +10,8 @@ PASSWORD_LABEL = "Пароль"
 SUBMIT_LABEL = "Войти"
 CARD_WIDTH = "22rem"
 FULL_HEIGHT = "100vh"
+NO_USERS_MESSAGE = "Пользователей нет. Создайте первого:"
+USER_COMMAND = "python scripts/user.py add <логин> -d <файл с dsn>"
 
 
 def login_page() -> rx.Component:
@@ -32,6 +34,21 @@ def login_page() -> rx.Component:
                         width="100%",
                     ),
                     rx.cond(
+                        AuthState.no_users,
+                        rx.callout(
+                            rx.vstack(
+                                rx.text(NO_USERS_MESSAGE, size="1"),
+                                rx.code(USER_COMMAND, size="1"),
+                                spacing="2",
+                                align="start",
+                            ),
+                            color_scheme="amber",
+                            size="1",
+                            width="100%",
+                        ),
+                        rx.fragment(),
+                    ),
+                    rx.cond(
                         AuthState.error != "",
                         rx.callout(AuthState.error, color_scheme="red", size="1", width="100%"),
                     ),
@@ -40,6 +57,7 @@ def login_page() -> rx.Component:
                         type="submit",
                         width="100%",
                         loading=AuthState.busy,
+                        disabled=AuthState.no_users,
                     ),
                     spacing="4",
                     width="100%",
@@ -50,4 +68,5 @@ def login_page() -> rx.Component:
             width=CARD_WIDTH,
         ),
         height=FULL_HEIGHT,
+        on_mount=AuthState.check_users,
     )

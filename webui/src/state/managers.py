@@ -6,12 +6,13 @@ import reflex as rx
 from src import context, formatting
 from src.constants import PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_WEEK
 from src.database import build_window
-from src.state.auth import AuthState
+from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
 SORT_NAME = "name"
 SORT_CALLS = "calls"
+SORT_ANALYZED = "analyzed"
 SORT_SCORE = "score"
 SORT_DELTA = "delta"
 SORT_LAST_CALL = "last_call"
@@ -19,6 +20,7 @@ SORT_LAST_CALL = "last_call"
 SORT_LABELS = {
     SORT_NAME: "Имя",
     SORT_CALLS: "Звонков",
+    SORT_ANALYZED: "Проанализировано",
     SORT_SCORE: "Средний балл",
     SORT_DELTA: "Изменение",
     SORT_LAST_CALL: "Последний звонок",
@@ -30,6 +32,7 @@ class ManagerRow:
     agent_id: int
     name: str
     calls: int
+    analyzed: int
     score: float
     score_label: str
     points: int
@@ -76,6 +79,10 @@ class ManagersState(AuthState):
         self._refresh()
 
     def _refresh(self) -> None:
+        if not guarded(self, self._collect):
+            return
+
+    def _collect(self) -> None:
         rows = collect(self.period, self.utc_offset)
         self.rows = sorted_rows(
             filtered_rows(rows, self.search), self.sort_by, self.descending
@@ -101,8 +108,9 @@ def collect(period: str, offset_hours: int) -> list[ManagerRow]:
                 agent_id=row["agent_id"],
                 name=row["display_name"],
                 calls=row["calls"],
+                analyzed=row["analyzed"],
                 score=formatting.share(row["ratio"]),
-                score_label=formatting.share_label(row["ratio"]),
+                score_label=formatting.share_label(row["ratio"], row["analyzed"]),
                 points=points,
                 delta=formatting.delta_label(points),
                 last_call=formatting.moment(row["last_call"], offset_hours),
@@ -123,6 +131,7 @@ def sorted_rows(rows: list[ManagerRow], column: str, descending: bool) -> list[M
     keys = {
         SORT_NAME: lambda row: row.name.casefold(),
         SORT_CALLS: lambda row: row.calls,
+        SORT_ANALYZED: lambda row: row.analyzed,
         SORT_SCORE: lambda row: row.score,
         SORT_DELTA: lambda row: row.points,
         SORT_LAST_CALL: lambda row: row.last_call_key,

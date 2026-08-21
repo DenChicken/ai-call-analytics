@@ -2,6 +2,7 @@ import reflex as rx
 
 from src.components.common import (
     checkbox_menu,
+    empty_state,
     kpi_card,
     period_picker,
     refresh_button,
@@ -12,7 +13,7 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_CALL, ROUTE_CALLS, ROUTE_MANAGER
+from src.constants import ROUTE_CALL, ROUTE_CALLS, ROUTE_MANAGER, SHARE_MAX
 from src.state.dashboard import (
     CHART_AFTER_KEY,
     CHART_BEFORE_KEY,
@@ -36,15 +37,18 @@ EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
 FAILED_LABEL = "с ошибкой"
 
-CHART_HEIGHT = 320
 CHART_BAR_BEFORE = "var(--gray-8)"
 CHART_BAR_AFTER = "var(--accent-9)"
 LEGEND_BEFORE = "Прошлый период"
 LEGEND_AFTER = "Текущий период"
-CRITERIA_MAX_HEIGHT = "24rem"
+EXPAND_CRITERIA_LABEL = "Показать все"
+COLLAPSE_CRITERIA_LABEL = "Свернуть"
 CHART_LABEL_WIDTH = 180
+CHART_BAR_SIZE = 12
+CHART_CATEGORY_GAP = 18
+CHART_BAR_GAP = 2
+TICK_COUNT = 6
 CHART_MARGIN = {"left": 10, "right": 20}
-PERCENT_MAX = 100
 LINK_ICON_SIZE = 14
 NAME_MAX_WIDTH = "9rem"
 
@@ -141,36 +145,69 @@ def _kpi_row() -> rx.Component:
 def _criteria_chart() -> rx.Component:
     return rx.cond(
         DashboardState.criteria_chart.length() > 0,
-        rx.scroll_area(
+        rx.vstack(
             rx.recharts.bar_chart(
                 rx.recharts.bar(
                     data_key=CHART_BEFORE_KEY,
                     fill=CHART_BAR_BEFORE,
                     name=LEGEND_BEFORE,
+                    bar_size=CHART_BAR_SIZE,
                 ),
                 rx.recharts.bar(
                     data_key=CHART_AFTER_KEY,
                     fill=CHART_BAR_AFTER,
                     name=LEGEND_AFTER,
+                    bar_size=CHART_BAR_SIZE,
                 ),
-                rx.recharts.x_axis(type_="number", domain=[0, PERCENT_MAX]),
+                rx.recharts.x_axis(
+                    type_="number", domain=[0, SHARE_MAX], tick_count=TICK_COUNT
+                ),
                 rx.recharts.y_axis(
-                    data_key=CHART_LABEL_KEY, type_="category", width=CHART_LABEL_WIDTH
+                    data_key=CHART_LABEL_KEY,
+                    type_="category",
+                    width=CHART_LABEL_WIDTH,
+                    interval=0,
                 ),
                 rx.recharts.graphing_tooltip(),
                 rx.recharts.legend(),
                 rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
-                data=DashboardState.criteria_chart,
+                data=DashboardState.visible_criteria,
                 layout="vertical",
-                height=CHART_HEIGHT,
+                bar_category_gap=CHART_CATEGORY_GAP,
+                bar_gap=CHART_BAR_GAP,
+                height=DashboardState.criteria_chart_height,
                 width="100%",
                 margin=CHART_MARGIN,
             ),
-            max_height=CRITERIA_MAX_HEIGHT,
-            type="auto",
+            rx.cond(
+                DashboardState.criteria_hidden_count > 0,
+                rx.button(
+                    rx.icon(
+                        rx.cond(
+                            DashboardState.criteria_expanded, "chevron-up", "chevron-down"
+                        ),
+                        size=LINK_ICON_SIZE,
+                    ),
+                    rx.cond(
+                        DashboardState.criteria_expanded,
+                        rx.text(COLLAPSE_CRITERIA_LABEL, size="1"),
+                        rx.text(
+                            f"{EXPAND_CRITERIA_LABEL} ({DashboardState.criteria_hidden_count})",
+                            size="1",
+                        ),
+                    ),
+                    on_click=DashboardState.toggle_criteria,
+                    variant="ghost",
+                    size="1",
+                    color_scheme="gray",
+                ),
+                rx.fragment(),
+            ),
+            spacing="2",
             width="100%",
+            align="center",
         ),
-        rx.text(EMPTY_CRITERIA, size="2", color_scheme="gray"),
+        empty_state(EMPTY_CRITERIA),
     )
 
 
@@ -236,7 +273,7 @@ def _table(rows, columns: tuple, builder, empty: str) -> rx.Component:
             ),
             rx.table.body(rx.foreach(rows, builder)),
         ),
-        rx.text(empty, size="2", color_scheme="gray"),
+        empty_state(empty),
     )
 
 
