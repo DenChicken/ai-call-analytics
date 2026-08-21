@@ -204,7 +204,8 @@ SELECT c.id,
        r.transcript,
        r.language,
        r.duration_ms,
-       j.status
+       j.status,
+       j.last_error
 FROM calls c
 LEFT JOIN agents ag ON ag.id = c.agent_id
 LEFT JOIN analyses a ON a.call_id = c.id

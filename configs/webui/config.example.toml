@@ -4,6 +4,16 @@ dsn_file = "../../secrets/database_dsn"
 [storage]
 root_dir = "../../data"
 
+[server]
+host = "localhost"
+scheme = "http"
+frontend_port = 3000
+backend_port = 8000
+
+[session]
+max_age_seconds = 604800
+cookie_secure = false
+
 [display]
 timezone = "Asia/Tbilisi"
 refresh_seconds = 5

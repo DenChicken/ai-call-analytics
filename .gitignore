@@ -52,3 +52,5 @@ models/
 .web/
 node_modules/
 .reflex/
+.states/
+reflex.lock/

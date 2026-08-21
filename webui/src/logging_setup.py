@@ -1,4 +1,5 @@
 import logging
+import os
 import sys
 from datetime import datetime
 from logging.handlers import RotatingFileHandler
@@ -8,12 +9,23 @@ from src.config import LoggingConfig
 from src.constants import (
     LOG_APPLICATION_LOGGERS,
     LOG_BACKUP_COUNT,
+    LOG_FILE_ENV_VAR,
     LOG_FILE_TEMPLATE,
     LOG_FILE_TIME_FORMAT,
     LOG_FORMAT,
     LOG_LATEST_NAME,
     LOG_MAX_BYTES,
 )
+
+
+def new_log_file(directory: Path) -> Path:
+    timestamp = datetime.now().strftime(LOG_FILE_TIME_FORMAT)
+    return directory / LOG_FILE_TEMPLATE.format(timestamp=timestamp)
+
+
+def _log_file(directory: Path) -> Path:
+    inherited = os.environ.get(LOG_FILE_ENV_VAR)
+    return Path(inherited) if inherited else new_log_file(directory)
 
 
 def _link_latest(directory: Path, target: Path) -> None:
@@ -40,8 +52,7 @@ def setup_logging(config: LoggingConfig) -> None:
     root.addHandler(console)
 
     config.dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now().strftime(LOG_FILE_TIME_FORMAT)
-    log_file = config.dir / LOG_FILE_TEMPLATE.format(timestamp=timestamp)
+    log_file = _log_file(config.dir)
 
     file_handler = RotatingFileHandler(
         log_file,

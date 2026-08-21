@@ -18,6 +18,28 @@ class StorageConfig:
 
 
 @dataclass(frozen=True)
+class ServerConfig:
+    host: str
+    scheme: str
+    frontend_port: int
+    backend_port: int
+
+    @property
+    def api_url(self) -> str:
+        return f"{self.scheme}://{self.host}:{self.backend_port}"
+
+    @property
+    def frontend_url(self) -> str:
+        return f"{self.scheme}://{self.host}:{self.frontend_port}"
+
+
+@dataclass(frozen=True)
+class SessionConfig:
+    max_age_seconds: int
+    cookie_secure: bool
+
+
+@dataclass(frozen=True)
 class DisplayConfig:
     timezone: str
     refresh_seconds: int
@@ -37,6 +59,8 @@ class LoggingConfig:
 class Config:
     database: DatabaseConfig
     storage: StorageConfig
+    server: ServerConfig
+    session: SessionConfig
     display: DisplayConfig
     logging: LoggingConfig
 
@@ -81,6 +105,8 @@ def load_config(path: str | Path) -> Config:
 
     database_raw = _section(raw, "database")
     storage_raw = _section(raw, "storage")
+    server_raw = _section(raw, "server")
+    session_raw = _section(raw, "session")
     display_raw = _section(raw, "display")
     logging_raw = _section(raw, "logging")
 
@@ -92,6 +118,16 @@ def load_config(path: str | Path) -> Config:
         ),
         storage=StorageConfig(
             root_dir=resolve_path(base_dir, _require(storage_raw, "root_dir", "storage")),
+        ),
+        server=ServerConfig(
+            host=_require(server_raw, "host", "server"),
+            scheme=_require(server_raw, "scheme", "server"),
+            frontend_port=_require(server_raw, "frontend_port", "server"),
+            backend_port=_require(server_raw, "backend_port", "server"),
+        ),
+        session=SessionConfig(
+            max_age_seconds=_require(session_raw, "max_age_seconds", "session"),
+            cookie_secure=_require(session_raw, "cookie_secure", "session"),
         ),
         display=DisplayConfig(
             timezone=_require(display_raw, "timezone", "display"),

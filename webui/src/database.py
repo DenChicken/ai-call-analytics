@@ -107,7 +107,7 @@ def build_window(
     return {
         "since": since,
         "until": until,
-        "types": types,
+        "types": [str(code) for code in types],
         "timezone": timezone,
         "agent_id": agent_id,
     }
