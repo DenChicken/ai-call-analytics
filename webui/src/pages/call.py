@@ -1,13 +1,19 @@
 import reflex as rx
 
 from src.components.common import (
+    breadcrumbs,
     empty_state,
     section_card,
     status_badge,
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import AUDIO_ELEMENT_ID, ROUTE_CALLS, ROUTE_MANAGER
+from src.constants import (
+    AUDIO_ELEMENT_ID,
+    ROUTE_CALLS,
+    ROUTE_MANAGER,
+    SECTION_CALLS,
+)
 from src.state.call import CallState
 
 TITLE = "Разговор"
@@ -38,7 +44,6 @@ META_PROMPT = "Версия промпта"
 META_PROCESSING = "Время обработки"
 META_ANALYZED = "Проанализирован"
 
-BACK_ICON_SIZE = 16
 MARK_ICON_SIZE = 16
 CRM_ICON_SIZE = 14
 NAME_MAX_WIDTH = "12rem"
@@ -59,12 +64,7 @@ def _field(label: str, value) -> rx.Component:
 
 def _header() -> rx.Component:
     return sticky_header(
-        rx.link(
-            rx.icon("arrow-left", size=BACK_ICON_SIZE),
-            href=ROUTE_CALLS,
-            color_scheme="gray",
-        ),
-        rx.heading(TITLE, size="5"),
+        breadcrumbs((SECTION_CALLS, ROUTE_CALLS), TITLE),
         status_badge(CallState.status_label, CallState.status_color, CallState.error),
         rx.spacer(),
         rx.cond(

@@ -1,13 +1,13 @@
 import reflex as rx
 
 from src.components.common import (
+    breadcrumbs,
     empty_state,
     kpi_card,
     period_picker,
     scrollable_table,
     section_card,
     status_badge,
-    truncated,
 )
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
@@ -16,6 +16,7 @@ from src.constants import (
     ROUTE_CALL,
     ROUTE_CALLS,
     ROUTE_MANAGERS,
+    SECTION_MANAGERS,
     SHARE_MAX,
 )
 from src.state.manager import (
@@ -51,9 +52,7 @@ TICK_COUNT = 6
 RADAR_OPACITY = 0.5
 RADAR_OUTER_RADIUS = "78%"
 RADAR_HEIGHT = 340
-BACK_ICON_SIZE = 16
 CRM_ICON_SIZE = 14
-NAME_MAX_WIDTH = "22rem"
 BAR_COLOR = "var(--accent-9)"
 SHOW_ALL_LABEL = "Все"
 HIDE_ALL_LABEL = "Ничего"
@@ -80,12 +79,7 @@ COLUMNS = ("Дата", "Клиент", "Длительность", "Балл", "
 
 def _header() -> rx.Component:
     return sticky_header(
-        rx.link(
-            rx.icon("arrow-left", size=BACK_ICON_SIZE),
-            href=ROUTE_MANAGERS,
-            color_scheme="gray",
-        ),
-        truncated(ManagerState.name, size="5", weight="bold", max_width=NAME_MAX_WIDTH),
+        breadcrumbs((SECTION_MANAGERS, ROUTE_MANAGERS), ManagerState.name),
         rx.cond(
             ManagerState.profile_link != "",
             rx.link(

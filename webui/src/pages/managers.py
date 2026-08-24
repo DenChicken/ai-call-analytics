@@ -8,7 +8,7 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_MANAGER
+from src.constants import ROUTE_MANAGER, SECTION_MANAGERS
 from src.state.managers import (
     SORT_ANALYZED,
     SORT_CALLS,
@@ -20,7 +20,7 @@ from src.state.managers import (
     ManagersState,
 )
 
-TITLE = "Менеджеры"
+TITLE = SECTION_MANAGERS
 SEARCH_PLACEHOLDER = "Поиск менеджера"
 EMPTY_MESSAGE = "За выбранный период нет звонков"
 SEARCH_WIDTH = "18rem"

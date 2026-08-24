@@ -4,6 +4,9 @@ from src.constants import (
     ROUTE_CALLS,
     ROUTE_DASHBOARD,
     ROUTE_MANAGERS,
+    SECTION_CALLS,
+    SECTION_DASHBOARD,
+    SECTION_MANAGERS,
     TIMEZONE_DIALOG_CANCEL,
     TIMEZONE_DIALOG_CONFIRM,
     TIMEZONE_DIALOG_TEXT,
@@ -46,9 +49,9 @@ CHART_FOCUS_RESET = {
 }
 
 NAV_ITEMS = (
-    (ROUTE_DASHBOARD, "Дашборд", "layout-dashboard"),
-    (ROUTE_CALLS, "Звонки", "phone"),
-    (ROUTE_MANAGERS, "Менеджеры", "users"),
+    (ROUTE_DASHBOARD, SECTION_DASHBOARD, "layout-dashboard"),
+    (ROUTE_CALLS, SECTION_CALLS, "phone"),
+    (ROUTE_MANAGERS, SECTION_MANAGERS, "users"),
 )
 
 

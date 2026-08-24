@@ -10,10 +10,10 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_CALL, ROUTE_MANAGER
+from src.constants import ROUTE_CALL, ROUTE_MANAGER, SECTION_CALLS
 from src.state.calls import CallsState
 
-TITLE = "Звонки"
+TITLE = SECTION_CALLS
 EMPTY_MESSAGE = "Нет звонков по выбранным фильтрам"
 STATUSES_LABEL = "Статусы"
 PAGE_SIZE_LABEL = "На странице"

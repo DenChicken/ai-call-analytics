@@ -64,6 +64,10 @@ ROUTE_MANAGER = "/manager"
 ROUTE_CALLS = "/calls"
 ROUTE_CALL = "/call"
 
+SECTION_DASHBOARD = "Дашборд"
+SECTION_CALLS = "Звонки"
+SECTION_MANAGERS = "Менеджеры"
+
 STATUS_LABELS = {
     STATUS_PENDING: "Ожидает",
     STATUS_TRANSCRIBING: "Расшифровка",

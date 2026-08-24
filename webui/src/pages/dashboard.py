@@ -13,7 +13,13 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_CALL, ROUTE_CALLS, ROUTE_MANAGER, SHARE_MAX
+from src.constants import (
+    ROUTE_CALL,
+    ROUTE_CALLS,
+    ROUTE_MANAGER,
+    SECTION_DASHBOARD,
+    SHARE_MAX,
+)
 from src.state.dashboard import (
     CHART_AFTER_KEY,
     CHART_BEFORE_KEY,
@@ -21,7 +27,7 @@ from src.state.dashboard import (
     DashboardState,
 )
 
-TITLE = "Дашборд"
+TITLE = SECTION_DASHBOARD
 KPI_PROCESSED = "Звонков за период"
 KPI_ANALYZED = "Проанализировано"
 KPI_QUEUED = "В очереди"

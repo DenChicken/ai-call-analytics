@@ -23,6 +23,12 @@ EMPTY_ICON_COLOR = "var(--gray-7)"
 EMPTY_PADDING = "2.5rem 1rem"
 CARD_HEADER_BACKGROUND = "var(--gray-a2)"
 CARD_BORDER = "1px solid var(--gray-a5)"
+CRUMB_SEPARATOR = "/"
+CRUMB_SEPARATOR_COLOR = "var(--gray-8)"
+CRUMB_SPACING = "2"
+CRUMB_MAX_WIDTH = "20rem"
+CRUMB_PARENT_SIZE = "2"
+CRUMB_CURRENT_SIZE = "5"
 TRUNCATE_STYLE = {
     "overflow": "hidden",
     "text_overflow": "ellipsis",
@@ -32,6 +38,31 @@ TRUNCATE_STYLE = {
 
 def truncated(value: rx.Var | str, **props) -> rx.Component:
     return rx.text(value, **TRUNCATE_STYLE, **props)
+
+
+def breadcrumbs(parent: tuple[str, str], current: rx.Var | str) -> rx.Component:
+    label, route = parent
+    return rx.hstack(
+        rx.link(
+            rx.text(label, size=CRUMB_PARENT_SIZE, white_space="nowrap"),
+            href=route,
+            color_scheme="gray",
+            underline="hover",
+            flex_shrink="0",
+        ),
+        rx.text(
+            CRUMB_SEPARATOR,
+            size=CRUMB_PARENT_SIZE,
+            color=CRUMB_SEPARATOR_COLOR,
+            flex_shrink="0",
+        ),
+        rx.heading(
+            current, size=CRUMB_CURRENT_SIZE, **TRUNCATE_STYLE, max_width=CRUMB_MAX_WIDTH
+        ),
+        spacing=CRUMB_SPACING,
+        align="baseline",
+        min_width="0",
+    )
 
 
 def kpi_card(
