@@ -22,6 +22,7 @@ from src.constants import (
     ROUTE_MANAGER,
     SECTION_DASHBOARD,
     SHARE_MAX,
+    TYPES_LABEL,
 )
 from src.state.dashboard import (
     CHART_AFTER_KEY,
@@ -39,7 +40,6 @@ KPI_WORST = "Худший менеджер"
 CRITERIA_TITLE = "Изменение критериев"
 QUEUE_TITLE = "Очередь обработки"
 RECENT_TITLE = "Завершённые анализы"
-TYPES_LABEL = "Типы звонков"
 EMPTY_QUEUE = "Очередь пуста"
 EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"

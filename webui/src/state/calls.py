@@ -5,9 +5,6 @@ import reflex as rx
 
 from src import context, errors, formatting, urlstate
 from src.constants import (
-    PERIOD_BY_LABEL,
-    PERIOD_DAYS,
-    PERIOD_LABELS,
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
     PAGE_SIZES,
@@ -15,15 +12,21 @@ from src.constants import (
     PARAM_PAGE,
     PARAM_PERIOD,
     PARAM_STATUSES,
+    PARAM_TYPES,
+    PERIOD_BY_LABEL,
+    PERIOD_DAYS,
+    PERIOD_LABELS,
     PERIOD_MONTH,
     ROUTE_CALLS,
     STATUS_COLORS,
     STATUS_LABELS,
     STATUS_ORDER,
     STATUSES_SUMMARY_TEMPLATE,
+    TYPES_SUMMARY_TEMPLATE,
 )
 from src.database import build_filters
 from src.state.auth import AuthState, guarded
+from src.state.dashboard import CallType
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +68,7 @@ class CallsState(AuthState):
     period: str = PERIOD_MONTH
     agent_filter: str = ALL_AGENTS
     selected_statuses: list[str] = []
+    selected_types: list[str] = []
     page: int = FIRST_PAGE
     page_size: int = 0
 
@@ -72,6 +76,7 @@ class CallsState(AuthState):
     total: int = 0
     agents: list[AgentOption] = []
     statuses: list[StatusOption] = []
+    available_types: list[CallType] = []
 
     @rx.event
     def load(self):
@@ -84,6 +89,12 @@ class CallsState(AuthState):
                 StatusOption(code=code, label=STATUS_LABELS[code]) for code in STATUS_ORDER
             ]
             self.selected_statuses = list(STATUS_ORDER)
+        if not self.available_types:
+            self.available_types = [
+                CallType(code=row["code"], label=row["label"])
+                for row in context.database().call_types()
+            ]
+            self.selected_types = [entry.code for entry in self.available_types]
         self.agents = [AgentOption(value=ALL_AGENTS, label=ALL_AGENTS_LABEL)] + [
             AgentOption(value=str(row["id"]), label=row["display_name"])
             for row in context.database().agents_with_calls()
@@ -98,11 +109,16 @@ class CallsState(AuthState):
             params, PARAM_STATUSES, STATUS_ORDER, self.selected_statuses
         )
         self.page = urlstate.read_page(params, PARAM_PAGE, FIRST_PAGE)
+        codes = [entry.code for entry in self.available_types]
+        self.selected_types = urlstate.read_list(
+            params, PARAM_TYPES, codes, self.selected_types
+        )
         agent = urlstate.read(params, PARAM_AGENT)
         if any(entry.value == agent for entry in self.agents):
             self.agent_filter = agent
 
     def _sync_url(self):
+        codes = [entry.code for entry in self.available_types]
         return rx.redirect(
             urlstate.query(
                 ROUTE_CALLS,
@@ -112,6 +128,7 @@ class CallsState(AuthState):
                     PARAM_STATUSES: urlstate.write_list(
                         self.selected_statuses, STATUS_ORDER
                     ),
+                    PARAM_TYPES: urlstate.write_list(self.selected_types, codes),
                     PARAM_PAGE: "" if self.page == FIRST_PAGE else str(self.page),
                 },
             ),
@@ -154,6 +171,26 @@ class CallsState(AuthState):
         return STATUSES_SUMMARY_TEMPLATE.format(
             selected=len(self.selected_statuses), total=len(self.statuses)
         )
+
+    @rx.var
+    def types_summary(self) -> str:
+        return TYPES_SUMMARY_TEMPLATE.format(
+            selected=len(self.selected_types), total=len(self.available_types)
+        )
+
+    @rx.event
+    def toggle_type(self, code: str, enabled: bool):
+        codes = {str(entry) for entry in self.selected_types}
+        if enabled:
+            codes.add(code)
+        else:
+            codes.discard(code)
+        self.selected_types = [
+            entry.code for entry in self.available_types if entry.code in codes
+        ]
+        self.page = FIRST_PAGE
+        self._refresh()
+        return self._sync_url()
 
     @rx.event
     def toggle_status(self, code: str, enabled: bool):
@@ -201,6 +238,8 @@ class CallsState(AuthState):
             self.period,
             self.agent_filter,
             list(self.selected_statuses),
+            list(self.selected_types),
+            len(self.selected_types) == len(self.available_types),
             self.page,
             self.page_size,
             self.utc_offset,
@@ -216,6 +255,8 @@ def collect(
     period: str,
     agent_filter: str,
     statuses: list[str],
+    types: list[str],
+    all_types: bool,
     page: int,
     page_size: int,
     offset_hours: int,
@@ -223,9 +264,8 @@ def collect(
     database = context.database()
 
     since, until = formatting.period_bounds(period, offset_hours)
-    types = [row["code"] for row in database.call_types()]
     agent_id = int(agent_filter) if agent_filter != ALL_AGENTS else None
-    filters = build_filters(since, until, types, agent_id, statuses or None)
+    filters = build_filters(since, until, types, agent_id, statuses or None, all_types)
 
     total = database.calls_list_count(filters)
     row_offset = (max(page, FIRST_PAGE) - 1) * page_size

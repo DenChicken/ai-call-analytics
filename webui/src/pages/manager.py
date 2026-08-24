@@ -2,6 +2,7 @@ import reflex as rx
 
 from src.components.common import (
     breadcrumbs,
+    checkbox_menu,
     empty_state,
     kpi_card,
     not_found,
@@ -16,13 +17,11 @@ from src.constants import (
     CHART_MARGIN,
     CHART_TICK_COUNT,
     CRM_ICON_SIZE,
-    PARAM_AGENT,
-    PARAM_PERIOD,
     ROUTE_CALL,
-    ROUTE_CALLS,
     ROUTE_MANAGERS,
     SECTION_MANAGERS,
     SHARE_MAX,
+    TYPES_LABEL,
 )
 from src.state.manager import (
     CHART_DAY_KEY,
@@ -99,6 +98,13 @@ def _header() -> rx.Component:
             rx.fragment(),
         ),
         rx.spacer(),
+        checkbox_menu(
+            TYPES_LABEL,
+            ManagerState.types_summary,
+            ManagerState.available_types,
+            lambda entry: ManagerState.selected_types.contains(entry.code),
+            lambda entry, value: ManagerState.toggle_type(entry.code, value),
+        ),
         period_picker(ManagerState.period_label, ManagerState.set_period),
     )
 
@@ -390,8 +396,7 @@ def _calls_actions() -> rx.Component:
                 spacing="1",
                 align="center",
             ),
-            href=f"{ROUTE_CALLS}?{PARAM_AGENT}={ManagerState.current_agent_id}"
-            f"&{PARAM_PERIOD}={ManagerState.period}",
+            href=ManagerState.all_calls_link,
             underline="none",
             color_scheme="gray",
         ),

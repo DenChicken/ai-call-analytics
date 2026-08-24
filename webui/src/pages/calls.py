@@ -10,12 +10,17 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_CALL, ROUTE_MANAGER, SECTION_CALLS
+from src.constants import (
+    ROUTE_CALL,
+    ROUTE_MANAGER,
+    SECTION_CALLS,
+    STATUSES_LABEL,
+    TYPES_LABEL,
+)
 from src.state.calls import CallsState
 
 TITLE = SECTION_CALLS
 EMPTY_MESSAGE = "Нет звонков по выбранным фильтрам"
-STATUSES_LABEL = "Статусы"
 PAGE_SIZE_LABEL = "На странице"
 PREVIOUS_LABEL = "Назад"
 NEXT_LABEL = "Вперёд"
@@ -37,9 +42,20 @@ def _header() -> rx.Component:
             size="1",
             width=AGENT_SELECT_WIDTH,
         ),
+        _type_filters(),
         _status_filters(),
         period_picker(CallsState.period_label, CallsState.set_period),
         refresh_button(CallsState.refresh),
+    )
+
+
+def _type_filters() -> rx.Component:
+    return checkbox_menu(
+        TYPES_LABEL,
+        CallsState.types_summary,
+        CallsState.available_types,
+        lambda entry: CallsState.selected_types.contains(entry.code),
+        lambda entry, value: CallsState.toggle_type(entry.code, value),
     )
 
 

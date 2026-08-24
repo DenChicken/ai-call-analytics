@@ -134,6 +134,8 @@ PARAM_SEARCH = "search"
 PARAM_SORT = "sort"
 PARAM_DESC = "desc"
 
+TYPES_LABEL = "Типы звонков"
+STATUSES_LABEL = "Статусы"
 TYPES_SUMMARY_TEMPLATE = "Типы: {selected}/{total}"
 STATUSES_SUMMARY_TEMPLATE = "Статусы: {selected}/{total}"
 
