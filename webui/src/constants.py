@@ -113,6 +113,15 @@ PERIOD_LABELS = {
 
 PERIOD_BY_LABEL = {label: code for code, label in PERIOD_LABELS.items()}
 
+PARAM_PERIOD = "period"
+PARAM_AGENT = "agent"
+PARAM_TYPES = "types"
+PARAM_STATUSES = "statuses"
+PARAM_PAGE = "page"
+PARAM_SEARCH = "search"
+PARAM_SORT = "sort"
+PARAM_DESC = "desc"
+
 TYPES_SUMMARY_TEMPLATE = "Типы: {selected}/{total}"
 STATUSES_SUMMARY_TEMPLATE = "Статусы: {selected}/{total}"
 

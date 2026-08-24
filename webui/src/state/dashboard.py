@@ -4,14 +4,18 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, errors, formatting
+from src import context, errors, formatting, urlstate
 from src.constants import (
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
+    PARAM_PERIOD,
+    PARAM_TYPES,
     PERIOD_BY_LABEL,
+    PERIOD_DAYS,
     PERIOD_LABELS,
     PERIOD_TODAY,
     QUEUE_STATUSES,
+    ROUTE_DASHBOARD,
     STATUS_COLORS,
     STATUS_FAILED,
     STATUS_LABELS,
@@ -121,6 +125,7 @@ class DashboardState(AuthState):
                 for row in context.database().call_types()
             ]
             self.selected_types = [entry.code for entry in self.available_types]
+        self._read_url()
         self._refresh()
         return DashboardState.auto_refresh
 
@@ -176,6 +181,7 @@ class DashboardState(AuthState):
     def set_period(self, label: str):
         self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
+        return self._sync_url()
 
     @rx.event
     def toggle_type(self, code: str, enabled: bool):
@@ -186,6 +192,28 @@ class DashboardState(AuthState):
             codes.discard(code)
         self.selected_types = sorted(codes)
         self._refresh()
+        return self._sync_url()
+
+    def _read_url(self) -> None:
+        params = self.router.url.query_parameters
+        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        codes = [entry.code for entry in self.available_types]
+        self.selected_types = urlstate.read_list(
+            params, PARAM_TYPES, codes, self.selected_types
+        )
+
+    def _sync_url(self):
+        codes = [entry.code for entry in self.available_types]
+        return rx.redirect(
+            urlstate.query(
+                ROUTE_DASHBOARD,
+                {
+                    PARAM_PERIOD: self.period,
+                    PARAM_TYPES: urlstate.write_list(self.selected_types, codes),
+                },
+            ),
+            replace=True,
+        )
 
     def _refresh(self) -> None:
         if not guarded(self, self._collect):

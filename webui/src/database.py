@@ -92,12 +92,6 @@ class Database:
     def agent_daily_ratios(self, window: dict) -> list[dict]:
         return self._fetch(queries.AGENT_DAILY_RATIOS, window)
 
-    def calls_page(self, window: dict, limit: int, offset: int) -> list[dict]:
-        return self._fetch(queries.CALLS_PAGE, {**window, "limit": limit, "offset": offset})
-
-    def calls_count(self, window: dict) -> int:
-        return self._fetch_one(queries.CALLS_COUNT, window)["total"]
-
     def extreme_calls(self, window: dict) -> dict[str, dict]:
         return {row["kind"]: row for row in self._fetch(queries.EXTREME_CALLS, window)}
 

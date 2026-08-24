@@ -123,35 +123,6 @@ GROUP BY day
 ORDER BY day
 """
 
-CALLS_PAGE = f"""
-SELECT c.id,
-       c.started_at,
-       c.duration_seconds,
-       c.direction,
-       c.client_number,
-       c.subject,
-       ag.display_name AS agent_name,
-       a.call_type,
-       t.label AS call_type_label,
-       m.met,
-       m.total
-FROM calls c
-{CALL_JOIN}
-LEFT JOIN agents ag ON ag.id = c.agent_id
-LEFT JOIN call_types t ON t.code = a.call_type
-{CALL_SCORE_COUNTS}
-{CALL_WHERE}
-ORDER BY c.started_at DESC
-LIMIT %(limit)s OFFSET %(offset)s
-"""
-
-CALLS_COUNT = f"""
-SELECT count(*) AS total
-FROM calls c
-{CALL_JOIN}
-{CALL_WHERE}
-"""
-
 EXTREME_CALLS = f"""
 WITH scored AS (
     SELECT c.id, c.started_at, m.met, m.total, m.ratio

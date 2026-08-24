@@ -3,8 +3,18 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, formatting
-from src.constants import PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_WEEK
+from src import context, formatting, urlstate
+from src.constants import (
+    PARAM_DESC,
+    PARAM_PERIOD,
+    PARAM_SEARCH,
+    PARAM_SORT,
+    PERIOD_BY_LABEL,
+    PERIOD_DAYS,
+    PERIOD_LABELS,
+    PERIOD_WEEK,
+    ROUTE_MANAGERS,
+)
 from src.database import build_window
 from src.state.auth import AuthState, guarded
 
@@ -26,6 +36,10 @@ SORT_LABELS = {
     SORT_LAST_CALL: "Последний звонок",
 }
 
+DEFAULT_SORT = SORT_SCORE
+DEFAULT_DESCENDING = True
+DESCENDING_VALUES = {True: "1", False: "0"}
+
 
 @dataclass
 class ManagerRow:
@@ -44,8 +58,8 @@ class ManagerRow:
 class ManagersState(AuthState):
     period: str = PERIOD_WEEK
     search: str = ""
-    sort_by: str = SORT_SCORE
-    descending: bool = True
+    sort_by: str = DEFAULT_SORT
+    descending: bool = DEFAULT_DESCENDING
 
     rows: list[ManagerRow] = []
 
@@ -53,6 +67,7 @@ class ManagersState(AuthState):
     def load(self):
         if not self.session_login:
             return AuthState.require_session
+        self._read_url()
         self._refresh()
 
     @rx.var
@@ -63,11 +78,16 @@ class ManagersState(AuthState):
     def set_period(self, label: str):
         self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
+        return self._sync_url()
 
     @rx.event
     def set_search(self, value: str):
         self.search = value
         self._refresh()
+
+    @rx.event
+    def commit_search(self):
+        return self._sync_url()
 
     @rx.event
     def sort(self, column: str):
@@ -77,6 +97,32 @@ class ManagersState(AuthState):
             self.sort_by = column
             self.descending = column != SORT_NAME
         self._refresh()
+        return self._sync_url()
+
+    def _read_url(self) -> None:
+        params = self.router.url.query_parameters
+        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self.search = urlstate.read(params, PARAM_SEARCH)
+        self.sort_by = urlstate.read_choice(params, PARAM_SORT, SORT_LABELS, self.sort_by)
+        self.descending = urlstate.read_flag(params, PARAM_DESC, self.descending)
+
+    def _sync_url(self):
+        return rx.redirect(
+            urlstate.query(
+                ROUTE_MANAGERS,
+                {
+                    PARAM_PERIOD: self.period,
+                    PARAM_SEARCH: self.search,
+                    PARAM_SORT: "" if self.sort_by == DEFAULT_SORT else self.sort_by,
+                    PARAM_DESC: (
+                        ""
+                        if bool(self.descending) == DEFAULT_DESCENDING
+                        else DESCENDING_VALUES[bool(self.descending)]
+                    ),
+                },
+            ),
+            replace=True,
+        )
 
     def _refresh(self) -> None:
         if not guarded(self, self._collect):

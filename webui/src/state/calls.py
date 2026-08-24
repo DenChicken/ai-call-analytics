@@ -3,14 +3,20 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, errors, formatting
+from src import context, errors, formatting, urlstate
 from src.constants import (
     PERIOD_BY_LABEL,
+    PERIOD_DAYS,
     PERIOD_LABELS,
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
     PAGE_SIZES,
+    PARAM_AGENT,
+    PARAM_PAGE,
+    PARAM_PERIOD,
+    PARAM_STATUSES,
     PERIOD_MONTH,
+    ROUTE_CALLS,
     STATUS_COLORS,
     STATUS_LABELS,
     STATUS_ORDER,
@@ -82,7 +88,35 @@ class CallsState(AuthState):
             AgentOption(value=str(row["id"]), label=row["display_name"])
             for row in context.database().agents_with_calls()
         ]
+        self._read_url()
         self._refresh()
+
+    def _read_url(self) -> None:
+        params = self.router.url.query_parameters
+        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self.selected_statuses = urlstate.read_list(
+            params, PARAM_STATUSES, STATUS_ORDER, self.selected_statuses
+        )
+        self.page = urlstate.read_page(params, PARAM_PAGE, FIRST_PAGE)
+        agent = urlstate.read(params, PARAM_AGENT)
+        if any(entry.value == agent for entry in self.agents):
+            self.agent_filter = agent
+
+    def _sync_url(self):
+        return rx.redirect(
+            urlstate.query(
+                ROUTE_CALLS,
+                {
+                    PARAM_PERIOD: self.period,
+                    PARAM_AGENT: "" if self.agent_filter == ALL_AGENTS else self.agent_filter,
+                    PARAM_STATUSES: urlstate.write_list(
+                        self.selected_statuses, STATUS_ORDER
+                    ),
+                    PARAM_PAGE: "" if self.page == FIRST_PAGE else str(self.page),
+                },
+            ),
+            replace=True,
+        )
 
     @rx.event
     def refresh(self):
@@ -97,6 +131,7 @@ class CallsState(AuthState):
         self.period = PERIOD_BY_LABEL.get(label, self.period)
         self.page = FIRST_PAGE
         self._refresh()
+        return self._sync_url()
 
     @rx.event
     def set_agent_label(self, label: str):
@@ -105,6 +140,7 @@ class CallsState(AuthState):
         )
         self.page = FIRST_PAGE
         self._refresh()
+        return self._sync_url()
 
     @rx.var
     def agent_label(self) -> str:
@@ -129,6 +165,7 @@ class CallsState(AuthState):
         self.selected_statuses = [status for status in STATUS_ORDER if status in codes]
         self.page = FIRST_PAGE
         self._refresh()
+        return self._sync_url()
 
     @rx.event
     def set_page_size(self, value: str):
@@ -140,6 +177,7 @@ class CallsState(AuthState):
     def go_to_page(self, page: int):
         self.page = max(FIRST_PAGE, min(page, self.pages))
         self._refresh()
+        return self._sync_url()
 
     @rx.var
     def pages(self) -> int:
@@ -170,6 +208,9 @@ class CallsState(AuthState):
         )
         self.rows = rows
         self.total = total
+        if not rows and self.page > FIRST_PAGE:
+            self.page = FIRST_PAGE
+            self._collect()
 
 
 def collect(

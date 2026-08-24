@@ -6,10 +6,18 @@ from src.components.common import (
     period_picker,
     scrollable_table,
     section_card,
+    status_badge,
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_CALL, ROUTE_MANAGERS, SHARE_MAX
+from src.constants import (
+    PARAM_AGENT,
+    PARAM_PERIOD,
+    ROUTE_CALL,
+    ROUTE_CALLS,
+    ROUTE_MANAGERS,
+    SHARE_MAX,
+)
 from src.state.manager import (
     CHART_DAY_KEY,
     CHART_LABEL_KEY,
@@ -19,13 +27,16 @@ from src.state.manager import (
 
 KPI_SCORE = "Средний балл"
 KPI_CALLS = "Звонков"
+KPI_ANALYZED_HINT = "проанализировано:"
 KPI_BEST = "Лучший разговор"
 KPI_WORST = "Худший разговор"
 TREND_TITLE = "Средний балл по дням"
 CRITERIA_TREND_TITLE = "Критерии по дням"
 RADAR_TITLE = "Критерии за период"
 CRITERIA_TITLE = "Средние оценки за период"
-CALLS_TITLE = "Разговоры"
+CALLS_TITLE = "Последние разговоры"
+ALL_CALLS_LABEL = "Все звонки"
+ALL_CALLS_HINT = "всего за период:"
 EMPTY_TREND = "Нет данных за период"
 EMPTY_CALLS = "За период нет звонков"
 CRM_LABEL = "Профиль в CRM"
@@ -64,7 +75,7 @@ LEGEND_HOVER_BACKGROUND = "var(--gray-a3)"
 TREND_LEGEND_WIDTH = "15rem"
 RADAR_LEGEND_WIDTH = "22rem"
 
-COLUMNS = ("Дата", "Клиент", "Длительность", "Балл", "Тип")
+COLUMNS = ("Дата", "Клиент", "Длительность", "Балл", "Тип", "Статус")
 
 
 def _header() -> rx.Component:
@@ -107,7 +118,17 @@ def _call_link(label: rx.Var, call_id: rx.Var) -> rx.Component:
 def _kpi_row() -> rx.Component:
     return rx.hstack(
         kpi_card(KPI_SCORE, ManagerState.score, "target"),
-        kpi_card(KPI_CALLS, ManagerState.calls.to_string(), "phone"),
+        kpi_card(
+            KPI_CALLS,
+            ManagerState.calls.to_string(),
+            "phone",
+            rx.text(
+                f"{KPI_ANALYZED_HINT} {ManagerState.analyzed}",
+                size="2",
+                color_scheme="gray",
+                white_space="nowrap",
+            ),
+        ),
         kpi_card(
             KPI_BEST,
             ManagerState.best_call,
@@ -356,6 +377,31 @@ def _radar_chart() -> rx.Component:
     )
 
 
+def _calls_actions() -> rx.Component:
+    return rx.hstack(
+        rx.text(
+            f"{ALL_CALLS_HINT} {ManagerState.calls_total}",
+            size="1",
+            color_scheme="gray",
+            white_space="nowrap",
+        ),
+        rx.link(
+            rx.hstack(
+                rx.text(ALL_CALLS_LABEL, size="1"),
+                rx.icon("arrow-right", size=CRM_ICON_SIZE),
+                spacing="1",
+                align="center",
+            ),
+            href=f"{ROUTE_CALLS}?{PARAM_AGENT}={ManagerState.current_agent_id}"
+            f"&{PARAM_PERIOD}={ManagerState.period}",
+            underline="none",
+            color_scheme="gray",
+        ),
+        spacing="3",
+        align="center",
+    )
+
+
 def _call_row(row) -> rx.Component:
     return rx.table.row(
         rx.table.cell(
@@ -368,6 +414,7 @@ def _call_row(row) -> rx.Component:
         rx.table.cell(rx.text(row.duration, size="2")),
         rx.table.cell(rx.badge(row.score)),
         rx.table.cell(rx.text(row.call_type, size="2")),
+        rx.table.cell(status_badge(row.status_label, row.status_color, row.error)),
     )
 
 
@@ -390,9 +437,10 @@ def manager_page() -> rx.Component:
                             )
                         ),
                         rx.table.body(rx.foreach(ManagerState.calls_rows, _call_row)),
-                        ),
+                    ),
                     empty_state(EMPTY_CALLS),
                 ),
+                actions=_calls_actions(),
             ),
             spacing="4",
             width="100%",

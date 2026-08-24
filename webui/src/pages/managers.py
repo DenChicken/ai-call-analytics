@@ -100,6 +100,7 @@ def managers_page() -> rx.Component:
                 placeholder=SEARCH_PLACEHOLDER,
                 value=ManagersState.search,
                 on_change=ManagersState.set_search,
+                on_blur=ManagersState.commit_search,
                 width=SEARCH_WIDTH,
                 size="1",
             ),

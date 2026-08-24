@@ -3,9 +3,20 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, formatting
-from src.constants import EMPTY_VALUE, PERIOD_BY_LABEL, PERIOD_LABELS, PERIOD_MONTH
-from src.database import build_window
+from src import context, errors, formatting, urlstate
+from src.constants import (
+    DEFAULT_STATUS_COLOR,
+    EMPTY_VALUE,
+    PARAM_PERIOD,
+    PERIOD_BY_LABEL,
+    PERIOD_DAYS,
+    PERIOD_LABELS,
+    PERIOD_MONTH,
+    ROUTE_MANAGER,
+    STATUS_COLORS,
+    STATUS_LABELS,
+)
+from src.database import build_filters, build_window
 from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
@@ -56,6 +67,9 @@ class CallRow:
     duration: str
     score: str
     call_type: str
+    status_label: str
+    status_color: str
+    error: str
 
 
 @dataclass
@@ -72,6 +86,7 @@ class ManagerData:
     profile_link: str
     score: str
     calls: int
+    analyzed: int
     best_call: str
     best_call_id: int
     worst_call: str
@@ -81,6 +96,7 @@ class ManagerData:
     criteria_trend: list[dict]
     criteria_lines: list[CriterionLine]
     calls_rows: list[CallRow]
+    calls_total: int
 
 
 class ManagerState(AuthState):
@@ -91,6 +107,7 @@ class ManagerState(AuthState):
     profile_link: str = ""
     score: str = EMPTY_VALUE
     calls: int = 0
+    analyzed: int = 0
     best_call: str = EMPTY_VALUE
     best_call_id: int = 0
     worst_call: str = EMPTY_VALUE
@@ -104,6 +121,7 @@ class ManagerState(AuthState):
     criteria_lines: list[CriterionLine] = []
     hidden_lines: list[str] = []
     calls_rows: list[CallRow] = []
+    calls_total: int = 0
 
     @rx.var
     def criteria_chart_height(self) -> int:
@@ -133,6 +151,9 @@ class ManagerState(AuthState):
         if not self.session_login:
             return AuthState.require_session
         self.current_agent_id = _as_id(self.agent_id)
+        self.period = urlstate.read_choice(
+            self.router.url.query_parameters, PARAM_PERIOD, PERIOD_DAYS, self.period
+        )
         self._refresh()
 
     @rx.var
@@ -143,6 +164,12 @@ class ManagerState(AuthState):
     def set_period(self, label: str):
         self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
+        return rx.redirect(
+            urlstate.query(
+                f"{ROUTE_MANAGER}/{self.current_agent_id}", {PARAM_PERIOD: self.period}
+            ),
+            replace=True,
+        )
 
     def _refresh(self) -> None:
         if not guarded(self, self._collect):
@@ -155,6 +182,7 @@ class ManagerState(AuthState):
         self.profile_link = data.profile_link
         self.score = data.score
         self.calls = data.calls
+        self.analyzed = data.analyzed
         self.best_call = data.best_call
         self.best_call_id = data.best_call_id
         self.worst_call = data.worst_call
@@ -172,6 +200,7 @@ class ManagerState(AuthState):
         self.criteria_trend = data.criteria_trend
         self.criteria_lines = data.criteria_lines
         self.calls_rows = data.calls_rows
+        self.calls_total = data.calls_total
 
 
 def collect(agent_id: int, period: str, offset_hours: int) -> ManagerData:
@@ -181,18 +210,23 @@ def collect(agent_id: int, period: str, offset_hours: int) -> ManagerData:
     since, until = formatting.period_bounds(period, offset_hours)
     types = [entry["code"] for entry in database.call_types()]
     window = build_window(since, until, types, agent_id=agent_id)
+    filters = build_filters(since, until, types, agent_id, None)
 
     agent = database.agent(agent_id)
     totals = database.period_totals(window)
     extremes = database.extreme_calls(window)
     criteria = _criteria(database, window)
+    calls_rows, calls_total = _calls(
+        database, filters, display.page_size, offset_hours
+    )
 
     return ManagerData(
         name=agent["display_name"] if agent else EMPTY_VALUE,
         email=agent["email"] or "" if agent else "",
         profile_link=agent["profile_link"] or "" if agent else "",
         score=formatting.share_label(totals["ratio"], totals["calls"]),
-        calls=totals["calls"],
+        calls=calls_total,
+        analyzed=totals["calls"],
         best_call=_extreme_label(extremes.get("best")),
         best_call_id=extremes["best"]["id"] if "best" in extremes else 0,
         worst_call=_extreme_label(extremes.get("worst")),
@@ -201,7 +235,8 @@ def collect(agent_id: int, period: str, offset_hours: int) -> ManagerData:
         trend=_trend(database, window),
         criteria_trend=_criteria_trend(database, window, criteria),
         criteria_lines=_criteria_lines(criteria),
-        calls_rows=_calls(database, window, display.page_size, offset_hours),
+        calls_rows=calls_rows,
+        calls_total=calls_total,
     )
 
 
@@ -256,8 +291,10 @@ def _trend(database, window: dict) -> list[dict]:
     ]
 
 
-def _calls(database, window: dict, limit: int, offset_hours: int) -> list[CallRow]:
-    return [
+def _calls(
+    database, filters: dict, limit: int, offset_hours: int
+) -> tuple[list[CallRow], int]:
+    rows = [
         CallRow(
             call_id=row["id"],
             started_at=formatting.moment(row["started_at"], offset_hours),
@@ -265,6 +302,10 @@ def _calls(database, window: dict, limit: int, offset_hours: int) -> list[CallRo
             duration=formatting.duration(row["duration_seconds"]),
             score=formatting.fraction(row["met"], row["total"]),
             call_type=row["call_type_label"] or row["call_type"] or EMPTY_VALUE,
+            status_label=STATUS_LABELS.get(row["status"], row["status"] or EMPTY_VALUE),
+            status_color=STATUS_COLORS.get(row["status"], DEFAULT_STATUS_COLOR),
+            error=errors.describe(row["error_code"]),
         )
-        for row in database.calls_page(window, limit, 0)
+        for row in database.calls_list(filters, limit, 0)
     ]
+    return rows, database.calls_list_count(filters)
