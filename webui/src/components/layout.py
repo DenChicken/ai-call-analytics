@@ -1,6 +1,8 @@
 import reflex as rx
 
 from src.constants import (
+    FULL_HEIGHT,
+    MUTED_COLOR,
     ROUTE_CALLS,
     ROUTE_DASHBOARD,
     ROUTE_MANAGERS,
@@ -33,11 +35,9 @@ CONTENT_MAX_WIDTH = "88rem"
 NAV_ITEM_PADDING = "0.5rem 0.75rem"
 NAV_ITEM_RADIUS = "var(--radius-3)"
 NAV_HOVER_BACKGROUND = "var(--gray-a3)"
-MUTED_COLOR = "var(--gray-9)"
 BORDER_STYLE = "1px solid var(--gray-a5)"
 HEADER_BACKGROUND = "var(--color-panel-solid)"
 HEADER_Z_INDEX = "10"
-FULL_HEIGHT = "100vh"
 FOOTER_ICON_PADDING = "0.25rem"
 DIALOG_MAX_WIDTH = "26rem"
 DIALOG_ACTIONS_MARGIN = "1rem"

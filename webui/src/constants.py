@@ -68,6 +68,13 @@ NOT_FOUND_ROUTE = "404"
 SECTION_DASHBOARD = "Дашборд"
 SECTION_CALLS = "Звонки"
 SECTION_MANAGERS = "Менеджеры"
+ALL_CALLS_LABEL = "Все звонки"
+
+CHART_MARGIN = {"left": 10, "right": 20}
+CHART_TICK_COUNT = 6
+CRM_ICON_SIZE = 14
+MUTED_COLOR = "var(--gray-9)"
+FULL_HEIGHT = "100vh"
 
 STATUS_LABELS = {
     STATUS_PENDING: "Ожидает",

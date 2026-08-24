@@ -202,15 +202,14 @@ class AuthState(rx.State):
             return rx.redirect(ROUTE_LOGIN)
 
 
-def guarded(state: AuthState, action) -> bool:
+def guarded(state: AuthState, action) -> None:
     try:
         action()
     except Exception:
         logger.exception("failed to load page data")
         state.load_error = LOAD_ERROR_MESSAGE
-        return False
+        return
     state.load_error = ""
-    return True
 
 
 def _authenticate(login: str, password: str) -> str | None:

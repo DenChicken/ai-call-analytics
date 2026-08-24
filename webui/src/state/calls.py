@@ -194,8 +194,7 @@ class CallsState(AuthState):
         return [str(size) for size in PAGE_SIZES]
 
     def _refresh(self) -> None:
-        if not guarded(self, self._collect):
-            return
+        guarded(self, self._collect)
 
     def _collect(self) -> None:
         rows, total = collect(

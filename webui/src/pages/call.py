@@ -11,6 +11,7 @@ from src.components.common import (
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
     AUDIO_ELEMENT_ID,
+    CRM_ICON_SIZE,
     ROUTE_CALLS,
     ROUTE_MANAGER,
     SECTION_CALLS,
@@ -46,7 +47,6 @@ META_PROCESSING = "Время обработки"
 META_ANALYZED = "Проанализирован"
 
 MARK_ICON_SIZE = 16
-CRM_ICON_SIZE = 14
 NAME_MAX_WIDTH = "12rem"
 TRANSCRIPT_HEIGHT = "22rem"
 TIME_WIDTH = "3rem"

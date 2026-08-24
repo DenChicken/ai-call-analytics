@@ -1,6 +1,6 @@
 import reflex as rx
 
-from src.constants import PERIOD_LABELS, POSITIVE_SIGN
+from src.constants import MUTED_COLOR, PERIOD_LABELS, POSITIVE_SIGN
 
 KPI_MIN_WIDTH = "12rem"
 KPI_ICON_SIZE = 16
@@ -16,7 +16,6 @@ CARD_BODY_PADDING = "1rem"
 DELTA_POSITIVE_COLOR = "grass"
 DELTA_NEGATIVE_COLOR = "tomato"
 DELTA_NEUTRAL_COLOR = "gray"
-MUTED_COLOR = "var(--gray-9)"
 EMPTY_ICON = "inbox"
 EMPTY_ICON_SIZE = 28
 EMPTY_ICON_COLOR = "var(--gray-7)"

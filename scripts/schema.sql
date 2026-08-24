@@ -93,6 +93,8 @@ CREATE TABLE IF NOT EXISTS analyses (
     created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE INDEX IF NOT EXISTS analyses_created_idx ON analyses (created_at DESC);
+
 CREATE TABLE IF NOT EXISTS asr_results (
     call_id     BIGINT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
     model       TEXT NOT NULL,

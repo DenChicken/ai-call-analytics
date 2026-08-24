@@ -125,8 +125,7 @@ class ManagersState(AuthState):
         )
 
     def _refresh(self) -> None:
-        if not guarded(self, self._collect):
-            return
+        guarded(self, self._collect)
 
     def _collect(self) -> None:
         rows = collect(self.period, self.utc_offset)

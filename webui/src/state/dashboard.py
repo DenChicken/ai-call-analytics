@@ -216,8 +216,7 @@ class DashboardState(AuthState):
         )
 
     def _refresh(self) -> None:
-        if not guarded(self, self._collect):
-            return
+        guarded(self, self._collect)
 
     def _collect(self) -> None:
         data = collect(self.period, self.selected_types, self.utc_offset)

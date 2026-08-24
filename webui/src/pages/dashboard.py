@@ -14,6 +14,9 @@ from src.components.common import (
 )
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
+    ALL_CALLS_LABEL,
+    CHART_MARGIN,
+    CHART_TICK_COUNT,
     ROUTE_CALL,
     ROUTE_CALLS,
     ROUTE_MANAGER,
@@ -37,7 +40,6 @@ CRITERIA_TITLE = "Изменение критериев"
 QUEUE_TITLE = "Очередь обработки"
 RECENT_TITLE = "Завершённые анализы"
 TYPES_LABEL = "Типы звонков"
-ALL_CALLS_LABEL = "Все звонки"
 EMPTY_QUEUE = "Очередь пуста"
 EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
@@ -53,8 +55,6 @@ CHART_LABEL_WIDTH = 180
 CHART_BAR_SIZE = 12
 CHART_CATEGORY_GAP = 18
 CHART_BAR_GAP = 2
-TICK_COUNT = 6
-CHART_MARGIN = {"left": 10, "right": 20}
 LINK_ICON_SIZE = 14
 NAME_MAX_WIDTH = "9rem"
 
@@ -166,7 +166,7 @@ def _criteria_chart() -> rx.Component:
                     bar_size=CHART_BAR_SIZE,
                 ),
                 rx.recharts.x_axis(
-                    type_="number", domain=[0, SHARE_MAX], tick_count=TICK_COUNT
+                    type_="number", domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
                 ),
                 rx.recharts.y_axis(
                     data_key=CHART_LABEL_KEY,

@@ -1,6 +1,6 @@
 import reflex as rx
 
-from src.constants import FIELD_LOGIN, FIELD_PASSWORD
+from src.constants import FIELD_LOGIN, FIELD_PASSWORD, FULL_HEIGHT
 from src.state.auth import AuthState
 
 TITLE = "Аналитика звонков"
@@ -9,7 +9,6 @@ LOGIN_LABEL = "Логин"
 PASSWORD_LABEL = "Пароль"
 SUBMIT_LABEL = "Войти"
 CARD_WIDTH = "22rem"
-FULL_HEIGHT = "100vh"
 NO_USERS_MESSAGE = "Пользователей нет. Создайте первого:"
 USER_COMMAND = "python scripts/user.py add <логин> -d <файл с dsn>"
 

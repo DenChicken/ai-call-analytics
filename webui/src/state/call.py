@@ -114,8 +114,7 @@ class CallState(AuthState):
             return AuthState.require_session
 
         self.current_call_id = _as_id(self.call_id)
-        if not guarded(self, self._collect):
-            return
+        guarded(self, self._collect)
 
     def _collect(self) -> None:
         data = collect(self.current_call_id, self.utc_offset)

@@ -174,8 +174,7 @@ class ManagerState(AuthState):
         )
 
     def _refresh(self) -> None:
-        if not guarded(self, self._collect):
-            return
+        guarded(self, self._collect)
 
     def _collect(self) -> None:
         data = collect(self.current_agent_id, self.period, self.utc_offset)

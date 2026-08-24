@@ -12,6 +12,10 @@ from src.components.common import (
 )
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
+    ALL_CALLS_LABEL,
+    CHART_MARGIN,
+    CHART_TICK_COUNT,
+    CRM_ICON_SIZE,
     PARAM_AGENT,
     PARAM_PERIOD,
     ROUTE_CALL,
@@ -37,7 +41,6 @@ CRITERIA_TREND_TITLE = "Критерии по дням"
 RADAR_TITLE = "Критерии за период"
 CRITERIA_TITLE = "Средние оценки за период"
 CALLS_TITLE = "Последние разговоры"
-ALL_CALLS_LABEL = "Все звонки"
 ALL_CALLS_HINT = "всего за период:"
 NOT_FOUND_MANAGER = "Менеджер не найден"
 EMPTY_TREND = "Нет данных за период"
@@ -49,12 +52,9 @@ CHART_HEIGHT = 260
 CRITERIA_CHART_HEIGHT = 320
 CRITERIA_BAR_SIZE = 16
 CRITERIA_LABEL_WIDTH = 200
-CHART_MARGIN = {"left": 10, "right": 20}
-TICK_COUNT = 6
 RADAR_OPACITY = 0.5
 RADAR_OUTER_RADIUS = "78%"
 RADAR_HEIGHT = 340
-CRM_ICON_SIZE = 14
 BAR_COLOR = "var(--accent-9)"
 SHOW_ALL_LABEL = "Все"
 HIDE_ALL_LABEL = "Ничего"
@@ -150,7 +150,7 @@ def _score_chart() -> rx.Component:
         rx.recharts.bar_chart(
             rx.recharts.bar(data_key=CHART_SCORE_KEY, fill=BAR_COLOR),
             rx.recharts.x_axis(data_key=CHART_DAY_KEY),
-            rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+            rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT),
             rx.recharts.graphing_tooltip(),
             rx.recharts.cartesian_grid(stroke_dasharray="3 3", vertical=False),
             data=ManagerState.trend,
@@ -266,7 +266,7 @@ def _criteria_chart() -> rx.Component:
                         ),
                     ),
                     rx.recharts.x_axis(data_key=CHART_DAY_KEY),
-                    rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+                    rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT),
                     rx.recharts.graphing_tooltip(),
                     rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
                     data=ManagerState.criteria_trend,
@@ -291,7 +291,9 @@ def _criteria_bars() -> rx.Component:
             rx.recharts.bar(
                 data_key=CHART_SCORE_KEY, fill=BAR_COLOR, bar_size=CRITERIA_BAR_SIZE
             ),
-            rx.recharts.x_axis(type_="number", domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
+            rx.recharts.x_axis(
+                type_="number", domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
+            ),
             rx.recharts.y_axis(
                 data_key=CHART_LABEL_KEY,
                 type_="category",
@@ -347,7 +349,7 @@ def _radar_chart() -> rx.Component:
                     rx.recharts.polar_angle_axis(data_key=CHART_LABEL_KEY),
                     rx.recharts.polar_radius_axis(
                         domain=[0, SHARE_MAX],
-                        tick_count=TICK_COUNT,
+                        tick_count=CHART_TICK_COUNT,
                         axis_line=False,
                         tick=False,
                     ),
