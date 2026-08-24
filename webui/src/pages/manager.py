@@ -40,24 +40,29 @@ TICK_COUNT = 6
 RADAR_OPACITY = 0.5
 RADAR_OUTER_RADIUS = "78%"
 RADAR_HEIGHT = 340
-RADAR_LEGEND_WIDTH = "22rem"
-LEGEND_ROW_PADDING = "0.2rem 0.25rem"
-LEGEND_NUMBER_WIDTH = "1.4rem"
-LEGEND_SCROLLBAR_GUTTER = "0.75rem"
 BACK_ICON_SIZE = 16
 CRM_ICON_SIZE = 14
 NAME_MAX_WIDTH = "22rem"
 BAR_COLOR = "var(--accent-9)"
-LEGEND_WIDTH = "13rem"
-LEGEND_DOT_SIZE = "0.6rem"
-LEGEND_HIDDEN_OPACITY = 0.55
 SHOW_ALL_LABEL = "Все"
 HIDE_ALL_LABEL = "Ничего"
-TOGGLE_TEXT_STYLE = {
-    "overflow": "hidden",
-    "text_overflow": "ellipsis",
-    "white_space": "nowrap",
-}
+
+LEGEND_TEXT_SIZE = "1"
+LEGEND_ROW_SPACING = "2"
+LEGEND_ROW_PADDING = "0.25rem 0.5rem"
+LEGEND_ROW_RADIUS = "var(--radius-2)"
+LEGEND_SCROLLBAR_GUTTER = "0.75rem"
+LEGEND_SCROLLBAR_TYPE = "always"
+LEGEND_DOT_SIZE = "0.6rem"
+LEGEND_DOT_OFFSET = "0.25rem"
+LEGEND_NUMBER_WIDTH = "1.4rem"
+LEGEND_HIDDEN_OPACITY = 0.55
+LEGEND_HIDDEN_DOT_COLOR = "var(--gray-6)"
+LEGEND_HIDDEN_TEXT_COLOR = "var(--gray-9)"
+LEGEND_TEXT_COLOR = "var(--gray-12)"
+LEGEND_HOVER_BACKGROUND = "var(--gray-a3)"
+TREND_LEGEND_WIDTH = "15rem"
+RADAR_LEGEND_WIDTH = "22rem"
 
 COLUMNS = ("Дата", "Клиент", "Длительность", "Балл", "Тип")
 
@@ -139,31 +144,58 @@ def _score_chart() -> rx.Component:
     )
 
 
+def _legend_dot(color) -> rx.Component:
+    return rx.box(
+        width=LEGEND_DOT_SIZE,
+        height=LEGEND_DOT_SIZE,
+        border_radius="50%",
+        background=color,
+        flex_shrink="0",
+        margin_top=LEGEND_DOT_OFFSET,
+    )
+
+
+def _legend_row(*children: rx.Component, **props) -> rx.Component:
+    return rx.hstack(
+        *children,
+        spacing=LEGEND_ROW_SPACING,
+        align="start",
+        width="100%",
+        padding=LEGEND_ROW_PADDING,
+        border_radius=LEGEND_ROW_RADIUS,
+        **props,
+    )
+
+
+def _legend_panel(rows, width: str, height: int) -> rx.Component:
+    return rx.scroll_area(
+        rx.vstack(
+            rows,
+            spacing="0",
+            width="100%",
+            padding_right=LEGEND_SCROLLBAR_GUTTER,
+        ),
+        height=height,
+        type=LEGEND_SCROLLBAR_TYPE,
+        scrollbars="vertical",
+        width=width,
+        flex_shrink="0",
+    )
+
+
 def _line_toggle(line) -> rx.Component:
     hidden = ManagerState.hidden_lines.contains(line.code)
-    return rx.hstack(
-        rx.box(
-            width=LEGEND_DOT_SIZE,
-            height=LEGEND_DOT_SIZE,
-            border_radius="50%",
-            background=rx.cond(hidden, "var(--gray-6)", line.color),
-            flex_shrink="0",
-        ),
+    return _legend_row(
+        _legend_dot(rx.cond(hidden, LEGEND_HIDDEN_DOT_COLOR, line.color)),
         rx.text(
             line.label,
-            size="1",
-            color=rx.cond(hidden, "var(--gray-9)", "var(--gray-12)"),
-            **TOGGLE_TEXT_STYLE,
+            size=LEGEND_TEXT_SIZE,
+            color=rx.cond(hidden, LEGEND_HIDDEN_TEXT_COLOR, LEGEND_TEXT_COLOR),
         ),
         on_click=ManagerState.toggle_line(line.code),
-        spacing="2",
-        align="center",
-        width="100%",
-        padding="0.25rem 0.5rem",
-        border_radius="var(--radius-2)",
         cursor="pointer",
         opacity=rx.cond(hidden, LEGEND_HIDDEN_OPACITY, 1),
-        _hover={"background": "var(--gray-a3)"},
+        _hover={"background": LEGEND_HOVER_BACKGROUND},
     )
 
 
@@ -187,19 +219,13 @@ def _line_panel() -> rx.Component:
             spacing="2",
             width="100%",
         ),
-        rx.scroll_area(
-            rx.vstack(
-                rx.foreach(ManagerState.criteria_lines, _line_toggle),
-                spacing="0",
-                width="100%",
-            ),
-            height=CRITERIA_CHART_HEIGHT,
-            type="auto",
-            scrollbars="vertical",
+        _legend_panel(
+            rx.foreach(ManagerState.criteria_lines, _line_toggle),
             width="100%",
+            height=CRITERIA_CHART_HEIGHT,
         ),
         spacing="2",
-        width=LEGEND_WIDTH,
+        width=TREND_LEGEND_WIDTH,
         flex_shrink="0",
     )
 
@@ -268,29 +294,23 @@ def _criteria_bars() -> rx.Component:
 
 
 def _radar_legend_row(entry) -> rx.Component:
-    return rx.hstack(
-        rx.box(
-            width=LEGEND_DOT_SIZE,
-            height=LEGEND_DOT_SIZE,
-            border_radius="50%",
-            background=entry.color,
-            flex_shrink="0",
-        ),
+    return _legend_row(
+        _legend_dot(entry.color),
         rx.text(
             entry.number,
-            size="1",
+            size=LEGEND_TEXT_SIZE,
             color_scheme="gray",
             flex_shrink="0",
             width=LEGEND_NUMBER_WIDTH,
             text_align="right",
         ),
-        rx.text(entry.label, size="1", **TOGGLE_TEXT_STYLE),
-        rx.spacer(),
-        rx.text(entry.score_label, size="1", weight="medium", flex_shrink="0"),
-        spacing="2",
-        align="center",
-        width="100%",
-        padding=LEGEND_ROW_PADDING,
+        rx.text(entry.label, size=LEGEND_TEXT_SIZE, flex="1"),
+        rx.text(
+            entry.score_label,
+            size=LEGEND_TEXT_SIZE,
+            weight="medium",
+            flex_shrink="0",
+        ),
     )
 
 
@@ -323,18 +343,10 @@ def _radar_chart() -> rx.Component:
                 width="100%",
                 min_width="0",
             ),
-            rx.scroll_area(
-                rx.vstack(
-                    rx.foreach(ManagerState.criteria, _radar_legend_row),
-                    spacing="0",
-                    width="100%",
-                    padding_right=LEGEND_SCROLLBAR_GUTTER,
-                ),
-                height=RADAR_HEIGHT,
-                type="always",
-                scrollbars="vertical",
+            _legend_panel(
+                rx.foreach(ManagerState.criteria, _radar_legend_row),
                 width=RADAR_LEGEND_WIDTH,
-                flex_shrink="0",
+                height=RADAR_HEIGHT,
             ),
             spacing="4",
             width="100%",
