@@ -21,7 +21,7 @@ from src.constants import (
     STATUS_LABELS,
     TYPES_SUMMARY_TEMPLATE,
 )
-from src.database import build_window
+from src.database import CallType, build_window
 from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
@@ -65,12 +65,6 @@ class AnalysisRow:
     score: str
     started_at: str
     analyzed_at: str
-
-
-@dataclass
-class CallType:
-    code: str
-    label: str
 
 
 @dataclass

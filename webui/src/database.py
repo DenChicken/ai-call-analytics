@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from psycopg.rows import dict_row
@@ -16,6 +17,12 @@ ZONE_POSITIVE_SIGN = "+"
 ZONE_NEGATIVE_SIGN = "-"
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CallType:
+    code: str
+    label: str
 
 
 class Database:

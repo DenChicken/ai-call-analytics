@@ -24,9 +24,8 @@ from src.constants import (
     STATUSES_SUMMARY_TEMPLATE,
     TYPES_SUMMARY_TEMPLATE,
 )
-from src.database import build_filters
+from src.database import CallType, build_filters
 from src.state.auth import AuthState, guarded
-from src.state.dashboard import CallType
 
 logger = logging.getLogger(__name__)
 
