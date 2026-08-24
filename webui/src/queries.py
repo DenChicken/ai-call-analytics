@@ -204,10 +204,7 @@ CALLS_LIST_WHERE = """
 WHERE c.started_at >= %(since)s AND c.started_at < %(until)s
   AND (%(agent_id)s::bigint IS NULL OR c.agent_id = %(agent_id)s)
   AND (%(statuses)s::text[] IS NULL OR j.status = ANY(%(statuses)s))
-  AND (
-      a.call_type = ANY(%(types)s)
-      OR (a.call_type IS NULL AND %(all_types)s)
-  )
+  AND (a.call_type IS NULL OR a.call_type = ANY(%(types)s))
 """
 
 CALLS_LIST = f"""

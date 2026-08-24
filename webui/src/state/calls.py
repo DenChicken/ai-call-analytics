@@ -238,7 +238,6 @@ class CallsState(AuthState):
             self.agent_filter,
             list(self.selected_statuses),
             list(self.selected_types),
-            len(self.selected_types) == len(self.available_types),
             self.page,
             self.page_size,
             self.utc_offset,
@@ -255,7 +254,6 @@ def collect(
     agent_filter: str,
     statuses: list[str],
     types: list[str],
-    all_types: bool,
     page: int,
     page_size: int,
     offset_hours: int,
@@ -264,7 +262,7 @@ def collect(
 
     since, until = formatting.period_bounds(period, offset_hours)
     agent_id = int(agent_filter) if agent_filter != ALL_AGENTS else None
-    filters = build_filters(since, until, types, agent_id, statuses or None, all_types)
+    filters = build_filters(since, until, types, agent_id, statuses or None)
 
     total = database.calls_list_count(filters)
     row_offset = (max(page, FIRST_PAGE) - 1) * page_size

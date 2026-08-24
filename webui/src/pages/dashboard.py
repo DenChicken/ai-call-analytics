@@ -1,5 +1,6 @@
 import reflex as rx
 
+from src.components.charts import criteria_deltas_chart
 from src.components.common import (
     checkbox_menu,
     empty_state,
@@ -15,21 +16,13 @@ from src.components.common import (
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
     ALL_CALLS_LABEL,
-    CHART_MARGIN,
-    CHART_TICK_COUNT,
     ROUTE_CALL,
     ROUTE_CALLS,
     ROUTE_MANAGER,
     SECTION_DASHBOARD,
-    SHARE_MAX,
     TYPES_LABEL,
 )
-from src.state.dashboard import (
-    CHART_AFTER_KEY,
-    CHART_BEFORE_KEY,
-    CHART_LABEL_KEY,
-    DashboardState,
-)
+from src.state.dashboard import DashboardState
 
 TITLE = SECTION_DASHBOARD
 KPI_PROCESSED = "Звонков за период"
@@ -45,16 +38,6 @@ EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
 FAILED_LABEL = "с ошибкой"
 
-CHART_BAR_BEFORE = "var(--gray-8)"
-CHART_BAR_AFTER = "var(--accent-9)"
-LEGEND_BEFORE = "Прошлый период"
-LEGEND_AFTER = "Текущий период"
-EXPAND_CRITERIA_LABEL = "Показать все"
-COLLAPSE_CRITERIA_LABEL = "Свернуть"
-CHART_LABEL_WIDTH = 180
-CHART_BAR_SIZE = 12
-CHART_CATEGORY_GAP = 18
-CHART_BAR_GAP = 2
 LINK_ICON_SIZE = 14
 NAME_MAX_WIDTH = "9rem"
 
@@ -149,72 +132,7 @@ def _kpi_row() -> rx.Component:
 
 
 def _criteria_chart() -> rx.Component:
-    return rx.cond(
-        DashboardState.criteria_chart.length() > 0,
-        rx.vstack(
-            rx.recharts.bar_chart(
-                rx.recharts.bar(
-                    data_key=CHART_BEFORE_KEY,
-                    fill=CHART_BAR_BEFORE,
-                    name=LEGEND_BEFORE,
-                    bar_size=CHART_BAR_SIZE,
-                ),
-                rx.recharts.bar(
-                    data_key=CHART_AFTER_KEY,
-                    fill=CHART_BAR_AFTER,
-                    name=LEGEND_AFTER,
-                    bar_size=CHART_BAR_SIZE,
-                ),
-                rx.recharts.x_axis(
-                    type_="number", domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
-                ),
-                rx.recharts.y_axis(
-                    data_key=CHART_LABEL_KEY,
-                    type_="category",
-                    width=CHART_LABEL_WIDTH,
-                    interval=0,
-                ),
-                rx.recharts.graphing_tooltip(),
-                rx.recharts.legend(),
-                rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
-                data=DashboardState.visible_criteria,
-                layout="vertical",
-                bar_category_gap=CHART_CATEGORY_GAP,
-                bar_gap=CHART_BAR_GAP,
-                height=DashboardState.criteria_chart_height,
-                width="100%",
-                margin=CHART_MARGIN,
-            ),
-            rx.cond(
-                DashboardState.criteria_hidden_count > 0,
-                rx.button(
-                    rx.icon(
-                        rx.cond(
-                            DashboardState.criteria_expanded, "chevron-up", "chevron-down"
-                        ),
-                        size=LINK_ICON_SIZE,
-                    ),
-                    rx.cond(
-                        DashboardState.criteria_expanded,
-                        rx.text(COLLAPSE_CRITERIA_LABEL, size="1"),
-                        rx.text(
-                            f"{EXPAND_CRITERIA_LABEL} ({DashboardState.criteria_hidden_count})",
-                            size="1",
-                        ),
-                    ),
-                    on_click=DashboardState.toggle_criteria,
-                    variant="ghost",
-                    size="1",
-                    color_scheme="gray",
-                ),
-                rx.fragment(),
-            ),
-            spacing="2",
-            width="100%",
-            align="center",
-        ),
-        empty_state(EMPTY_CRITERIA),
-    )
+    return criteria_deltas_chart(DashboardState, EMPTY_CRITERIA)
 
 
 def _manager_link(name: rx.Var, manager_id: rx.Var) -> rx.Component:

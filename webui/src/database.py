@@ -156,7 +156,6 @@ def build_filters(
     types: list[str],
     agent_id: int | None,
     statuses: list[str] | None,
-    all_types: bool,
 ) -> dict:
     return {
         "since": since,
@@ -164,7 +163,6 @@ def build_filters(
         "types": [str(code) for code in types],
         "agent_id": agent_id,
         "statuses": [str(status) for status in statuses] if statuses else None,
-        "all_types": all_types,
     }
 
 

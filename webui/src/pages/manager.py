@@ -1,8 +1,10 @@
 import reflex as rx
 
+from src.components.charts import criteria_deltas_chart
 from src.components.common import (
     breadcrumbs,
     checkbox_menu,
+    delta_text,
     empty_state,
     kpi_card,
     not_found,
@@ -14,7 +16,6 @@ from src.components.common import (
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
     ALL_CALLS_LABEL,
-    CHART_MARGIN,
     CHART_TICK_COUNT,
     CRM_ICON_SIZE,
     ROUTE_CALL,
@@ -38,7 +39,7 @@ KPI_WORST = "Худший разговор"
 TREND_TITLE = "Средний балл по дням"
 CRITERIA_TREND_TITLE = "Критерии по дням"
 RADAR_TITLE = "Критерии за период"
-CRITERIA_TITLE = "Средние оценки за период"
+CRITERIA_TITLE = "Изменение критериев"
 CALLS_TITLE = "Последние разговоры"
 ALL_CALLS_HINT = "всего за период:"
 NOT_FOUND_MANAGER = "Менеджер не найден"
@@ -49,8 +50,6 @@ OPEN_LABEL = "открыть"
 
 CHART_HEIGHT = 260
 CRITERIA_CHART_HEIGHT = 320
-CRITERIA_BAR_SIZE = 16
-CRITERIA_LABEL_WIDTH = 200
 RADAR_OPACITY = 0.5
 RADAR_OUTER_RADIUS = "78%"
 RADAR_HEIGHT = 340
@@ -119,7 +118,12 @@ def _call_link(label: rx.Var, call_id: rx.Var) -> rx.Component:
 
 def _kpi_row() -> rx.Component:
     return rx.hstack(
-        kpi_card(KPI_SCORE, ManagerState.score, "target"),
+        kpi_card(
+            KPI_SCORE,
+            ManagerState.score,
+            "target",
+            delta_text(ManagerState.score_points, ManagerState.score_delta),
+        ),
         kpi_card(
             KPI_CALLS,
             ManagerState.calls.to_string(),
@@ -290,32 +294,8 @@ def _criteria_chart() -> rx.Component:
     )
 
 
-def _criteria_bars() -> rx.Component:
-    return rx.cond(
-        ManagerState.criteria.length() > 0,
-        rx.recharts.bar_chart(
-            rx.recharts.bar(
-                data_key=CHART_SCORE_KEY, fill=BAR_COLOR, bar_size=CRITERIA_BAR_SIZE
-            ),
-            rx.recharts.x_axis(
-                type_="number", domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
-            ),
-            rx.recharts.y_axis(
-                data_key=CHART_LABEL_KEY,
-                type_="category",
-                width=CRITERIA_LABEL_WIDTH,
-                interval=0,
-            ),
-            rx.recharts.graphing_tooltip(),
-            rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
-            data=ManagerState.criteria_bars,
-            layout="vertical",
-            height=ManagerState.criteria_chart_height,
-            width="100%",
-            margin=CHART_MARGIN,
-        ),
-        empty_state(EMPTY_TREND),
-    )
+def _criteria_deltas() -> rx.Component:
+    return criteria_deltas_chart(ManagerState, EMPTY_TREND)
 
 
 def _radar_legend_row(entry) -> rx.Component:
@@ -341,7 +321,7 @@ def _radar_legend_row(entry) -> rx.Component:
 
 def _radar_chart() -> rx.Component:
     return rx.cond(
-        ManagerState.criteria.length() > 0,
+        ManagerState.criteria_scores.length() > 0,
         rx.hstack(
             rx.box(
                 rx.recharts.radar_chart(
@@ -369,7 +349,7 @@ def _radar_chart() -> rx.Component:
                 min_width="0",
             ),
             _legend_panel(
-                rx.foreach(ManagerState.criteria, _radar_legend_row),
+                rx.foreach(ManagerState.criteria_scores, _radar_legend_row),
                 width=RADAR_LEGEND_WIDTH,
                 height=RADAR_HEIGHT,
             ),
@@ -427,7 +407,7 @@ def _found_view() -> rx.Component:
         section_card(TREND_TITLE, _score_chart()),
         section_card(RADAR_TITLE, _radar_chart()),
         section_card(CRITERIA_TREND_TITLE, _criteria_chart()),
-        section_card(CRITERIA_TITLE, _criteria_bars()),
+        section_card(CRITERIA_TITLE, _criteria_deltas()),
         section_card(
             CALLS_TITLE,
             rx.cond(

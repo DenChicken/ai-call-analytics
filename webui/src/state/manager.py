@@ -3,7 +3,7 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, errors, formatting, urlstate
+from src import context, criteria, errors, formatting, urlstate
 from src.constants import (
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
@@ -28,8 +28,6 @@ logger = logging.getLogger(__name__)
 CHART_DAY_KEY = "day"
 CHART_SCORE_KEY = "score"
 CHART_LABEL_KEY = "label"
-CRITERIA_ROW_HEIGHT = 34
-CRITERIA_CHART_PADDING = 48
 CRITERION_LINE_COLORS = (
     "var(--indigo-9)",
     "var(--grass-9)",
@@ -96,7 +94,10 @@ class ManagerData:
     best_call_id: int
     worst_call: str
     worst_call_id: int
-    criteria: list[CriterionScore]
+    criteria_scores: list[CriterionScore]
+    criteria_deltas: list[criteria.CriterionDelta]
+    score_points: int
+    score_delta: str
     trend: list[dict]
     criteria_trend: list[dict]
     criteria_lines: list[CriterionLine]
@@ -121,9 +122,14 @@ class ManagerState(AuthState):
     worst_call: str = EMPTY_VALUE
     worst_call_id: int = 0
 
-    criteria: list[CriterionScore] = []
+    score_points: int = 0
+    score_delta: str = ""
+
+    criteria_scores: list[CriterionScore] = []
+    criteria_deltas: list[criteria.CriterionDelta] = []
+    criteria_chart: list[dict] = []
+    criteria_expanded: bool = False
     radar: list[dict] = []
-    criteria_bars: list[dict] = []
     trend: list[dict] = []
     criteria_trend: list[dict] = []
     criteria_lines: list[CriterionLine] = []
@@ -131,9 +137,21 @@ class ManagerState(AuthState):
     calls_rows: list[CallRow] = []
     calls_total: int = 0
 
+    @rx.event
+    def toggle_criteria(self):
+        self.criteria_expanded = not self.criteria_expanded
+
+    @rx.var
+    def visible_criteria(self) -> list[dict]:
+        return criteria.visible(self.criteria_chart, self.criteria_expanded)
+
+    @rx.var
+    def criteria_hidden_count(self) -> int:
+        return criteria.hidden_count(self.criteria_chart)
+
     @rx.var
     def criteria_chart_height(self) -> int:
-        return len(self.criteria) * CRITERIA_ROW_HEIGHT + CRITERIA_CHART_PADDING
+        return criteria.chart_height(self.visible_criteria)
 
     @rx.event
     def toggle_line(self, code: str):
@@ -238,7 +256,6 @@ class ManagerState(AuthState):
             self.current_agent_id,
             self.period,
             list(self.selected_types),
-            len(self.selected_types) == len(self.available_types),
             self.utc_offset,
         )
         self.found = data.found
@@ -252,14 +269,14 @@ class ManagerState(AuthState):
         self.best_call_id = data.best_call_id
         self.worst_call = data.worst_call
         self.worst_call_id = data.worst_call_id
-        self.criteria = data.criteria
+        self.score_points = data.score_points
+        self.score_delta = data.score_delta
+        self.criteria_scores = data.criteria_scores
+        self.criteria_deltas = data.criteria_deltas
+        self.criteria_chart = criteria.chart_points(data.criteria_deltas)
         self.radar = [
             {CHART_LABEL_KEY: str(entry.number), CHART_SCORE_KEY: entry.score}
-            for entry in data.criteria
-        ]
-        self.criteria_bars = [
-            {CHART_LABEL_KEY: entry.label, CHART_SCORE_KEY: entry.score}
-            for entry in data.criteria
+            for entry in data.criteria_scores
         ]
         self.trend = data.trend
         self.criteria_trend = data.criteria_trend
@@ -269,21 +286,28 @@ class ManagerState(AuthState):
 
 
 def collect(
-    agent_id: int, period: str, types: list[str], all_types: bool, offset_hours: int
+    agent_id: int, period: str, types: list[str], offset_hours: int
 ) -> ManagerData:
     database = context.database()
     display = context.config().display
 
     since, until = formatting.period_bounds(period, offset_hours)
+    previous_since, previous_until = formatting.previous_bounds(since, until)
     window = build_window(since, until, types, agent_id=agent_id)
-    filters = build_filters(since, until, types, agent_id, None, all_types)
+    previous = build_window(previous_since, previous_until, types, agent_id=agent_id)
+    filters = build_filters(since, until, types, agent_id, None)
 
     agent = database.agent(agent_id)
     totals = database.period_totals(window)
+    previous_totals = database.period_totals(previous)
     extremes = database.extreme_calls(window)
-    criteria = _criteria(database, window)
+    scores = _criteria(database, window)
     calls_rows, calls_total = _calls(
         database, filters, display.page_size, offset_hours
+    )
+    score_points = formatting.delta_points(
+        previous_totals["ratio"] if previous_totals["calls"] else None,
+        totals["ratio"] if totals["calls"] else None,
     )
 
     return ManagerData(
@@ -298,10 +322,13 @@ def collect(
         best_call_id=extremes["best"]["id"] if "best" in extremes else 0,
         worst_call=_extreme_label(extremes.get("worst")),
         worst_call_id=extremes["worst"]["id"] if "worst" in extremes else 0,
-        criteria=criteria,
+        criteria_scores=scores,
+        criteria_deltas=criteria.deltas(database, window, previous),
+        score_points=score_points,
+        score_delta=formatting.delta_label(score_points),
         trend=_trend(database, window),
-        criteria_trend=_criteria_trend(database, window, criteria),
-        criteria_lines=_criteria_lines(criteria),
+        criteria_trend=_criteria_trend(database, window, scores),
+        criteria_lines=_criteria_lines(scores),
         calls_rows=calls_rows,
         calls_total=calls_total,
     )
@@ -330,17 +357,17 @@ def _criteria(database, window: dict) -> list[CriterionScore]:
     ]
 
 
-def _criteria_lines(criteria: list[CriterionScore]) -> list[CriterionLine]:
+def _criteria_lines(scores: list[CriterionScore]) -> list[CriterionLine]:
     return [
         CriterionLine(code=entry.code, label=entry.label, color=entry.color)
-        for entry in criteria
+        for entry in scores
     ]
 
 
 def _criteria_trend(
-    database, window: dict, criteria: list[CriterionScore]
+    database, window: dict, scores: list[CriterionScore]
 ) -> list[dict]:
-    codes = [entry.code for entry in criteria]
+    codes = [entry.code for entry in scores]
     days: dict[str, dict] = {}
     for row in database.criteria_daily_ratios(window):
         day = formatting.day_label(row["day"])

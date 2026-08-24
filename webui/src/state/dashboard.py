@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, errors, formatting, urlstate
+from src import context, criteria, errors, formatting, urlstate
 from src.constants import (
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
@@ -25,23 +25,6 @@ from src.database import CallType, build_window
 from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
-
-CHART_LABEL_KEY = "label"
-CHART_BEFORE_KEY = "before"
-CHART_AFTER_KEY = "after"
-CRITERIA_PREVIEW_COUNT = 6
-CRITERIA_GROUP_HEIGHT = 52
-CRITERIA_CHART_PADDING = 64
-
-
-@dataclass
-class CriterionDelta:
-    code: str
-    label: str
-    before: float
-    after: float
-    points: int
-    delta: str
 
 
 @dataclass
@@ -80,7 +63,7 @@ class DashboardData:
     worst_manager: str
     worst_manager_id: int
     worst_score: str
-    criteria_deltas: list[CriterionDelta]
+    criteria_deltas: list[criteria.CriterionDelta]
     queue_rows: list[QueueRow]
     recent_rows: list[AnalysisRow]
 
@@ -102,7 +85,7 @@ class DashboardState(AuthState):
     worst_manager_id: int = 0
     worst_score: str = ""
 
-    criteria_deltas: list[CriterionDelta] = []
+    criteria_deltas: list[criteria.CriterionDelta] = []
     criteria_chart: list[dict] = []
     criteria_expanded: bool = False
     queue_rows: list[QueueRow] = []
@@ -149,17 +132,15 @@ class DashboardState(AuthState):
 
     @rx.var
     def visible_criteria(self) -> list[dict]:
-        if self.criteria_expanded:
-            return list(self.criteria_chart)
-        return list(self.criteria_chart)[:CRITERIA_PREVIEW_COUNT]
+        return criteria.visible(self.criteria_chart, self.criteria_expanded)
 
     @rx.var
     def criteria_hidden_count(self) -> int:
-        return max(len(self.criteria_chart) - CRITERIA_PREVIEW_COUNT, 0)
+        return criteria.hidden_count(self.criteria_chart)
 
     @rx.var
     def criteria_chart_height(self) -> int:
-        return len(self.visible_criteria) * CRITERIA_GROUP_HEIGHT + CRITERIA_CHART_PADDING
+        return criteria.chart_height(self.visible_criteria)
 
     @rx.var
     def period_label(self) -> str:
@@ -226,14 +207,7 @@ class DashboardState(AuthState):
         self.worst_manager_id = data.worst_manager_id
         self.worst_score = data.worst_score
         self.criteria_deltas = data.criteria_deltas
-        self.criteria_chart = [
-            {
-                CHART_LABEL_KEY: entry.label,
-                CHART_BEFORE_KEY: entry.before,
-                CHART_AFTER_KEY: entry.after,
-            }
-            for entry in data.criteria_deltas
-        ]
+        self.criteria_chart = criteria.chart_points(data.criteria_deltas)
         self.queue_rows = data.queue_rows
         self.recent_rows = data.recent_rows
 
@@ -266,7 +240,7 @@ def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
         worst_manager=worst[0],
         worst_manager_id=worst[1],
         worst_score=worst[2],
-        criteria_deltas=_criteria_deltas(database, window, previous),
+        criteria_deltas=criteria.deltas(database, window, previous),
         queue_rows=_queue_rows(database, types, display.queue_size, offset_hours),
         recent_rows=_recent_rows(database, types, display.queue_size, offset_hours),
     )
@@ -283,27 +257,6 @@ def _extremes(database, window: dict) -> tuple[tuple, tuple]:
         (best["display_name"], best["agent_id"], formatting.share_label(best["ratio"])),
         (worst["display_name"], worst["agent_id"], formatting.share_label(worst["ratio"])),
     )
-
-
-def _criteria_deltas(database, window: dict, previous: dict) -> list[CriterionDelta]:
-    labels = {row["code"]: row["label"] for row in database.criteria()}
-    current = {row["code"]: row["ratio"] for row in database.criteria_ratios(window)}
-    earlier = {row["code"]: row["ratio"] for row in database.criteria_ratios(previous)}
-
-    deltas = []
-    for code, ratio in current.items():
-        points = formatting.delta_points(earlier.get(code), ratio)
-        deltas.append(
-            CriterionDelta(
-                code=code,
-                label=labels.get(code, code),
-                before=formatting.share(earlier.get(code)),
-                after=formatting.share(ratio),
-                points=points,
-                delta=formatting.delta_label(points),
-            )
-        )
-    return sorted(deltas, key=lambda entry: entry.points)
 
 
 def _queue_rows(database, types: list[str], limit: int, offset_hours: int) -> list[QueueRow]:
