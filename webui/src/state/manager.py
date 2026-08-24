@@ -134,6 +134,7 @@ class ManagerState(AuthState):
     criteria_trend: list[dict] = []
     criteria_lines: list[CriterionLine] = []
     hidden_lines: list[str] = []
+    show_dots: bool = False
     calls_rows: list[CallRow] = []
     calls_total: int = 0
 
@@ -169,6 +170,10 @@ class ManagerState(AuthState):
     @rx.event
     def hide_all_lines(self):
         self.hidden_lines = [entry.code for entry in self.criteria_lines]
+
+    @rx.event
+    def toggle_dots(self, enabled: bool):
+        self.show_dots = enabled
 
     current_agent_id: int = 0
 

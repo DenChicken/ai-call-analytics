@@ -32,6 +32,7 @@ CRM_LABEL = "Открыть в CRM"
 NO_AUDIO = "Запись недоступна"
 NO_TRANSCRIPT = "Расшифровка ещё не готова"
 NO_ANALYSIS = "Анализ ещё не выполнен"
+DISABLED_LABEL = "отключён"
 
 FIELD_MANAGER = "Менеджер"
 FIELD_CLIENT = "Клиент"
@@ -136,7 +137,7 @@ def _score_row(row) -> rx.Component:
         rx.cond(
             row.enabled,
             rx.fragment(),
-            rx.badge("выключен", color_scheme="gray", size="1"),
+            rx.badge(DISABLED_LABEL, color_scheme="gray", size="1"),
         ),
         spacing="2",
         align="center",

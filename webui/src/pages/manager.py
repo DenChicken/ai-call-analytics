@@ -56,6 +56,7 @@ RADAR_HEIGHT = 340
 BAR_COLOR = "var(--accent-9)"
 SHOW_ALL_LABEL = "Все"
 HIDE_ALL_LABEL = "Ничего"
+DOTS_LABEL = "Точки на линиях"
 
 LEGEND_TEXT_SIZE = "1"
 LEGEND_ROW_SPACING = "2"
@@ -232,14 +233,14 @@ def _line_panel() -> rx.Component:
             rx.button(
                 SHOW_ALL_LABEL,
                 on_click=ManagerState.show_all_lines,
-                variant="ghost",
+                variant="soft",
                 size="1",
                 color_scheme="gray",
             ),
             rx.button(
                 HIDE_ALL_LABEL,
                 on_click=ManagerState.hide_all_lines,
-                variant="ghost",
+                variant="soft",
                 size="1",
                 color_scheme="gray",
             ),
@@ -260,33 +261,47 @@ def _line_panel() -> rx.Component:
 def _criteria_chart() -> rx.Component:
     return rx.cond(
         ManagerState.criteria_trend.length() > 0,
-        rx.hstack(
-            rx.box(
-                rx.recharts.line_chart(
-                    rx.foreach(
-                        ManagerState.criteria_lines,
-                        lambda line: rx.recharts.line(
-                            data_key=line.code,
-                            name=line.label,
-                            stroke=line.color,
-                            type_="monotone",
-                            connect_nulls=False,
-                            dot=True,
-                            hide=ManagerState.hidden_lines.contains(line.code),
+        rx.vstack(
+            rx.hstack(
+                rx.box(
+                    rx.recharts.line_chart(
+                        rx.foreach(
+                            ManagerState.criteria_lines,
+                            lambda line: rx.recharts.line(
+                                data_key=line.code,
+                                name=line.label,
+                                stroke=line.color,
+                                type_="monotone",
+                                connect_nulls=False,
+                                dot=ManagerState.show_dots,
+                                hide=ManagerState.hidden_lines.contains(line.code),
+                            ),
                         ),
+                        rx.recharts.x_axis(data_key=CHART_DAY_KEY),
+                        rx.recharts.y_axis(
+                            domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
+                        ),
+                        rx.recharts.graphing_tooltip(),
+                        rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
+                        data=ManagerState.criteria_trend,
+                        height=CRITERIA_CHART_HEIGHT,
+                        width="100%",
                     ),
-                    rx.recharts.x_axis(data_key=CHART_DAY_KEY),
-                    rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT),
-                    rx.recharts.graphing_tooltip(),
-                    rx.recharts.cartesian_grid(stroke_dasharray="3 3"),
-                    data=ManagerState.criteria_trend,
-                    height=CRITERIA_CHART_HEIGHT,
                     width="100%",
                 ),
+                _line_panel(),
+                spacing="3",
                 width="100%",
+                align="start",
             ),
-            _line_panel(),
-            spacing="3",
+            rx.checkbox(
+                DOTS_LABEL,
+                checked=ManagerState.show_dots,
+                on_change=ManagerState.toggle_dots,
+                size="1",
+                color_scheme="gray",
+            ),
+            spacing="2",
             width="100%",
             align="start",
         ),
