@@ -29,19 +29,21 @@ CRITERION_LINE_COLORS = (
     "var(--blue-9)",
     "var(--gold-9)",
 )
-PARAM_AGENT_ID = "agent_id"
 UNKNOWN_AGENT_ID = 0
+FIRST_CRITERION_NUMBER = 1
 
 
-def _route_agent_id(params: dict) -> int:
-    value = params.get(PARAM_AGENT_ID)
-    return int(value) if value and str(value).isdigit() else UNKNOWN_AGENT_ID
+def _as_id(value) -> int:
+    text = str(value)
+    return int(text) if text.isdigit() else UNKNOWN_AGENT_ID
 
 
 @dataclass
 class CriterionScore:
     code: str
+    number: int
     label: str
+    color: str
     score: float
     score_label: str
 
@@ -96,6 +98,7 @@ class ManagerState(AuthState):
 
     criteria: list[CriterionScore] = []
     radar: list[dict] = []
+    criteria_bars: list[dict] = []
     trend: list[dict] = []
     criteria_trend: list[dict] = []
     criteria_lines: list[CriterionLine] = []
@@ -129,7 +132,7 @@ class ManagerState(AuthState):
     def load(self):
         if not self.session_login:
             return AuthState.require_session
-        self.current_agent_id = _route_agent_id(self.router.page.params)
+        self.current_agent_id = _as_id(self.agent_id)
         self._refresh()
 
     @rx.var
@@ -158,6 +161,10 @@ class ManagerState(AuthState):
         self.worst_call_id = data.worst_call_id
         self.criteria = data.criteria
         self.radar = [
+            {CHART_LABEL_KEY: str(entry.number), CHART_SCORE_KEY: entry.score}
+            for entry in data.criteria
+        ]
+        self.criteria_bars = [
             {CHART_LABEL_KEY: entry.label, CHART_SCORE_KEY: entry.score}
             for entry in data.criteria
         ]
@@ -210,22 +217,20 @@ def _criteria(database, window: dict) -> list[CriterionScore]:
     return [
         CriterionScore(
             code=code,
+            number=number,
             label=label,
+            color=CRITERION_LINE_COLORS[(number - 1) % len(CRITERION_LINE_COLORS)],
             score=formatting.share(ratios.get(code)),
             score_label=formatting.share_label(ratios.get(code)),
         )
-        for code, label in labels.items()
+        for number, (code, label) in enumerate(labels.items(), start=FIRST_CRITERION_NUMBER)
     ]
 
 
 def _criteria_lines(criteria: list[CriterionScore]) -> list[CriterionLine]:
     return [
-        CriterionLine(
-            code=entry.code,
-            label=entry.label,
-            color=CRITERION_LINE_COLORS[index % len(CRITERION_LINE_COLORS)],
-        )
-        for index, entry in enumerate(criteria)
+        CriterionLine(code=entry.code, label=entry.label, color=entry.color)
+        for entry in criteria
     ]
 
 

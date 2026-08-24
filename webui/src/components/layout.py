@@ -4,6 +4,10 @@ from src.constants import (
     ROUTE_CALLS,
     ROUTE_DASHBOARD,
     ROUTE_MANAGERS,
+    TIMEZONE_DIALOG_CANCEL,
+    TIMEZONE_DIALOG_CONFIRM,
+    TIMEZONE_DIALOG_TEXT,
+    TIMEZONE_DIALOG_TITLE,
     TIMEZONE_LABEL,
 )
 from src.state.auth import AuthState
@@ -32,6 +36,8 @@ HEADER_BACKGROUND = "var(--color-panel-solid)"
 HEADER_Z_INDEX = "10"
 FULL_HEIGHT = "100vh"
 FOOTER_ICON_PADDING = "0.25rem"
+DIALOG_MAX_WIDTH = "26rem"
+DIALOG_ACTIONS_MARGIN = "1rem"
 
 CHART_FOCUS_RESET = {
     "& .recharts-wrapper, & .recharts-surface, & .recharts-wrapper *": {
@@ -133,7 +139,7 @@ def _sidebar() -> rx.Component:
                 rx.select(
                     AuthState.offset_options,
                     value=AuthState.offset_label,
-                    on_change=AuthState.set_utc_offset,
+                    on_change=AuthState.ask_utc_offset,
                     size="1",
                     width="100%",
                 ),
@@ -167,6 +173,44 @@ def _sidebar() -> rx.Component:
         top="0",
         flex_shrink="0",
         overflow="hidden",
+        on_mount=AuthState.detect_offset,
+    )
+
+
+def _timezone_dialog() -> rx.Component:
+    return rx.alert_dialog.root(
+        rx.alert_dialog.content(
+            rx.alert_dialog.title(TIMEZONE_DIALOG_TITLE),
+            rx.alert_dialog.description(
+                f"{AuthState.offset_label} → {AuthState.pending_offset_label}. "
+                f"{TIMEZONE_DIALOG_TEXT}",
+                size="2",
+            ),
+            rx.hstack(
+                rx.alert_dialog.cancel(
+                    rx.button(
+                        TIMEZONE_DIALOG_CANCEL,
+                        variant="soft",
+                        color_scheme="gray",
+                        size="2",
+                    )
+                ),
+                rx.alert_dialog.action(
+                    rx.button(
+                        TIMEZONE_DIALOG_CONFIRM,
+                        on_click=AuthState.confirm_utc_offset,
+                        size="2",
+                    )
+                ),
+                spacing="3",
+                justify="end",
+                width="100%",
+                margin_top=DIALOG_ACTIONS_MARGIN,
+            ),
+            max_width=DIALOG_MAX_WIDTH,
+        ),
+        open=AuthState.timezone_dialog_open,
+        on_open_change=AuthState.close_timezone_dialog,
     )
 
 
@@ -193,6 +237,7 @@ def page_layout(
     *children: rx.Component, header: rx.Component | None = None, on_mount=None
 ) -> rx.Component:
     return rx.hstack(
+        _timezone_dialog(),
         _sidebar(),
         rx.vstack(
             header if header is not None else rx.fragment(),

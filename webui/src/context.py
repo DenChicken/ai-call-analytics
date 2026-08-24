@@ -1,3 +1,4 @@
+import atexit
 import os
 from pathlib import Path
 
@@ -30,7 +31,15 @@ def database() -> Database:
     global _database
     if _database is None:
         _database = Database(config().database.dsn)
+        atexit.register(_close_database)
     return _database
+
+
+def _close_database() -> None:
+    global _database
+    if _database is not None:
+        _database.close()
+        _database = None
 
 
 def audio() -> AudioStore:

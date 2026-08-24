@@ -1,5 +1,6 @@
 import argparse
 import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -10,6 +11,11 @@ from src.constants import (
     LOG_FILE_ENV_VAR,
     REFLEX_MODULE,
     REFLEX_RUN_COMMAND,
+    SHUTDOWN_EXIT_CODE,
+    TASKKILL_COMMAND,
+    TASKKILL_TREE_FLAGS,
+    TERMINATE_TIMEOUT_SECONDS,
+    WINDOWS_PLATFORM,
 )
 from src.logging_setup import new_log_file
 
@@ -26,6 +32,26 @@ def _print_startup(config: Config, log_file: Path) -> None:
         f"backend {config.server.api_url}, timezone {config.display.timezone}"
     )
     print(f"logs are written to {log_file}")
+
+
+def _terminate_tree(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+
+    if sys.platform == WINDOWS_PLATFORM:
+        subprocess.run(
+            [TASKKILL_COMMAND, *TASKKILL_TREE_FLAGS, str(process.pid)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+    else:
+        os.killpg(process.pid, signal.SIGTERM)
+
+    try:
+        process.wait(timeout=TERMINATE_TIMEOUT_SECONDS)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 def main() -> int:
@@ -45,16 +71,18 @@ def main() -> int:
     environment[CONFIG_ENV_VAR] = str(Path(args.config).resolve())
     environment[LOG_FILE_ENV_VAR] = str(log_file)
 
+    process = subprocess.Popen(
+        [sys.executable, "-m", REFLEX_MODULE, REFLEX_RUN_COMMAND],
+        cwd=Path(__file__).resolve().parent,
+        env=environment,
+        start_new_session=sys.platform != WINDOWS_PLATFORM,
+    )
     try:
-        completed = subprocess.run(
-            [sys.executable, "-m", REFLEX_MODULE, REFLEX_RUN_COMMAND],
-            cwd=Path(__file__).resolve().parent,
-            env=environment,
-        )
+        return process.wait()
     except KeyboardInterrupt:
-        return 0
-
-    return completed.returncode
+        return SHUTDOWN_EXIT_CODE
+    finally:
+        _terminate_tree(process)
 
 
 if __name__ == "__main__":

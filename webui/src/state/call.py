@@ -17,7 +17,6 @@ from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
-PARAM_CALL_ID = "call_id"
 UNKNOWN_CALL_ID = 0
 SEGMENT_START_KEY = "start_ms"
 SEGMENT_TEXT_KEY = "text"
@@ -27,9 +26,9 @@ SEEK_SCRIPT = (
 )
 
 
-def _route_call_id(params: dict) -> int:
-    value = params.get(PARAM_CALL_ID)
-    return int(value) if value and str(value).isdigit() else UNKNOWN_CALL_ID
+def _as_id(value) -> int:
+    text = str(value)
+    return int(text) if text.isdigit() else UNKNOWN_CALL_ID
 
 
 @dataclass
@@ -114,7 +113,7 @@ class CallState(AuthState):
         if not self.session_login:
             return AuthState.require_session
 
-        self.current_call_id = _route_call_id(self.router.page.params)
+        self.current_call_id = _as_id(self.call_id)
         if not guarded(self, self._collect):
             return
 

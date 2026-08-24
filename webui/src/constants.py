@@ -40,6 +40,12 @@ LOG_FILE_ENV_VAR = "WEBUI_LOG_FILE"
 REFLEX_MODULE = "reflex"
 REFLEX_RUN_COMMAND = "run"
 
+SHUTDOWN_EXIT_CODE = 130
+WINDOWS_PLATFORM = "win32"
+TASKKILL_COMMAND = "taskkill"
+TASKKILL_TREE_FLAGS = ("/T", "/F", "/PID")
+TERMINATE_TIMEOUT_SECONDS = 10
+
 SESSION_COOKIE_NAME = "webui_session"
 SESSION_SAME_SITE = "strict"
 SESSION_TOKEN_BYTES = 32
@@ -130,6 +136,15 @@ SIDEBAR_COLLAPSED_VALUE = "collapsed"
 MIN_UTC_OFFSET = -11
 MAX_UTC_OFFSET = 14
 TIMEZONE_LABEL = "Часовой пояс"
+BROWSER_OFFSET_SCRIPT = "-new Date().getTimezoneOffset() / 60"
+TIMEZONE_DIALOG_TITLE = "Сменить часовой пояс?"
+TIMEZONE_DIALOG_TEXT = (
+    "Страница перезагрузится. Метки времени, границы периода и группировка "
+    "по дням будут пересчитаны: звонок у границы суток может перейти "
+    "на соседний день, а «сегодня» — сместиться."
+)
+TIMEZONE_DIALOG_CONFIRM = "Сменить"
+TIMEZONE_DIALOG_CANCEL = "Отмена"
 DURATION_TEMPLATE = "{minutes}:{seconds:02d}"
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600

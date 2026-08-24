@@ -7,6 +7,7 @@ from argon2.exceptions import VerifyMismatchError
 
 from src import context, formatting
 from src.constants import (
+    BROWSER_OFFSET_SCRIPT,
     FIELD_LOGIN,
     FIELD_PASSWORD,
     INTERNAL_ERROR_MESSAGE,
@@ -34,11 +35,15 @@ OFFSET_BY_LABEL = {
     formatting.offset_label(hours): hours
     for hours in range(MIN_UTC_OFFSET, MAX_UTC_OFFSET + 1)
 }
-DEFAULT_UTC_OFFSET = formatting.default_offset(context.config().display.timezone)
+FALLBACK_UTC_OFFSET = formatting.default_offset(context.config().display.timezone)
 
 
 def _is_offset(value: str) -> bool:
     return value.lstrip(NEGATIVE_SIGN).isdigit()
+
+
+def _clamped(hours: int) -> int:
+    return max(MIN_UTC_OFFSET, min(hours, MAX_UTC_OFFSET))
 
 
 class AuthState(rx.State):
@@ -51,7 +56,7 @@ class AuthState(rx.State):
     )
 
     offset_cookie: str = rx.Cookie(
-        str(formatting.default_offset(context.config().display.timezone)),
+        "",
         name=OFFSET_COOKIE_NAME,
         max_age=session.max_age_seconds,
         secure=session.cookie_secure,
@@ -70,6 +75,8 @@ class AuthState(rx.State):
     busy: bool = False
     no_users: bool = False
     load_error: str = ""
+    pending_offset: int = 0
+    timezone_dialog_open: bool = False
 
     @rx.event
     def check_users(self):
@@ -94,15 +101,49 @@ class AuthState(rx.State):
     @rx.var
     def utc_offset(self) -> int:
         value = str(self.offset_cookie)
-        return int(value) if _is_offset(value) else DEFAULT_UTC_OFFSET
+        return _clamped(int(value)) if _is_offset(value) else FALLBACK_UTC_OFFSET
 
     @rx.event
-    def set_utc_offset(self, label: str):
-        self.offset_cookie = str(OFFSET_BY_LABEL.get(label, DEFAULT_UTC_OFFSET))
+    def detect_offset(self):
+        if not _is_offset(str(self.offset_cookie)):
+            return rx.call_script(
+                BROWSER_OFFSET_SCRIPT, callback=AuthState.store_browser_offset
+            )
+
+    @rx.event
+    def store_browser_offset(self, hours):
+        if _is_offset(str(self.offset_cookie)):
+            return
+        detected = _clamped(int(hours))
+        self.offset_cookie = str(detected)
+        if detected != FALLBACK_UTC_OFFSET:
+            return rx.redirect(self.router.url.path)
+
+    @rx.event
+    def ask_utc_offset(self, label: str):
+        hours = OFFSET_BY_LABEL.get(label)
+        if hours is None or hours == self.utc_offset:
+            return
+        self.pending_offset = hours
+        self.timezone_dialog_open = True
+
+    @rx.event
+    def close_timezone_dialog(self, is_open: bool):
+        self.timezone_dialog_open = is_open
+
+    @rx.event
+    def confirm_utc_offset(self):
+        self.offset_cookie = str(self.pending_offset)
+        self.timezone_dialog_open = False
+        return rx.redirect(self.router.url.path)
 
     @rx.var
     def offset_label(self) -> str:
         return formatting.offset_label(self.utc_offset)
+
+    @rx.var
+    def pending_offset_label(self) -> str:
+        return formatting.offset_label(self.pending_offset)
 
     @rx.var
     def offset_options(self) -> list[str]:

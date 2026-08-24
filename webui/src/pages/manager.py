@@ -38,6 +38,12 @@ CRITERIA_LABEL_WIDTH = 200
 CHART_MARGIN = {"left": 10, "right": 20}
 TICK_COUNT = 6
 RADAR_OPACITY = 0.5
+RADAR_OUTER_RADIUS = "78%"
+RADAR_HEIGHT = 340
+RADAR_LEGEND_WIDTH = "22rem"
+LEGEND_ROW_PADDING = "0.2rem 0.25rem"
+LEGEND_NUMBER_WIDTH = "1.4rem"
+LEGEND_SCROLLBAR_GUTTER = "0.75rem"
 BACK_ICON_SIZE = 16
 CRM_ICON_SIZE = 14
 NAME_MAX_WIDTH = "22rem"
@@ -189,6 +195,7 @@ def _line_panel() -> rx.Component:
             ),
             height=CRITERIA_CHART_HEIGHT,
             type="auto",
+            scrollbars="vertical",
             width="100%",
         ),
         spacing="2",
@@ -250,7 +257,7 @@ def _criteria_bars() -> rx.Component:
             ),
             rx.recharts.graphing_tooltip(),
             rx.recharts.cartesian_grid(stroke_dasharray="3 3", horizontal=False),
-            data=ManagerState.radar,
+            data=ManagerState.criteria_bars,
             layout="vertical",
             height=ManagerState.criteria_chart_height,
             width="100%",
@@ -260,21 +267,80 @@ def _criteria_bars() -> rx.Component:
     )
 
 
-def _radar_chart() -> rx.Component:
-    return rx.recharts.radar_chart(
-        rx.recharts.radar(
-            data_key=CHART_SCORE_KEY,
-            stroke="var(--accent-9)",
-            fill="var(--accent-8)",
-            fill_opacity=RADAR_OPACITY,
+def _radar_legend_row(entry) -> rx.Component:
+    return rx.hstack(
+        rx.box(
+            width=LEGEND_DOT_SIZE,
+            height=LEGEND_DOT_SIZE,
+            border_radius="50%",
+            background=entry.color,
+            flex_shrink="0",
         ),
-        rx.recharts.polar_grid(),
-        rx.recharts.polar_angle_axis(data_key=CHART_LABEL_KEY),
-        rx.recharts.polar_radius_axis(domain=[0, SHARE_MAX], tick_count=TICK_COUNT),
-        rx.recharts.graphing_tooltip(),
-        data=ManagerState.radar,
-        height=CHART_HEIGHT,
+        rx.text(
+            entry.number,
+            size="1",
+            color_scheme="gray",
+            flex_shrink="0",
+            width=LEGEND_NUMBER_WIDTH,
+            text_align="right",
+        ),
+        rx.text(entry.label, size="1", **TOGGLE_TEXT_STYLE),
+        rx.spacer(),
+        rx.text(entry.score_label, size="1", weight="medium", flex_shrink="0"),
+        spacing="2",
+        align="center",
         width="100%",
+        padding=LEGEND_ROW_PADDING,
+    )
+
+
+def _radar_chart() -> rx.Component:
+    return rx.cond(
+        ManagerState.criteria.length() > 0,
+        rx.hstack(
+            rx.box(
+                rx.recharts.radar_chart(
+                    rx.recharts.radar(
+                        data_key=CHART_SCORE_KEY,
+                        stroke="var(--accent-9)",
+                        fill="var(--accent-8)",
+                        fill_opacity=RADAR_OPACITY,
+                    ),
+                    rx.recharts.polar_grid(),
+                    rx.recharts.polar_angle_axis(data_key=CHART_LABEL_KEY),
+                    rx.recharts.polar_radius_axis(
+                        domain=[0, SHARE_MAX],
+                        tick_count=TICK_COUNT,
+                        axis_line=False,
+                        tick=False,
+                    ),
+                    rx.recharts.graphing_tooltip(),
+                    data=ManagerState.radar,
+                    outer_radius=RADAR_OUTER_RADIUS,
+                    height=RADAR_HEIGHT,
+                    width="100%",
+                ),
+                width="100%",
+                min_width="0",
+            ),
+            rx.scroll_area(
+                rx.vstack(
+                    rx.foreach(ManagerState.criteria, _radar_legend_row),
+                    spacing="0",
+                    width="100%",
+                    padding_right=LEGEND_SCROLLBAR_GUTTER,
+                ),
+                height=RADAR_HEIGHT,
+                type="always",
+                scrollbars="vertical",
+                width=RADAR_LEGEND_WIDTH,
+                flex_shrink="0",
+            ),
+            spacing="4",
+            width="100%",
+            align="start",
+        ),
+        empty_state(EMPTY_TREND),
     )
 
 
@@ -297,14 +363,8 @@ def manager_page() -> rx.Component:
     return page_layout(
         rx.vstack(
             _kpi_row(),
-            rx.hstack(
-                section_card(TREND_TITLE, _score_chart()),
-                section_card(RADAR_TITLE, _radar_chart()),
-                spacing="3",
-                width="100%",
-                align="stretch",
-                wrap="wrap",
-            ),
+            section_card(TREND_TITLE, _score_chart()),
+            section_card(RADAR_TITLE, _radar_chart()),
             section_card(CRITERIA_TREND_TITLE, _criteria_chart()),
             section_card(CRITERIA_TITLE, _criteria_bars()),
             section_card(
