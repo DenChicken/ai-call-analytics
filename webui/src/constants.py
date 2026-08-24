@@ -63,6 +63,7 @@ ROUTE_MANAGERS = "/managers"
 ROUTE_MANAGER = "/manager"
 ROUTE_CALLS = "/calls"
 ROUTE_CALL = "/call"
+NOT_FOUND_ROUTE = "404"
 
 SECTION_DASHBOARD = "Дашборд"
 SECTION_CALLS = "Звонки"

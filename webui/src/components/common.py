@@ -21,6 +21,9 @@ EMPTY_ICON = "inbox"
 EMPTY_ICON_SIZE = 28
 EMPTY_ICON_COLOR = "var(--gray-7)"
 EMPTY_PADDING = "2.5rem 1rem"
+NOT_FOUND_ICON = "search-x"
+NOT_FOUND_ICON_SIZE = 40
+NOT_FOUND_PADDING = "4rem 1rem"
 CARD_HEADER_BACKGROUND = "var(--gray-a2)"
 CARD_BORDER = "1px solid var(--gray-a5)"
 CRUMB_SEPARATOR = "/"
@@ -173,6 +176,30 @@ def empty_state(message: str, icon: str = EMPTY_ICON) -> rx.Component:
         ),
         width="100%",
         padding=EMPTY_PADDING,
+    )
+
+
+def not_found(message: str, *destinations: tuple[str, str]) -> rx.Component:
+    return rx.center(
+        rx.vstack(
+            rx.icon(NOT_FOUND_ICON, size=NOT_FOUND_ICON_SIZE, color=EMPTY_ICON_COLOR),
+            rx.text(message, size="3", color_scheme="gray"),
+            rx.hstack(
+                *[
+                    rx.link(
+                        rx.button(label, variant="soft", size="2", color_scheme="gray"),
+                        href=route,
+                        underline="none",
+                    )
+                    for label, route in destinations
+                ],
+                spacing="3",
+            ),
+            spacing="4",
+            align="center",
+        ),
+        width="100%",
+        padding=NOT_FOUND_PADDING,
     )
 
 

@@ -4,6 +4,7 @@ from src.components.common import (
     breadcrumbs,
     empty_state,
     kpi_card,
+    not_found,
     period_picker,
     scrollable_table,
     section_card,
@@ -38,6 +39,7 @@ CRITERIA_TITLE = "Средние оценки за период"
 CALLS_TITLE = "Последние разговоры"
 ALL_CALLS_LABEL = "Все звонки"
 ALL_CALLS_HINT = "всего за период:"
+NOT_FOUND_MANAGER = "Менеджер не найден"
 EMPTY_TREND = "Нет данных за период"
 EMPTY_CALLS = "За период нет звонков"
 CRM_LABEL = "Профиль в CRM"
@@ -412,32 +414,40 @@ def _call_row(row) -> rx.Component:
     )
 
 
+def _found_view() -> rx.Component:
+    return rx.vstack(
+        _kpi_row(),
+        section_card(TREND_TITLE, _score_chart()),
+        section_card(RADAR_TITLE, _radar_chart()),
+        section_card(CRITERIA_TREND_TITLE, _criteria_chart()),
+        section_card(CRITERIA_TITLE, _criteria_bars()),
+        section_card(
+            CALLS_TITLE,
+            rx.cond(
+                ManagerState.calls_rows.length() > 0,
+                scrollable_table(
+                    rx.table.header(
+                        rx.table.row(
+                            *[rx.table.column_header_cell(name) for name in COLUMNS]
+                        )
+                    ),
+                    rx.table.body(rx.foreach(ManagerState.calls_rows, _call_row)),
+                ),
+                empty_state(EMPTY_CALLS),
+            ),
+            actions=_calls_actions(),
+        ),
+        spacing="4",
+        width="100%",
+    )
+
+
 def manager_page() -> rx.Component:
     return page_layout(
-        rx.vstack(
-            _kpi_row(),
-            section_card(TREND_TITLE, _score_chart()),
-            section_card(RADAR_TITLE, _radar_chart()),
-            section_card(CRITERIA_TREND_TITLE, _criteria_chart()),
-            section_card(CRITERIA_TITLE, _criteria_bars()),
-            section_card(
-                CALLS_TITLE,
-                rx.cond(
-                    ManagerState.calls_rows.length() > 0,
-                    scrollable_table(
-                        rx.table.header(
-                            rx.table.row(
-                                *[rx.table.column_header_cell(name) for name in COLUMNS]
-                            )
-                        ),
-                        rx.table.body(rx.foreach(ManagerState.calls_rows, _call_row)),
-                    ),
-                    empty_state(EMPTY_CALLS),
-                ),
-                actions=_calls_actions(),
-            ),
-            spacing="4",
-            width="100%",
+        rx.cond(
+            ManagerState.found,
+            _found_view(),
+            not_found(NOT_FOUND_MANAGER, (SECTION_MANAGERS, ROUTE_MANAGERS)),
         ),
         header=_header(),
         on_mount=ManagerState.load,

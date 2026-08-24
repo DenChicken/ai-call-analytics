@@ -3,6 +3,7 @@ import reflex as rx
 from src.components.common import (
     breadcrumbs,
     empty_state,
+    not_found,
     section_card,
     status_badge,
     truncated,
@@ -201,7 +202,6 @@ def _metadata() -> rx.Component:
 
 def _found_view() -> rx.Component:
     return rx.vstack(
-        _header(),
         _summary_row(),
         rx.hstack(
             section_card(
@@ -281,12 +281,8 @@ def call_page() -> rx.Component:
         rx.cond(
             CallState.found,
             _found_view(),
-            rx.vstack(
-                _header(),
-                rx.text(NOT_FOUND, size="3", color_scheme="gray"),
-                spacing="4",
-                width="100%",
-            ),
+            not_found(NOT_FOUND, (SECTION_CALLS, ROUTE_CALLS)),
         ),
+        header=_header(),
         on_mount=CallState.load,
     )

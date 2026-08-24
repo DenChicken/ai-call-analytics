@@ -9,6 +9,7 @@ from src.constants import (
     APP_TITLE,
     AUDIO_MEDIA_TYPE,
     AUDIO_ROUTE,
+    NOT_FOUND_ROUTE,
     ROUTE_CALL,
     ROUTE_CALLS,
     ROUTE_DASHBOARD,
@@ -23,6 +24,7 @@ from src.pages.dashboard import dashboard_page
 from src.pages.login import login_page
 from src.pages.manager import manager_page
 from src.pages.managers import managers_page
+from src.pages.not_found import not_found_page
 
 PARAM_AGENT_ID = "agent_id"
 PARAM_CALL_ID = "call_id"
@@ -56,3 +58,4 @@ app.add_page(
     manager_page, route=f"{ROUTE_MANAGER}/[{PARAM_AGENT_ID}]", title=APP_TITLE
 )
 app.add_page(call_page, route=f"{ROUTE_CALL}/[{PARAM_CALL_ID}]", title=APP_TITLE)
+app.add_page(not_found_page, route=NOT_FOUND_ROUTE, title=APP_TITLE)

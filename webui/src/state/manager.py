@@ -81,6 +81,7 @@ class CriterionLine:
 
 @dataclass
 class ManagerData:
+    found: bool
     name: str
     email: str
     profile_link: str
@@ -102,6 +103,7 @@ class ManagerData:
 class ManagerState(AuthState):
     period: str = PERIOD_MONTH
 
+    found: bool = False
     name: str = EMPTY_VALUE
     email: str = ""
     profile_link: str = ""
@@ -177,6 +179,7 @@ class ManagerState(AuthState):
 
     def _collect(self) -> None:
         data = collect(self.current_agent_id, self.period, self.utc_offset)
+        self.found = data.found
         self.name = data.name
         self.email = data.email
         self.profile_link = data.profile_link
@@ -221,6 +224,7 @@ def collect(agent_id: int, period: str, offset_hours: int) -> ManagerData:
     )
 
     return ManagerData(
+        found=agent is not None,
         name=agent["display_name"] if agent else EMPTY_VALUE,
         email=agent["email"] or "" if agent else "",
         profile_link=agent["profile_link"] or "" if agent else "",
