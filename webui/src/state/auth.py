@@ -17,6 +17,7 @@ from src.constants import (
     MIN_UTC_OFFSET,
     NEGATIVE_SIGN,
     OFFSET_COOKIE_NAME,
+    RELOAD_SCRIPT,
     ROUTE_DASHBOARD,
     ROUTE_LOGIN,
     SESSION_COOKIE_NAME,
@@ -117,7 +118,7 @@ class AuthState(rx.State):
         detected = _clamped(int(hours))
         self.offset_cookie = str(detected)
         if detected != FALLBACK_UTC_OFFSET:
-            return rx.redirect(self.router.url.path)
+            return rx.call_script(RELOAD_SCRIPT)
 
     @rx.event
     def ask_utc_offset(self, label: str):
@@ -135,7 +136,7 @@ class AuthState(rx.State):
     def confirm_utc_offset(self):
         self.offset_cookie = str(self.pending_offset)
         self.timezone_dialog_open = False
-        return rx.redirect(self.router.url.path)
+        return rx.call_script(RELOAD_SCRIPT)
 
     @rx.var
     def offset_label(self) -> str:

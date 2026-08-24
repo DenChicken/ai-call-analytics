@@ -146,6 +146,7 @@ MIN_UTC_OFFSET = -11
 MAX_UTC_OFFSET = 14
 TIMEZONE_LABEL = "Часовой пояс"
 BROWSER_OFFSET_SCRIPT = "-new Date().getTimezoneOffset() / 60"
+RELOAD_SCRIPT = "window.location.reload()"
 TIMEZONE_DIALOG_TITLE = "Сменить часовой пояс?"
 TIMEZONE_DIALOG_TEXT = (
     "Страница перезагрузится. Метки времени, границы периода и группировка "
