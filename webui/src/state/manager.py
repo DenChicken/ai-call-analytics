@@ -247,18 +247,19 @@ def _extreme_label(row: dict | None) -> str:
 
 
 def _criteria(database, window: dict) -> list[CriterionScore]:
-    labels = {row["code"]: row["label"] for row in database.criteria() if row["enabled"]}
+    labels = {row["code"]: row["label"] for row in database.criteria()}
     ratios = {row["code"]: row["ratio"] for row in database.criteria_ratios(window)}
+    scored = [code for code in labels if code in ratios]
     return [
         CriterionScore(
             code=code,
             number=number,
-            label=label,
+            label=labels[code],
             color=CRITERION_LINE_COLORS[(number - 1) % len(CRITERION_LINE_COLORS)],
-            score=formatting.share(ratios.get(code)),
-            score_label=formatting.share_label(ratios.get(code)),
+            score=formatting.share(ratios[code]),
+            score_label=formatting.share_label(ratios[code]),
         )
-        for number, (code, label) in enumerate(labels.items(), start=FIRST_CRITERION_NUMBER)
+        for number, code in enumerate(scored, start=FIRST_CRITERION_NUMBER)
     ]
 
 
