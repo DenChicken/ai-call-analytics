@@ -12,8 +12,8 @@ done_dir = "done"
 
 [worker]
 poll_interval_seconds = 15
-max_attempts = 1
-stale_claim_seconds = 3600
+max_attempts = 3
+stale_claim_seconds = 300
 
 [criteria]
 file = "criteria.example.toml"
