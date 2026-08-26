@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
         error_code IS NULL OR error_code IN (
             'audio_missing', 'asr_empty', 'transcript_empty', 'llm_truncated',
             'llm_prompt_too_long', 'llm_invalid_output', 'no_criteria',
-            'no_call_types', 'out_of_memory', 'database', 'unknown'
+            'no_call_types', 'out_of_memory', 'database', 'stale_claim', 'unknown'
         )
     )
 );

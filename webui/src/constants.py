@@ -5,6 +5,7 @@ LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 LOG_APPLICATION_LOGGERS = ("src", "__main__")
+LOG_MODULE_DIR = "webui"
 
 STATUS_PENDING = "pending"
 STATUS_TRANSCRIBING = "transcribing"
@@ -31,6 +32,7 @@ ERROR_NO_CRITERIA = "no_criteria"
 ERROR_NO_CALL_TYPES = "no_call_types"
 ERROR_OUT_OF_MEMORY = "out_of_memory"
 ERROR_DATABASE = "database"
+ERROR_STALE_CLAIM = "stale_claim"
 ERROR_UNKNOWN = "unknown"
 
 APP_TITLE = "Аналитика звонков"

@@ -2,6 +2,13 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.constants import LOG_MODULE_DIR
+
+PATHS_SECTION = "paths"
+DATA_DIR_KEY = "data_dir"
+SECRETS_DIR_KEY = "secrets_dir"
+LOGS_DIR_KEY = "logs_dir"
+
 
 class ConfigError(Exception):
     pass
@@ -14,7 +21,7 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    root_dir: Path
+    data_dir: Path
     pending_dir: Path
     temp_dir: Path
 
@@ -52,7 +59,7 @@ class LoggingConfig:
 class SourceConfig:
     name: str
     kind: str
-    base_dir: Path
+    secrets_dir: Path
     options: dict
 
 
@@ -84,21 +91,27 @@ def require_option(source_config: SourceConfig, key: str):
     return source_config.options[key]
 
 
-def resolve_path(base_dir: Path, value: str | Path) -> Path:
-    path = Path(value)
-    return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
+def storage_path(data_dir: Path, path: Path) -> str:
+    return path.resolve().relative_to(data_dir).as_posix()
 
 
-def storage_path(root_dir: Path, path: Path) -> str:
-    return path.resolve().relative_to(root_dir).as_posix()
-
-
-def resolve_inside(root_dir: Path, value: str | Path, key: str, where: str) -> Path:
-    path = resolve_path(root_dir, value)
-    if not path.is_relative_to(root_dir):
+def resolve_anchor(raw: dict, key: str) -> Path:
+    value = Path(_require(raw, key, PATHS_SECTION))
+    if not value.is_absolute():
         raise ConfigError(
-            f"'{key}' in [{where}] resolves to {path}, which is outside "
-            f"root_dir {root_dir}: paths stored in the database must stay inside the root"
+            f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}: "
+            "anchors are mount points and cannot depend on where the config file sits"
+        )
+    return value.resolve()
+
+
+def resolve_inside(anchor: Path, value: str | Path, key: str, where: str) -> Path:
+    path = Path(value)
+    path = path.resolve() if path.is_absolute() else (anchor / path).resolve()
+    if not path.is_relative_to(anchor):
+        raise ConfigError(
+            f"'{key}' in [{where}] resolves to {path}, which is outside {anchor}: "
+            "it must stay inside its anchor directory"
         )
     return path
 
@@ -114,7 +127,7 @@ def read_secret_file(path: str | Path) -> str:
     return value
 
 
-def _load_sources(raw: list, base_dir: Path) -> list[SourceConfig]:
+def _load_sources(raw: list, secrets_dir: Path) -> list[SourceConfig]:
     if not raw:
         raise ConfigError("at least one [[source]] must be defined")
 
@@ -128,7 +141,7 @@ def _load_sources(raw: list, base_dir: Path) -> list[SourceConfig]:
         seen.add(name)
         options = {k: v for k, v in entry.items() if k not in ("name", "kind")}
         sources.append(
-            SourceConfig(name=name, kind=kind, base_dir=base_dir, options=options)
+            SourceConfig(name=name, kind=kind, secrets_dir=secrets_dir, options=options)
         )
     return sources
 
@@ -141,7 +154,10 @@ def load_config(path: str | Path) -> Config:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
 
-    base_dir = path.resolve().parent
+    paths_raw = _section(raw, PATHS_SECTION)
+    data_dir = resolve_anchor(paths_raw, DATA_DIR_KEY)
+    secrets_dir = resolve_anchor(paths_raw, SECRETS_DIR_KEY)
+    logs_dir = resolve_anchor(paths_raw, LOGS_DIR_KEY)
 
     database_raw = _section(raw, "database")
     storage_raw = _section(raw, "storage")
@@ -151,18 +167,19 @@ def load_config(path: str | Path) -> Config:
 
     database = DatabaseConfig(
         dsn=read_secret_file(
-            resolve_path(base_dir, _require(database_raw, "dsn_file", "database"))
+            resolve_inside(
+                secrets_dir, _require(database_raw, "dsn_file", "database"), "dsn_file", "database"
+            )
         )
     )
 
-    root_dir = resolve_path(base_dir, _require(storage_raw, "root_dir", "storage"))
     storage = StorageConfig(
-        root_dir=root_dir,
+        data_dir=data_dir,
         pending_dir=resolve_inside(
-            root_dir, _require(storage_raw, "pending_dir", "storage"), "pending_dir", "storage"
+            data_dir, _require(storage_raw, "pending_dir", "storage"), "pending_dir", "storage"
         ),
         temp_dir=resolve_inside(
-            root_dir, _require(storage_raw, "temp_dir", "storage"), "temp_dir", "storage"
+            data_dir, _require(storage_raw, "temp_dir", "storage"), "temp_dir", "storage"
         ),
     )
 
@@ -193,7 +210,7 @@ def load_config(path: str | Path) -> Config:
 
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
-        dir=resolve_path(base_dir, _require(logging_raw, "dir", "logging")),
+        dir=logs_dir / LOG_MODULE_DIR,
         external_logs=_require(logging_raw, "external_logs", "logging"),
         external_level=_require(logging_raw, "external_level", "logging"),
     )
@@ -204,5 +221,5 @@ def load_config(path: str | Path) -> Config:
         fetch=fetch,
         network=network,
         logging=logging_config,
-        sources=_load_sources(raw.get("source", []), base_dir),
+        sources=_load_sources(raw.get("source", []), secrets_dir),
     )

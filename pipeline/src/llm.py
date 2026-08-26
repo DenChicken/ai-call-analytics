@@ -1,7 +1,6 @@
 import gc
 import json
 import logging
-import threading
 import time
 
 import torch
@@ -24,7 +23,6 @@ from src.constants import (
     ERROR_LLM_TRUNCATED,
 )
 from src.errors import StageError
-from src.schema import parser_config
 
 ROLE_SYSTEM = "system"
 ROLE_USER = "user"
@@ -45,7 +43,6 @@ class Llm:
         self._config = config
         self._tokenizer = None
         self._model = None
-        self._lock = threading.Lock()
 
     @property
     def model_name(self) -> str:
@@ -65,72 +62,63 @@ class Llm:
         self._model.eval()
 
     def unload(self) -> None:
-        with self._lock:
-            if self._model is None:
-                return
-            logger.info("unloading llm %s", self._config.repo_id)
-            self._model = None
-            self._tokenizer = None
-            gc.collect()
-            if self._config.device.startswith(CUDA_DEVICE):
-                torch.cuda.empty_cache()
+        if self._model is None:
+            return
+        logger.info("unloading llm %s", self._config.repo_id)
+        self._model = None
+        self._tokenizer = None
+        gc.collect()
+        if self._config.device.startswith(CUDA_DEVICE):
+            torch.cuda.empty_cache()
 
     def generate(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
-        with self._lock:
-            self._ensure_loaded()
-            messages = [
-                {"role": ROLE_SYSTEM, "content": system_prompt},
-                {"role": ROLE_USER, "content": user_prompt},
-            ]
-            text = self._tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
+        self._ensure_loaded()
+        messages = [
+            {"role": ROLE_SYSTEM, "content": system_prompt},
+            {"role": ROLE_USER, "content": user_prompt},
+        ]
+        text = self._tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
+        inputs = self._tokenizer(text, return_tensors=TENSOR_FORMAT).to(self._model.device)
+        prompt_tokens = inputs["input_ids"].shape[1]
+        if prompt_tokens > self._config.max_input_tokens:
+            raise StageError(
+                ERROR_LLM_PROMPT_TOO_LONG,
+                f"prompt is {prompt_tokens} tokens, over the max_input_tokens limit of "
+                f"{self._config.max_input_tokens}, raise it in the config",
             )
-            inputs = self._tokenizer(
-                text,
-                return_tensors=TENSOR_FORMAT,
-                truncation=True,
-                max_length=self._config.max_input_tokens,
-            ).to(self._model.device)
-            prompt_tokens = inputs["input_ids"].shape[1]
-            if prompt_tokens >= self._config.max_input_tokens:
-                raise StageError(
-                    ERROR_LLM_PROMPT_TOO_LONG,
-                    f"prompt hit the max_input_tokens limit of {self._config.max_input_tokens} "
-                    "and was truncated, raise it in the config",
-                )
-            logger.info("generating from %s input tokens", prompt_tokens)
+        logger.info("generating from %s input tokens", prompt_tokens)
 
-            prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
-                self._tokenizer, JsonSchemaParser(schema, config=parser_config())
+        prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
+            self._tokenizer, JsonSchemaParser(schema)
+        )
+        sampling = (
+            {
+                "do_sample": True,
+                "temperature": self._config.temperature,
+                "top_p": self._config.top_p,
+                "top_k": self._config.top_k,
+            }
+            if self._config.temperature > 0
+            else {"do_sample": False}
+        )
+
+        output = self._config.output
+        started = time.monotonic()
+        with torch.inference_mode():
+            generated = self._model.generate(
+                **inputs,
+                max_new_tokens=output.max_new_tokens,
+                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                stopping_criteria=StoppingCriteriaList([MaxTimeCriteria(output.timeout_seconds)]),
+                pad_token_id=self._tokenizer.eos_token_id,
+                **sampling,
             )
-            sampling = (
-                {
-                    "do_sample": True,
-                    "temperature": self._config.temperature,
-                    "top_p": self._config.top_p,
-                    "top_k": self._config.top_k,
-                }
-                if self._config.temperature > 0
-                else {"do_sample": False}
-            )
 
-            output = self._config.output
-            started = time.monotonic()
-            with torch.inference_mode():
-                generated = self._model.generate(
-                    **inputs,
-                    max_new_tokens=output.max_new_tokens,
-                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                    stopping_criteria=StoppingCriteriaList(
-                        [MaxTimeCriteria(output.timeout_seconds)]
-                    ),
-                    pad_token_id=self._tokenizer.eos_token_id,
-                    **sampling,
-                )
-
-            produced = generated[0][prompt_tokens:]
-            elapsed = time.monotonic() - started
-            completion = self._tokenizer.decode(produced, skip_special_tokens=True)
+        produced = generated[0][prompt_tokens:]
+        elapsed = time.monotonic() - started
+        completion = self._tokenizer.decode(produced, skip_special_tokens=True)
 
         logger.info(
             "generated %s tokens in %.0fs (%.1f tokens/s)",

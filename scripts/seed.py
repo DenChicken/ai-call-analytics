@@ -43,6 +43,7 @@ ERROR_CODES = (
     "llm_invalid_output",
     "out_of_memory",
     "database",
+    "stale_claim",
     "unknown",
 )
 
@@ -59,9 +60,6 @@ STORED_STATUSES = (STATUS_TRANSCRIBED, STATUS_ANALYZING, STATUS_DONE, STATUS_FAI
 
 FIRST_SEGMENT_MIN_MS = 200
 FIRST_SEGMENT_MAX_MS = 1500
-NO_SPEECH_RANGE = (0.0, 0.2)
-LOGPROB_RANGE = (-0.9, -0.1)
-COMPRESSION_RANGE = (1.0, 1.9)
 SKILL_RANGE = (0.15, 0.8)
 LIST_ITEMS_RANGE = (1, 3)
 ATTEMPTS_RANGE = (1, 3)
@@ -74,7 +72,6 @@ PHONE_MIN = 100000000
 PHONE_MAX = 999999999
 DEAL_MIN = 1000
 DEAL_MAX = 9999
-ROUND_DIGITS = 3
 
 AGENTS = (
     ("10637", "Ефименко Александр Николаевич", "a.efimenko"),
@@ -228,12 +225,6 @@ def build_segments(chance: random.Random, duration_seconds: int, name: str) -> l
                 "start_ms": position,
                 "end_ms": end,
                 "text": chance.choice(PHRASES).format(name=name.split()[1]),
-                "words": [],
-                "no_speech_prob": round(chance.uniform(*NO_SPEECH_RANGE), ROUND_DIGITS),
-                "avg_logprob": round(chance.uniform(*LOGPROB_RANGE), ROUND_DIGITS),
-                "compression_ratio": round(
-                    chance.uniform(*COMPRESSION_RANGE), ROUND_DIGITS
-                ),
             }
         )
         position = end + chance.randint(0, SEGMENT_GAP_MS)
@@ -452,7 +443,7 @@ def _confirm() -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser(description="Fill the database with synthetic call data")
     parser.add_argument("-d", "--dsn-file", required=True, type=Path, help="path to the dsn file")
-    parser.add_argument("-r", "--root-dir", required=True, type=Path, help="storage root")
+    parser.add_argument("-r", "--data-dir", required=True, type=Path, help="data directory")
     parser.add_argument("--days", type=int, default=DEFAULT_DAYS, help="how far back to spread")
     parser.add_argument("--calls", type=int, default=DEFAULT_CALLS, help="how many calls")
     parser.add_argument("--seed", type=int, default=DEFAULT_SEED, help="random seed")
@@ -465,7 +456,7 @@ def main() -> int:
         return 1
 
     try:
-        root = args.root_dir.resolve()
+        root = args.data_dir.resolve()
         sources = sorted((root / PENDING_DIR).glob(f"*{AUDIO_SUFFIX}"))
         if not sources:
             raise SeedError(f"no audio files in {root / PENDING_DIR}")

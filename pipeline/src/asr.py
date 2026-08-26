@@ -1,6 +1,5 @@
 import gc
 import logging
-import threading
 import time
 from pathlib import Path
 
@@ -8,7 +7,7 @@ from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
-from src.transcript import Segment, Word
+from src.transcript import Segment
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +24,6 @@ class Asr:
             )
         self._config = config
         self._model = None
-        self._lock = threading.Lock()
 
     @property
     def model_name(self) -> str:
@@ -44,12 +42,11 @@ class Asr:
         return self._model
 
     def unload(self) -> None:
-        with self._lock:
-            if self._model is None:
-                return
-            logger.info("unloading asr model %s", self._config.repo_id)
-            self._model = None
-            gc.collect()
+        if self._model is None:
+            return
+        logger.info("unloading asr model %s", self._config.repo_id)
+        self._model = None
+        gc.collect()
 
     def transcribe(self, audio_path: Path) -> tuple[list[Segment], float]:
         logger.info("transcribing %s", audio_path.name)
@@ -68,42 +65,37 @@ class Asr:
             transcript.speech_pad_ms,
         )
         started = time.monotonic()
-        with self._lock:
-            model = self._ensure_loaded()
-            raw_segments, info = model.transcribe(
-                str(audio_path),
-                language=transcript.language,
-                beam_size=transcript.beam_size,
-                condition_on_previous_text=transcript.condition_on_previous_text,
-                hallucination_silence_threshold=transcript.hallucination_silence_threshold,
-                word_timestamps=transcript.word_timestamps,
-                vad_filter=transcript.vad_filter,
-                vad_parameters={
-                    "min_silence_duration_ms": transcript.min_silence_duration_ms,
-                    "speech_pad_ms": transcript.speech_pad_ms,
-                },
-            )
-            segments = [
+        model = self._ensure_loaded()
+        raw_segments, info = model.transcribe(
+            str(audio_path),
+            language=transcript.language,
+            beam_size=transcript.beam_size,
+            condition_on_previous_text=transcript.condition_on_previous_text,
+            hallucination_silence_threshold=transcript.hallucination_silence_threshold,
+            word_timestamps=transcript.word_timestamps,
+            vad_filter=transcript.vad_filter,
+            vad_parameters={
+                "min_silence_duration_ms": transcript.min_silence_duration_ms,
+                "speech_pad_ms": transcript.speech_pad_ms,
+            },
+        )
+
+        segments = []
+        suspicious = 0
+        for segment in raw_segments:
+            text = segment.text.strip()
+            if not text:
+                continue
+            if segment.compression_ratio > SUSPICIOUS_COMPRESSION_RATIO:
+                suspicious += 1
+            segments.append(
                 Segment(
                     start_ms=_to_ms(segment.start),
                     end_ms=_to_ms(segment.end),
                     text=text,
-                    words=[
-                        Word(
-                            start_ms=_to_ms(word.start),
-                            end_ms=_to_ms(word.end),
-                            text=word.word,
-                            probability=word.probability,
-                        )
-                        for word in segment.words or []
-                    ],
-                    no_speech_prob=segment.no_speech_prob,
-                    avg_logprob=segment.avg_logprob,
-                    compression_ratio=segment.compression_ratio,
                 )
-                for segment in raw_segments
-                if (text := segment.text.strip())
-            ]
+            )
+
         elapsed = time.monotonic() - started
         logger.info(
             "transcribed %s into %s segments: audio %.0fs, took %.0fs (%.1fx realtime)",
@@ -113,11 +105,10 @@ class Asr:
             elapsed,
             info.duration / elapsed if elapsed else 0,
         )
-        suspicious = [s for s in segments if s.compression_ratio > SUSPICIOUS_COMPRESSION_RATIO]
         if suspicious:
             logger.warning(
                 "%s of %s segments look like hallucinations (compression_ratio > %s)",
-                len(suspicious),
+                suspicious,
                 len(segments),
                 SUSPICIOUS_COMPRESSION_RATIO,
             )

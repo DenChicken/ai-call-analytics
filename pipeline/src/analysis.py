@@ -1,16 +1,15 @@
 import logging
+from dataclasses import dataclass
 
 from pydantic import ValidationError
 
 from src.config import Config, Reference
 from src.constants import (
-    CALL_TYPE_FIELD,
     CRITERIA_LINE_TEMPLATE,
     ERROR_LLM_INVALID_OUTPUT,
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
-    SCORES_FIELD,
     UNKNOWN_MANAGER,
 )
 from src.errors import StageError
@@ -18,6 +17,16 @@ from src.llm import Llm
 from src.schema import build_analysis_model
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class Analysis:
+    call_type: str
+    summary: str
+    strengths: list[str]
+    weaknesses: list[str]
+    recommendations: list[str]
+    scores: dict[str, int]
 
 
 def render_criteria(criteria: list[Reference]) -> str:
@@ -37,7 +46,7 @@ def analyze(
     call_types: list[Reference],
     plain: str,
     manager_name: str | None,
-) -> tuple[dict, dict[str, int]]:
+) -> Analysis:
     logger.debug(
         "analyzing %s characters against %s criteria and %s call types",
         len(plain),
@@ -59,11 +68,12 @@ def analyze(
         raise StageError(
             ERROR_LLM_INVALID_OUTPUT, f"model output does not match the schema: {error}"
         ) from error
-    scores = payload.pop(SCORES_FIELD)
+
+    analysis = Analysis(**payload)
     logger.info(
         "call classified as %s, %s of %s criteria met",
-        payload[CALL_TYPE_FIELD],
-        sum(scores.values()),
-        len(scores),
+        analysis.call_type,
+        sum(analysis.scores.values()),
+        len(analysis.scores),
     )
-    return payload, scores
+    return analysis

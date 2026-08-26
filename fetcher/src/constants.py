@@ -5,6 +5,7 @@ LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 LOG_APPLICATION_LOGGERS = ("src", "__main__")
+LOG_MODULE_DIR = "fetcher"
 
 TEMP_FILE_SUFFIX = ".part"
 

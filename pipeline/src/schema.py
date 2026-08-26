@@ -1,13 +1,8 @@
 from typing import Literal
 
-from lmformatenforcer.characterlevelparser import CharacterLevelParserConfig
 from pydantic import BaseModel, Field, create_model
 
 from src.config import Reference
-
-ASCII_PRINTABLE_RANGE = (0x20, 0x7F)
-CYRILLIC_RANGE = (0x0410, 0x0450)
-CYRILLIC_EXTRA = "Ёё"
 
 SCORES_MODEL_NAME = "CriteriaScores"
 ANALYSIS_MODEL_NAME = "CallAnalysis"
@@ -29,12 +24,6 @@ WEAKNESSES_DESCRIPTION = "Что менеджер упустил. Не повт�
 RECOMMENDATIONS_DESCRIPTION = (
     "Конкретное действие на будущее. Не пересказывать weaknesses другими словами"
 )
-
-
-def parser_config() -> CharacterLevelParserConfig:
-    alphabet = "".join(chr(code) for code in range(*ASCII_PRINTABLE_RANGE))
-    alphabet += "".join(chr(code) for code in range(*CYRILLIC_RANGE))
-    return CharacterLevelParserConfig(alphabet=alphabet + CYRILLIC_EXTRA)
 
 
 def build_analysis_model(

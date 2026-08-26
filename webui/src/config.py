@@ -2,6 +2,13 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.constants import LOG_MODULE_DIR
+
+PATHS_SECTION = "paths"
+DATA_DIR_KEY = "data_dir"
+SECRETS_DIR_KEY = "secrets_dir"
+LOGS_DIR_KEY = "logs_dir"
+
 
 class ConfigError(Exception):
     pass
@@ -14,7 +21,7 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    root_dir: Path
+    data_dir: Path
 
 
 @dataclass(frozen=True)
@@ -77,9 +84,25 @@ def _require(section: dict, key: str, where: str):
     return section[key]
 
 
-def resolve_path(base_dir: Path, value: str | Path) -> Path:
+def resolve_anchor(raw: dict, key: str) -> Path:
+    value = Path(_require(raw, key, PATHS_SECTION))
+    if not value.is_absolute():
+        raise ConfigError(
+            f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}: "
+            "anchors are mount points and cannot depend on where the config file sits"
+        )
+    return value.resolve()
+
+
+def resolve_inside(anchor: Path, value: str | Path, key: str, where: str) -> Path:
     path = Path(value)
-    return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
+    path = path.resolve() if path.is_absolute() else (anchor / path).resolve()
+    if not path.is_relative_to(anchor):
+        raise ConfigError(
+            f"'{key}' in [{where}] resolves to {path}, which is outside {anchor}: "
+            "it must stay inside its anchor directory"
+        )
+    return path
 
 
 def read_secret_file(path: str | Path) -> str:
@@ -101,10 +124,12 @@ def load_config(path: str | Path) -> Config:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
 
-    base_dir = path.resolve().parent
+    paths_raw = _section(raw, PATHS_SECTION)
+    data_dir = resolve_anchor(paths_raw, DATA_DIR_KEY)
+    secrets_dir = resolve_anchor(paths_raw, SECRETS_DIR_KEY)
+    logs_dir = resolve_anchor(paths_raw, LOGS_DIR_KEY)
 
     database_raw = _section(raw, "database")
-    storage_raw = _section(raw, "storage")
     server_raw = _section(raw, "server")
     session_raw = _section(raw, "session")
     display_raw = _section(raw, "display")
@@ -113,12 +138,15 @@ def load_config(path: str | Path) -> Config:
     return Config(
         database=DatabaseConfig(
             dsn=read_secret_file(
-                resolve_path(base_dir, _require(database_raw, "dsn_file", "database"))
+                resolve_inside(
+                    secrets_dir,
+                    _require(database_raw, "dsn_file", "database"),
+                    "dsn_file",
+                    "database",
+                )
             )
         ),
-        storage=StorageConfig(
-            root_dir=resolve_path(base_dir, _require(storage_raw, "root_dir", "storage")),
-        ),
+        storage=StorageConfig(data_dir=data_dir),
         server=ServerConfig(
             host=_require(server_raw, "host", "server"),
             scheme=_require(server_raw, "scheme", "server"),
@@ -137,7 +165,7 @@ def load_config(path: str | Path) -> Config:
         ),
         logging=LoggingConfig(
             level=_require(logging_raw, "level", "logging"),
-            dir=resolve_path(base_dir, _require(logging_raw, "dir", "logging")),
+            dir=logs_dir / LOG_MODULE_DIR,
             external_logs=_require(logging_raw, "external_logs", "logging"),
             external_level=_require(logging_raw, "external_level", "logging"),
         ),

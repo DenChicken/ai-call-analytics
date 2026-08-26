@@ -3,10 +3,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from src.constants import (
+    LOG_MODULE_DIR,
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
 )
+
+PATHS_SECTION = "paths"
+DATA_DIR_KEY = "data_dir"
+MODELS_DIR_KEY = "models_dir"
+SECRETS_DIR_KEY = "secrets_dir"
+LOGS_DIR_KEY = "logs_dir"
 
 REFERENCE_CODE = "code"
 REFERENCE_LABEL = "label"
@@ -29,15 +36,15 @@ class DatabaseConfig:
 
 @dataclass(frozen=True)
 class StorageConfig:
-    root_dir: Path
+    data_dir: Path
     done_dir: Path
 
 
 @dataclass(frozen=True)
 class WorkerConfig:
-    count: int
     poll_interval_seconds: float
     max_attempts: int
+    stale_claim_seconds: float
 
 
 @dataclass(frozen=True)
@@ -136,16 +143,26 @@ def resolve_path(base_dir: Path, value: str | Path) -> Path:
     return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
 
 
-def storage_path(root_dir: Path, path: Path) -> str:
-    return path.resolve().relative_to(root_dir).as_posix()
+def storage_path(data_dir: Path, path: Path) -> str:
+    return path.resolve().relative_to(data_dir).as_posix()
 
 
-def resolve_inside(root_dir: Path, value: str | Path, key: str, where: str) -> Path:
-    path = resolve_path(root_dir, value)
-    if not path.is_relative_to(root_dir):
+def resolve_anchor(raw: dict, key: str) -> Path:
+    value = Path(_require(raw, key, PATHS_SECTION))
+    if not value.is_absolute():
         raise ConfigError(
-            f"'{key}' in [{where}] resolves to {path}, which is outside "
-            f"root_dir {root_dir}: paths stored in the database must stay inside the root"
+            f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}: "
+            "anchors are mount points and cannot depend on where the config file sits"
+        )
+    return value.resolve()
+
+
+def resolve_inside(anchor: Path, value: str | Path, key: str, where: str) -> Path:
+    path = resolve_path(anchor, value)
+    if not path.is_relative_to(anchor):
+        raise ConfigError(
+            f"'{key}' in [{where}] resolves to {path}, which is outside {anchor}: "
+            "it must stay inside its anchor directory"
         )
     return path
 
@@ -171,13 +188,15 @@ def _read_text_file(path: str | Path, where: str) -> str:
     return text
 
 
-def _load_asr(raw: dict, base_dir: Path) -> AsrConfig:
+def _load_asr(raw: dict, models_dir: Path) -> AsrConfig:
     section = _section(raw, "asr")
     transcript_raw = _section(section, "transcript", "asr.")
     where = "asr.transcript"
     return AsrConfig(
         repo_id=_require(section, "repo_id", "asr"),
-        local_dir=resolve_path(base_dir, _require(section, "local_dir", "asr")),
+        local_dir=resolve_inside(
+            models_dir, _require(section, "local_dir", "asr"), "local_dir", "asr"
+        ),
         device=_require(section, "device", "asr"),
         compute_type=_require(section, "compute_type", "asr"),
         unload_after=_require(section, "unload_after", "asr"),
@@ -198,12 +217,14 @@ def _load_asr(raw: dict, base_dir: Path) -> AsrConfig:
     )
 
 
-def _load_llm(raw: dict, base_dir: Path) -> LlmConfig:
+def _load_llm(raw: dict, models_dir: Path) -> LlmConfig:
     section = _section(raw, "llm")
     output_raw = _section(section, "output", "llm.")
     return LlmConfig(
         repo_id=_require(section, "repo_id", "llm"),
-        local_dir=resolve_path(base_dir, _require(section, "local_dir", "llm")),
+        local_dir=resolve_inside(
+            models_dir, _require(section, "local_dir", "llm"), "local_dir", "llm"
+        ),
         device=_require(section, "device", "llm"),
         torch_dtype=_require(section, "torch_dtype", "llm"),
         load_in_4bit=_require(section, "load_in_4bit", "llm"),
@@ -280,62 +301,53 @@ def load_config(path: str | Path) -> Config:
 
     base_dir = path.resolve().parent
 
+    paths_raw = _section(raw, PATHS_SECTION)
+    data_dir = resolve_anchor(paths_raw, DATA_DIR_KEY)
+    models_dir = resolve_anchor(paths_raw, MODELS_DIR_KEY)
+    secrets_dir = resolve_anchor(paths_raw, SECRETS_DIR_KEY)
+    logs_dir = resolve_anchor(paths_raw, LOGS_DIR_KEY)
+
     database_raw = _section(raw, "database")
     storage_raw = _section(raw, "storage")
     worker_raw = _section(raw, "worker")
     criteria_raw = _section(raw, "criteria")
     types_raw = _section(raw, "types")
-    huggingface_raw = _section(raw, "huggingface")
     logging_raw = _section(raw, "logging")
-
-    read_secret_file(
-        resolve_path(base_dir, _require(huggingface_raw, "token_file", "huggingface"))
-    )
 
     database = DatabaseConfig(
         dsn=read_secret_file(
-            resolve_path(base_dir, _require(database_raw, "dsn_file", "database"))
+            resolve_inside(
+                secrets_dir, _require(database_raw, "dsn_file", "database"), "dsn_file", "database"
+            )
         )
     )
 
-    root_dir = resolve_path(base_dir, _require(storage_raw, "root_dir", "storage"))
     storage = StorageConfig(
-        root_dir=root_dir,
+        data_dir=data_dir,
         done_dir=resolve_inside(
-            root_dir, _require(storage_raw, "done_dir", "storage"), "done_dir", "storage"
+            data_dir, _require(storage_raw, "done_dir", "storage"), "done_dir", "storage"
         ),
     )
 
     worker = WorkerConfig(
-        count=_require(worker_raw, "count", "worker"),
         poll_interval_seconds=_require(worker_raw, "poll_interval_seconds", "worker"),
         max_attempts=_require(worker_raw, "max_attempts", "worker"),
+        stale_claim_seconds=_require(worker_raw, "stale_claim_seconds", "worker"),
     )
-
-    asr = _load_asr(raw, base_dir)
-    llm = _load_llm(raw, base_dir)
 
     logging_config = LoggingConfig(
         level=_require(logging_raw, "level", "logging"),
-        dir=resolve_path(base_dir, _require(logging_raw, "dir", "logging")),
+        dir=logs_dir / LOG_MODULE_DIR,
         external_logs=_require(logging_raw, "external_logs", "logging"),
         external_level=_require(logging_raw, "external_level", "logging"),
     )
-
-    unloading = [name for name, model in (("asr", asr), ("llm", llm)) if model.unload_after]
-    if worker.count > 1 and unloading:
-        raise ConfigError(
-            f"unload_after is set in {', '.join(unloading)} but [worker] count is "
-            f"{worker.count}: unloading a model shared by several workers would drop it "
-            "while another worker is still using it, set count = 1 or unload_after = false"
-        )
 
     return Config(
         database=database,
         storage=storage,
         worker=worker,
-        asr=asr,
-        llm=llm,
+        asr=_load_asr(raw, models_dir),
+        llm=_load_llm(raw, models_dir),
         prompt=_load_prompt(raw, base_dir),
         logging=logging_config,
         criteria=_load_reference(

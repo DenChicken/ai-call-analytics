@@ -9,6 +9,9 @@ from huggingface_hub.errors import GatedRepoError
 
 MODEL_SECTIONS = ("asr", "llm")
 HUGGINGFACE_SECTION = "huggingface"
+PATHS_SECTION = "paths"
+MODELS_DIR_KEY = "models_dir"
+SECRETS_DIR_KEY = "secrets_dir"
 TOKEN_KEY = "token_file"
 REQUIRED_MODEL_KEYS = ("repo_id", "local_dir")
 
@@ -47,9 +50,23 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
             raise ScriptError(f"missing required section [{name}] in {config_path}")
         return raw[name]
 
+    def anchor(key: str) -> Path:
+        paths = section(PATHS_SECTION)
+        if key not in paths:
+            raise ScriptError(f"missing required key '{key}' in [{PATHS_SECTION}]")
+        value = Path(paths[key])
+        if not value.is_absolute():
+            raise ScriptError(
+                f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}"
+            )
+        return value.resolve()
+
+    models_dir = anchor(MODELS_DIR_KEY)
+    secrets_dir = anchor(SECRETS_DIR_KEY)
+
     if TOKEN_KEY not in section(HUGGINGFACE_SECTION):
         raise ScriptError(f"missing required key '{TOKEN_KEY}' in [{HUGGINGFACE_SECTION}]")
-    token = read_secret_file(Path(section(HUGGINGFACE_SECTION)[TOKEN_KEY]))
+    token = read_secret_file(secrets_dir / section(HUGGINGFACE_SECTION)[TOKEN_KEY])
 
     specs = []
     seen = set()
@@ -65,7 +82,7 @@ def load_specs(config_path: Path) -> list[ModelSpec]:
             ModelSpec(
                 section=name,
                 repo_id=entry["repo_id"],
-                local_dir=Path(entry["local_dir"]).resolve(),
+                local_dir=models_dir / entry["local_dir"],
                 token=token,
             )
         )

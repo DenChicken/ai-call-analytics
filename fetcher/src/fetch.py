@@ -79,7 +79,7 @@ def run_once(config: Config, database: Database, source: Source) -> None:
                     source_id,
                     call,
                     agent_id,
-                    storage_path(config.storage.root_dir, final_path),
+                    storage_path(config.storage.data_dir, final_path),
                     cursor_value,
                 )
             except Exception as error:

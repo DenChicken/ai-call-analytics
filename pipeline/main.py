@@ -1,21 +1,15 @@
 import argparse
 import logging
 import sys
-import threading
 
 from src import shutdown
 from src.asr import Asr
 from src.config import Config, ConfigError, load_config
-from src.constants import (
-    CALL_TYPES_TABLE,
-    CRITERIA_TABLE,
-    SHUTDOWN_EXIT_CODE,
-    WORKER_THREAD_NAME,
-)
+from src.constants import CALL_TYPES_TABLE, CRITERIA_TABLE, SHUTDOWN_EXIT_CODE
 from src.database import Database
 from src.llm import Llm
 from src.logging_setup import setup_logging
-from src.worker import Models, run
+from src.worker import run
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +37,7 @@ def main() -> int:
 
     database = None
     try:
-        database = Database(config.database.dsn, config.worker.count)
+        database = Database(config.database.dsn)
         for table, entries in (
             (CRITERIA_TABLE, config.criteria),
             (CALL_TYPES_TABLE, config.call_types),
@@ -51,63 +45,44 @@ def main() -> int:
             disabled = database.sync_reference(table, entries)
             logger.info("%s synced: %s enabled, %s disabled", table, len(entries), disabled)
 
-        restored = database.reset_interrupted()
-        if restored:
-            logger.info("restored %s interrupted jobs", restored)
-
-        models = Models(asr=Asr(config.asr), llm=Llm(config.llm))
+        asr = Asr(config.asr)
+        llm = Llm(config.llm)
     except Exception:
         logger.exception("initialization failed")
         if database is not None:
             database.close()
         return 1
 
-    _run_workers(config, database, models)
-    database.close()
-    stopping = shutdown.is_stopping()
-    logger.info("pipeline %s", "stopped on request" if stopping else "finished")
-    return SHUTDOWN_EXIT_CODE if stopping else 0
+    interrupted = False
+    crashed = False
+    try:
+        run(config, database, asr, llm)
+    except shutdown.ShutdownRequested:
+        interrupted = True
+    except Exception:
+        logger.exception("pipeline crashed")
+        crashed = True
+    finally:
+        database.close()
+
+    if crashed:
+        return 1
+    logger.info("pipeline %s", "stopped on request" if interrupted else "finished")
+    return SHUTDOWN_EXIT_CODE if interrupted else 0
 
 
 def _log_startup(config: Config) -> None:
     logger.info(
-        "pipeline starting: asr=%s llm=%s prompt=%s workers=%s",
+        "pipeline starting: asr=%s llm=%s prompt=%s",
         config.asr.repo_id,
         config.llm.repo_id,
         config.prompt.label,
-        config.worker.count,
     )
     logger.debug("asr config: %s", config.asr)
     logger.debug("llm config: %s", config.llm)
     logger.debug("worker config: %s", config.worker)
     logger.debug("criteria from config: %s", [entry.code for entry in config.criteria])
     logger.debug("call types from config: %s", [entry.code for entry in config.call_types])
-
-
-def _run_workers(config: Config, database: Database, models: Models) -> None:
-    threads = [
-        threading.Thread(
-            target=_worker_entry,
-            args=(config, database, models),
-            name=WORKER_THREAD_NAME.format(number=number),
-        )
-        for number in range(config.worker.count)
-    ]
-    logger.info("starting %s workers", len(threads))
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
-    logger.info("all workers stopped")
-
-
-def _worker_entry(config: Config, database: Database, models: Models) -> None:
-    try:
-        run(config, database, models)
-    except shutdown.ShutdownRequested:
-        logger.info("worker stopped")
-    except Exception:
-        logger.exception("worker crashed")
 
 
 if __name__ == "__main__":

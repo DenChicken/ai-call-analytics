@@ -8,6 +8,7 @@ from src.constants import (
     ERROR_NO_CALL_TYPES,
     ERROR_NO_CRITERIA,
     ERROR_OUT_OF_MEMORY,
+    ERROR_STALE_CLAIM,
     ERROR_TRANSCRIPT_EMPTY,
     ERROR_UNKNOWN,
 )
@@ -23,6 +24,7 @@ ERROR_LABELS = {
     ERROR_NO_CALL_TYPES: "Не заданы активные типы звонков",
     ERROR_OUT_OF_MEMORY: "Не хватило памяти",
     ERROR_DATABASE: "Ошибка базы данных",
+    ERROR_STALE_CLAIM: "Обработка прервалась и не возобновилась",
     ERROR_UNKNOWN: "Не удалось обработать",
 }
 

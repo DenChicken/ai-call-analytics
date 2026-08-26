@@ -8,7 +8,7 @@ from src.config import (
     SourceConfig,
     read_secret_file,
     require_option,
-    resolve_path,
+    resolve_inside,
 )
 from src.constants import (
     DIRECTION_CALLBACK,
@@ -75,8 +75,11 @@ class BitrixSource(Source):
         self._portal_url = str(require_option(source_config, "portal_url")).rstrip("/")
         self._client = BitrixClient(
             read_secret_file(
-                resolve_path(
-                    source_config.base_dir, require_option(source_config, "rest_url_file")
+                resolve_inside(
+                    source_config.secrets_dir,
+                    require_option(source_config, "rest_url_file"),
+                    "rest_url_file",
+                    f"source '{source_config.name}'",
                 )
             ),
             network,

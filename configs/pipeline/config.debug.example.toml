@@ -1,14 +1,19 @@
+[paths]
+data_dir = "C:/projects/ai-call-analytics/data"
+models_dir = "C:/projects/ai-call-analytics/models"
+secrets_dir = "C:/projects/ai-call-analytics/secrets"
+logs_dir = "C:/projects/ai-call-analytics/logs"
+
 [database]
-dsn_file = "../../secrets/database_dsn"
+dsn_file = "database_dsn"
 
 [storage]
-root_dir = "../../data"
 done_dir = "done"
 
 [worker]
-count = 1
 poll_interval_seconds = 15
 max_attempts = 1
+stale_claim_seconds = 3600
 
 [criteria]
 file = "criteria.example.toml"
@@ -17,11 +22,11 @@ file = "criteria.example.toml"
 file = "types.example.toml"
 
 [huggingface]
-token_file = "../../secrets/hf_token"
+token_file = "hf_token"
 
 [asr]
 repo_id = "Systran/faster-whisper-large-v3"
-local_dir = "../../models/faster-whisper-large-v3"
+local_dir = "faster-whisper-large-v3"
 device = "cpu"
 compute_type = "int8"
 unload_after = true
@@ -38,7 +43,7 @@ speech_pad_ms = 400
 
 [llm]
 repo_id = "Qwen/Qwen3-1.7B"
-local_dir = "../../models/Qwen3-1.7B"
+local_dir = "Qwen3-1.7B"
 device = "cpu"
 torch_dtype = "bfloat16"
 load_in_4bit = false
@@ -60,6 +65,5 @@ user_file = "prompts/user-example.txt"
 
 [logging]
 level = "DEBUG"
-dir = "../../logs"
 external_logs = false
 external_level = "WARNING"

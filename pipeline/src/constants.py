@@ -1,14 +1,13 @@
 LOG_FILE_TIME_FORMAT = "%Y%m%d-%H%M%S"
 LOG_FILE_TEMPLATE = "pipeline-{timestamp}.log"
 LOG_LATEST_NAME = "latest.log"
-LOG_FORMAT = "%(asctime)s %(levelname)s %(threadName)s %(name)s %(message)s"
+LOG_FORMAT = "%(asctime)s %(levelname)s %(name)s %(message)s"
 LOG_MAX_BYTES = 10 * 1024 * 1024
 LOG_BACKUP_COUNT = 5
 LOG_APPLICATION_LOGGERS = ("src", "__main__")
+LOG_MODULE_DIR = "pipeline"
 
 SHUTDOWN_EXIT_CODE = 130
-
-WORKER_THREAD_NAME = "worker-{number}"
 
 STATUS_PENDING = "pending"
 STATUS_TRANSCRIBING = "transcribing"
@@ -37,13 +36,6 @@ PROMPT_TRANSCRIPT_PLACEHOLDER = "transcript"
 PROMPT_MANAGER_PLACEHOLDER = "manager"
 UNKNOWN_MANAGER = "имя неизвестно"
 
-CALL_TYPE_FIELD = "call_type"
-SCORES_FIELD = "scores"
-SUMMARY_FIELD = "summary"
-STRENGTHS_FIELD = "strengths"
-WEAKNESSES_FIELD = "weaknesses"
-RECOMMENDATIONS_FIELD = "recommendations"
-
 CRITERIA_TABLE = "criteria"
 CALL_TYPES_TABLE = "call_types"
 
@@ -57,12 +49,8 @@ ERROR_NO_CRITERIA = "no_criteria"
 ERROR_NO_CALL_TYPES = "no_call_types"
 ERROR_OUT_OF_MEMORY = "out_of_memory"
 ERROR_DATABASE = "database"
+ERROR_STALE_CLAIM = "stale_claim"
 ERROR_UNKNOWN = "unknown"
-
-METADATA_ASR_MODEL = "asr_model"
-METADATA_ANALYSIS_MODEL = "analysis_model"
-METADATA_PROMPT_LABEL = "prompt_label"
-METADATA_PROCESSING_SECONDS = "processing_seconds"
 
 SUSPICIOUS_COMPRESSION_RATIO = 2.4
 
