@@ -45,7 +45,14 @@ async def serve_audio(request: Request) -> Response:
 
 
 api = Starlette(
-    routes=[Route(f"{AUDIO_ROUTE}/{{{PARAM_CALL_ID}:int}}", serve_audio)]
+    routes=[
+        Route(
+            rx.config.get_config().prepend_backend_path(
+                f"{AUDIO_ROUTE}/{{{PARAM_CALL_ID}:int}}"
+            ),
+            serve_audio,
+        )
+    ]
 )
 
 app = rx.App(api_transformer=api)

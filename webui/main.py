@@ -14,6 +14,7 @@ from src.constants import (
     REFLEX_MODULE,
     REFLEX_RUN_COMMAND,
     SHUTDOWN_EXIT_CODE,
+    STARTUP_ACCESS_NOTE,
     TASKKILL_COMMAND,
     TASKKILL_TREE_FLAGS,
     TERMINATE_TIMEOUT_SECONDS,
@@ -30,9 +31,10 @@ def parse_args() -> argparse.Namespace:
 
 def _print_startup(config: Config, log_file: Path) -> None:
     print(
-        f"web interface starting: frontend {config.server.frontend_url}, "
-        f"backend {config.server.api_url}, timezone {config.display.timezone}"
+        f"web interface starting: {config.server.local_url}, "
+        f"backend port {config.server.backend_port}, timezone {config.display.timezone}"
     )
+    print(STARTUP_ACCESS_NOTE.format(port=config.server.frontend_port))
     print(f"logs are written to {log_file}")
 
 

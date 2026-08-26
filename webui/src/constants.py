@@ -49,6 +49,13 @@ TASKKILL_TREE_FLAGS = ("/T", "/F", "/PID")
 TERMINATE_TIMEOUT_SECONDS = 10
 
 PORT_PROBE_HOST = "0.0.0.0"
+SAME_DOMAIN_HOST = "localhost"
+SAME_DOMAIN_SCHEME = "http"
+CORS_ALLOWED_ORIGINS = ["*"]
+STARTUP_ACCESS_NOTE = (
+    "reachable from other machines at http://<this-host>:{port} "
+    "once both ports are open"
+)
 
 SESSION_COOKIE_NAME = "webui_session"
 SESSION_SAME_SITE = "strict"

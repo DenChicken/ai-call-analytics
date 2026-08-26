@@ -6,7 +6,6 @@ import reflex as rx
 from src import context, errors, formatting
 from src.constants import (
     AUDIO_ELEMENT_ID,
-    AUDIO_ROUTE,
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
     MILLISECONDS_PER_SECOND,
@@ -67,7 +66,7 @@ class CallData:
     scores: list[ScoreRow] = field(default_factory=list)
     score_label: str = EMPTY_VALUE
     segments: list[SegmentRow] = field(default_factory=list)
-    audio_url: str = ""
+    has_audio: bool = False
     asr_model: str = EMPTY_VALUE
     analysis_model: str = EMPTY_VALUE
     prompt_label: str = EMPTY_VALUE
@@ -97,7 +96,7 @@ class CallState(AuthState):
     scores: list[ScoreRow] = []
     score_label: str = EMPTY_VALUE
     segments: list[SegmentRow] = []
-    audio_url: str = ""
+    has_audio: bool = False
     asr_model: str = EMPTY_VALUE
     analysis_model: str = EMPTY_VALUE
     prompt_label: str = EMPTY_VALUE
@@ -138,7 +137,7 @@ class CallState(AuthState):
         self.scores = data.scores
         self.score_label = data.score_label
         self.segments = data.segments
-        self.audio_url = data.audio_url
+        self.has_audio = data.has_audio
         self.asr_model = data.asr_model
         self.analysis_model = data.analysis_model
         self.prompt_label = data.prompt_label
@@ -199,7 +198,7 @@ def collect(call_id: int, offset_hours: int) -> CallData:
         scores=scores,
         score_label=formatting.fraction(met, len(scores)),
         segments=_segments(database, call_id),
-        audio_url=_audio_url(call_id, details["audio_path"]),
+        has_audio=context.audio().locate(details["audio_path"]) is not None,
         asr_model=details["asr_model"] or EMPTY_VALUE,
         analysis_model=details["analysis_model"] or EMPTY_VALUE,
         prompt_label=details["prompt_label"] or EMPTY_VALUE,
@@ -219,7 +218,3 @@ def _segments(database, call_id: int) -> list[SegmentRow]:
     ]
 
 
-def _audio_url(call_id: int, audio_path: str | None) -> str:
-    if not audio_path or context.audio().locate(audio_path) is None:
-        return ""
-    return f"{context.config().server.api_url}{AUDIO_ROUTE}/{call_id}"

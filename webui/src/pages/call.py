@@ -1,5 +1,6 @@
 import reflex as rx
 
+from src.audio import call_audio_url
 from src.components.common import (
     breadcrumbs,
     empty_state,
@@ -221,9 +222,9 @@ def _found_view() -> rx.Component:
                 section_card(
                     AUDIO_TITLE,
                     rx.cond(
-                        CallState.audio_url != "",
+                        CallState.has_audio,
                         rx.el.audio(
-                            src=CallState.audio_url,
+                            src=call_audio_url(CallState.current_call_id),
                             id=AUDIO_ELEMENT_ID,
                             controls=True,
                             preload="metadata",

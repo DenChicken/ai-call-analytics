@@ -2,7 +2,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.constants import LOG_MODULE_DIR
+from src.constants import LOG_MODULE_DIR, SAME_DOMAIN_HOST, SAME_DOMAIN_SCHEME
 
 PATHS_SECTION = "paths"
 DATA_DIR_KEY = "data_dir"
@@ -26,18 +26,17 @@ class StorageConfig:
 
 @dataclass(frozen=True)
 class ServerConfig:
-    host: str
-    scheme: str
     frontend_port: int
     backend_port: int
+    backend_path: str
 
     @property
     def api_url(self) -> str:
-        return f"{self.scheme}://{self.host}:{self.backend_port}"
+        return f"{SAME_DOMAIN_SCHEME}://{SAME_DOMAIN_HOST}:{self.backend_port}"
 
     @property
-    def frontend_url(self) -> str:
-        return f"{self.scheme}://{self.host}:{self.frontend_port}"
+    def local_url(self) -> str:
+        return f"{SAME_DOMAIN_SCHEME}://{SAME_DOMAIN_HOST}:{self.frontend_port}"
 
 
 @dataclass(frozen=True)
@@ -148,10 +147,9 @@ def load_config(path: str | Path) -> Config:
         ),
         storage=StorageConfig(data_dir=data_dir),
         server=ServerConfig(
-            host=_require(server_raw, "host", "server"),
-            scheme=_require(server_raw, "scheme", "server"),
             frontend_port=_require(server_raw, "frontend_port", "server"),
             backend_port=_require(server_raw, "backend_port", "server"),
+            backend_path=_require(server_raw, "backend_path", "server"),
         ),
         session=SessionConfig(
             max_age_seconds=_require(session_raw, "max_age_seconds", "session"),

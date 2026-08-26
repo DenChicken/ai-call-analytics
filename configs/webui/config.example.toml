@@ -7,10 +7,9 @@ logs_dir = "C:/projects/ai-call-analytics/logs"
 dsn_file = "database_dsn"
 
 [server]
-host = "localhost"
-scheme = "http"
 frontend_port = 3000
 backend_port = 8000
+backend_path = ""
 
 [session]
 max_age_seconds = 604800
