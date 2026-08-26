@@ -25,7 +25,7 @@ from src.constants import (
 from src.state.dashboard import DashboardState
 
 TITLE = SECTION_DASHBOARD
-KPI_PROCESSED = "Звонков за период"
+KPI_PROCESSED = "Состоялось звонков"
 KPI_ANALYZED = "Проанализировано"
 KPI_QUEUED = "В очереди"
 KPI_BEST = "Лучший менеджер"
