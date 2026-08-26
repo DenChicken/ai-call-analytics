@@ -147,7 +147,8 @@ class Database:
                     """
                     UPDATE processing_jobs
                     SET status = %s, attempts = attempts + 1,
-                        claimed_at = now(), updated_at = now()
+                        claimed_at = now(), updated_at = now(),
+                        error_code = NULL, last_error = NULL
                     WHERE call_id = %s
                     RETURNING attempts
                     """,
