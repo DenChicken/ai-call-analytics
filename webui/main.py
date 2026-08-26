@@ -1,6 +1,7 @@
 import argparse
 import os
 import signal
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -9,6 +10,7 @@ from src.config import Config, ConfigError, load_config
 from src.constants import (
     CONFIG_ENV_VAR,
     LOG_FILE_ENV_VAR,
+    PORT_PROBE_HOST,
     REFLEX_MODULE,
     REFLEX_RUN_COMMAND,
     SHUTDOWN_EXIT_CODE,
@@ -32,6 +34,21 @@ def _print_startup(config: Config, log_file: Path) -> None:
         f"backend {config.server.api_url}, timezone {config.display.timezone}"
     )
     print(f"logs are written to {log_file}")
+
+
+def _check_ports(config: Config) -> None:
+    for key, port in (
+        ("frontend_port", config.server.frontend_port),
+        ("backend_port", config.server.backend_port),
+    ):
+        with socket.socket() as probe:
+            try:
+                probe.bind((PORT_PROBE_HOST, port))
+            except OSError as error:
+                raise ConfigError(
+                    f"'{key}' in [server] is {port}, but that port is already in use: "
+                    "stop whatever is listening on it or pick another port"
+                ) from error
 
 
 def _terminate_tree(process: subprocess.Popen) -> None:
@@ -59,6 +76,7 @@ def main() -> int:
 
     try:
         config = load_config(args.config)
+        _check_ports(config)
     except ConfigError as error:
         print(f"config error: {error}", file=sys.stderr)
         return 1
