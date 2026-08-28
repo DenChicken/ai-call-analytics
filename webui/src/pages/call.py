@@ -6,7 +6,6 @@ from src.components.common import (
     empty_state,
     not_found,
     section_card,
-    status_badge,
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
@@ -69,7 +68,12 @@ def _field(label: str, value) -> rx.Component:
 def _header() -> rx.Component:
     return sticky_header(
         breadcrumbs((SECTION_CALLS, ROUTE_CALLS), TITLE),
-        status_badge(CallState.status_label, CallState.status_color, CallState.error),
+        rx.badge(CallState.status_label, color_scheme=CallState.status_color),
+        rx.cond(
+            CallState.error_reason != "",
+            rx.text(CallState.error_reason, size="1", color_scheme="gray"),
+            rx.fragment(),
+        ),
         rx.spacer(),
         rx.cond(
             CallState.crm_link != "",

@@ -2,6 +2,7 @@ import reflex as rx
 
 from src.components.charts import criteria_deltas_chart, top_managers_chart
 from src.components.common import (
+    HINT_CURSOR,
     checkbox_menu,
     empty_state,
     kpi_card,
@@ -38,7 +39,11 @@ RECENT_TITLE = "Завершённые анализы"
 EMPTY_QUEUE = "Очередь пуста"
 EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
-FAILED_LABEL = "с ошибкой"
+FAILED_LABEL = "пропущено:"
+FAILED_HINT = (
+    "Звонки, которые не удалось проанализировать. "
+    "Причина указана в статусе звонка."
+)
 
 LINK_ICON_SIZE = 14
 NAME_MAX_WIDTH = "9rem"
@@ -101,11 +106,15 @@ def _kpi_row() -> rx.Component:
             "inbox",
             rx.cond(
                 DashboardState.failed > 0,
-                rx.text(
-                    f"{DashboardState.failed} {FAILED_LABEL}",
-                    size="2",
-                    color_scheme="tomato",
-                    white_space="nowrap",
+                rx.tooltip(
+                    rx.text(
+                        f"{FAILED_LABEL} {DashboardState.failed}",
+                        size="2",
+                        color_scheme="gray",
+                        white_space="nowrap",
+                        cursor=HINT_CURSOR,
+                    ),
+                    content=FAILED_HINT,
                 ),
                 rx.fragment(),
             ),

@@ -81,7 +81,7 @@ class CallState(AuthState):
     status: str = ""
     status_label: str = EMPTY_VALUE
     status_color: str = DEFAULT_STATUS_COLOR
-    error: str = ""
+    error_reason: str = ""
     agent_name: str = EMPTY_VALUE
     manager_id: int = 0
     client: str = EMPTY_VALUE
@@ -122,7 +122,7 @@ class CallState(AuthState):
         self.status = data.status
         self.status_label = data.status_label
         self.status_color = data.status_color
-        self.error = data.error
+        self.error_reason = data.error
         self.agent_name = data.agent_name
         self.manager_id = data.manager_id
         self.client = data.client

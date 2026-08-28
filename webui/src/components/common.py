@@ -31,6 +31,7 @@ CRUMB_SPACING = "2"
 CRUMB_MAX_WIDTH = "20rem"
 CRUMB_PARENT_SIZE = "2"
 CRUMB_CURRENT_SIZE = "5"
+HINT_CURSOR = "help"
 TRUNCATE_STYLE = {
     "overflow": "hidden",
     "text_overflow": "ellipsis",
@@ -213,7 +214,10 @@ def scrollable_table(*children: rx.Component, size: str = TABLE_SIZE) -> rx.Comp
 def status_badge(label: rx.Var, color: rx.Var, error: rx.Var) -> rx.Component:
     return rx.cond(
         error != "",
-        rx.tooltip(rx.badge(label, color_scheme=color), content=error),
+        rx.tooltip(
+            rx.badge(label, color_scheme=color, cursor=HINT_CURSOR),
+            content=error,
+        ),
         rx.badge(label, color_scheme=color),
     )
 
