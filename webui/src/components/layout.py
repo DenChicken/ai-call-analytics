@@ -27,6 +27,7 @@ SIDEBAR_WIDTH = "15rem"
 SIDEBAR_COLLAPSED_WIDTH = "4rem"
 SIDEBAR_PADDING = "0.75rem"
 CONTENT_PADDING = "1.5rem"
+LOADING_HEIGHT = "100vh"
 NAV_ICON_SIZE = 18
 BRAND_ICON_SIZE = 20
 FOOTER_ICON_SIZE = 16
@@ -239,36 +240,45 @@ def sticky_header(*children: rx.Component) -> rx.Component:
 def page_layout(
     *children: rx.Component, header: rx.Component | None = None, on_mount=None
 ) -> rx.Component:
-    return rx.hstack(
-        _timezone_dialog(),
-        _sidebar(),
-        rx.vstack(
-            header if header is not None else rx.fragment(),
-            rx.box(
-                rx.cond(
-                    AuthState.load_error != "",
-                    rx.callout(
-                        AuthState.load_error,
-                        color_scheme="red",
-                        size="1",
-                        width="100%",
-                        margin_bottom=CONTENT_PADDING,
+    return rx.cond(
+        AuthState.is_hydrated & (AuthState.session_login != ""),
+        rx.hstack(
+            _timezone_dialog(),
+            _sidebar(),
+            rx.vstack(
+                header if header is not None else rx.fragment(),
+                rx.box(
+                    rx.cond(
+                        AuthState.load_error != "",
+                        rx.callout(
+                            AuthState.load_error,
+                            color_scheme="red",
+                            size="1",
+                            width="100%",
+                            margin_bottom=CONTENT_PADDING,
+                        ),
+                        rx.fragment(),
                     ),
-                    rx.fragment(),
+                    *children,
+                    padding=CONTENT_PADDING,
+                    width="100%",
+                    max_width=CONTENT_MAX_WIDTH,
+                    sx=CHART_FOCUS_RESET,
                 ),
-                *children,
-                padding=CONTENT_PADDING,
+                spacing="0",
                 width="100%",
-                max_width=CONTENT_MAX_WIDTH,
-                sx=CHART_FOCUS_RESET,
+                min_width="0",
+                align="start",
             ),
             spacing="0",
-            width="100%",
-            min_width="0",
             align="start",
+            width="100%",
+            on_mount=on_mount if on_mount is not None else AuthState.require_session,
         ),
-        spacing="0",
-        align="start",
-        width="100%",
-        on_mount=on_mount if on_mount is not None else AuthState.require_session,
+        rx.center(
+            rx.spinner(size="3"),
+            width="100%",
+            height=LOADING_HEIGHT,
+            on_mount=AuthState.require_session,
+        ),
     )

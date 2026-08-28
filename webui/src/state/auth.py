@@ -198,6 +198,8 @@ class AuthState(rx.State):
 
     @rx.event
     def require_session(self):
+        if not self.is_hydrated:
+            return AuthState.require_session
         if not self.session_login:
             return rx.redirect(ROUTE_LOGIN)
 
