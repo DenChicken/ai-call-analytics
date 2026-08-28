@@ -19,7 +19,8 @@ TOP_LEGEND_RADIUS = "var(--radius-2)"
 TOP_LEGEND_NUMBER_WIDTH = "1.4rem"
 TOP_LEGEND_HOVER_BACKGROUND = "var(--gray-a3)"
 TOP_LEGEND_TEXT_SIZE = "1"
-TOP_NAME_MAX_WIDTH = "11rem"
+TOP_LEGEND_ANALYZED_WIDTH = "3.5rem"
+TOP_LEGEND_SCORE_WIDTH = "2.2rem"
 TOP_ANALYZED_TEMPLATE = "{count} зв."
 
 BAR_BEFORE_COLOR = "var(--gray-8)"
@@ -71,7 +72,7 @@ def _top_manager_row(entry) -> rx.Component:
                 entry.name,
                 size=TOP_LEGEND_TEXT_SIZE,
                 flex="1",
-                max_width=TOP_NAME_MAX_WIDTH,
+                min_width="0",
             ),
             rx.text(
                 TOP_ANALYZED_TEMPLATE.format(count=entry.analyzed),
@@ -79,12 +80,16 @@ def _top_manager_row(entry) -> rx.Component:
                 color_scheme="gray",
                 white_space="nowrap",
                 flex_shrink="0",
+                width=TOP_LEGEND_ANALYZED_WIDTH,
+                text_align="right",
             ),
             rx.text(
                 entry.score_label,
                 size=TOP_LEGEND_TEXT_SIZE,
                 weight="medium",
                 flex_shrink="0",
+                width=TOP_LEGEND_SCORE_WIDTH,
+                text_align="right",
             ),
             spacing=TOP_LEGEND_SPACING,
             align="center",
