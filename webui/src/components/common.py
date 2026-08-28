@@ -63,7 +63,7 @@ def breadcrumbs(parent: tuple[str, str], current: rx.Var | str) -> rx.Component:
             current, size=CRUMB_CURRENT_SIZE, **TRUNCATE_STYLE, max_width=CRUMB_MAX_WIDTH
         ),
         spacing=CRUMB_SPACING,
-        align="baseline",
+        align="center",
         min_width="0",
     )
 
