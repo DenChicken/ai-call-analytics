@@ -1,5 +1,6 @@
 import logging
 import secrets
+import time
 
 import reflex as rx
 from argon2 import PasswordHasher
@@ -14,6 +15,7 @@ from src.constants import (
     LOAD_ERROR_MESSAGE,
     LOGIN_ERROR_MESSAGE,
     MAX_UTC_OFFSET,
+    MILLISECONDS_PER_SECOND,
     MIN_UTC_OFFSET,
     NEGATIVE_SIGN,
     OFFSET_COOKIE_NAME,
@@ -177,7 +179,7 @@ class AuthState(rx.State):
 
         self.busy = False
         if token is None:
-            logger.info("failed sign in attempt for %r", login)
+            logger.warning("failed sign in attempt for %r", login)
             self.error = LOGIN_ERROR_MESSAGE
             return
 
@@ -205,12 +207,18 @@ class AuthState(rx.State):
 
 
 def guarded(state: AuthState, action) -> None:
+    started = time.monotonic()
     try:
         action()
     except Exception:
         logger.exception("failed to load page data")
         state.load_error = LOAD_ERROR_MESSAGE
         return
+    logger.trace(
+        "%s loaded in %.0fms",
+        type(state).__name__,
+        (time.monotonic() - started) * MILLISECONDS_PER_SECOND,
+    )
     state.load_error = ""
 
 

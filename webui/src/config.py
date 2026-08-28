@@ -2,9 +2,15 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.constants import LOG_MODULE_DIR, SAME_DOMAIN_HOST, SAME_DOMAIN_SCHEME
+from src.constants import (
+    LOG_LEVELS,
+    LOG_MODULE_DIR,
+    SAME_DOMAIN_HOST,
+    SAME_DOMAIN_SCHEME,
+)
 
 PATHS_SECTION = "paths"
+LOGGING_SECTION = "logging"
 DATA_DIR_KEY = "data_dir"
 SECRETS_DIR_KEY = "secrets_dir"
 LOGS_DIR_KEY = "logs_dir"
@@ -81,6 +87,15 @@ def _require(section: dict, key: str, where: str):
     if key not in section:
         raise ConfigError(f"missing required key '{key}' in [{where}]")
     return section[key]
+
+
+def _require_level(section: dict, key: str) -> str:
+    value = str(_require(section, key, LOGGING_SECTION)).upper()
+    if value not in LOG_LEVELS:
+        raise ConfigError(
+            f"'{key}' in [{LOGGING_SECTION}] is {value}, expected one of: {', '.join(LOG_LEVELS)}"
+        )
+    return value
 
 
 def resolve_anchor(raw: dict, key: str) -> Path:
@@ -162,9 +177,9 @@ def load_config(path: str | Path) -> Config:
             queue_size=_require(display_raw, "queue_size", "display"),
         ),
         logging=LoggingConfig(
-            level=_require(logging_raw, "level", "logging"),
+            level=_require_level(logging_raw, "level"),
             dir=logs_dir / LOG_MODULE_DIR,
             external_logs=_require(logging_raw, "external_logs", "logging"),
-            external_level=_require(logging_raw, "external_level", "logging"),
+            external_level=_require_level(logging_raw, "external_level"),
         ),
     )

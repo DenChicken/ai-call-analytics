@@ -13,18 +13,7 @@ from src.constants import (
     LOG_FORMAT,
     LOG_LATEST_NAME,
     LOG_MAX_BYTES,
-    LOG_TRACE_LEVEL,
-    LOG_TRACE_NAME,
 )
-
-
-def _trace(self: logging.Logger, message: str, *args, **kwargs) -> None:
-    if self.isEnabledFor(LOG_TRACE_LEVEL):
-        self._log(LOG_TRACE_LEVEL, message, args, **kwargs)
-
-
-logging.addLevelName(LOG_TRACE_LEVEL, LOG_TRACE_NAME)
-logging.Logger.trace = _trace
 
 
 def _link_latest(directory: Path, target: Path) -> None:

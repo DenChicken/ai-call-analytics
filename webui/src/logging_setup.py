@@ -38,12 +38,11 @@ def _link_latest(directory: Path, target: Path) -> None:
 
 
 def setup_logging(config: LoggingConfig) -> None:
-    level = config.level.upper()
     root = logging.getLogger()
-    root.setLevel(level if config.external_logs else config.external_level.upper())
+    root.setLevel(config.level if config.external_logs else config.external_level)
     root.handlers.clear()
     for name in LOG_APPLICATION_LOGGERS:
-        logging.getLogger(name).setLevel(level)
+        logging.getLogger(name).setLevel(config.level)
 
     formatter = logging.Formatter(LOG_FORMAT)
 

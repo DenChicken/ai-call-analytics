@@ -1,4 +1,5 @@
 import logging
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -6,7 +7,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from src import queries
-from src.constants import QUEUE_STATUSES, SECONDS_PER_MINUTE
+from src.constants import MILLISECONDS_PER_SECOND, QUEUE_STATUSES, SECONDS_PER_MINUTE
 
 POOL_MIN_SIZE = 1
 POOL_MAX_SIZE = 4
@@ -15,8 +16,19 @@ MINUTES_PER_HOUR = 60
 ZONE_NAME_TEMPLATE = "{sign}{hours:02d}:{minutes:02d}"
 ZONE_POSITIVE_SIGN = "+"
 ZONE_NEGATIVE_SIGN = "-"
+UNKNOWN_QUERY_NAME = "query"
 
 logger = logging.getLogger(__name__)
+
+QUERY_NAMES = {
+    text: name
+    for name, text in vars(queries).items()
+    if isinstance(text, str) and not name.startswith("_")
+}
+
+
+def _query_name(query: str) -> str:
+    return QUERY_NAMES.get(query, UNKNOWN_QUERY_NAME)
 
 
 @dataclass
@@ -41,10 +53,18 @@ class Database:
         self._pool.close()
 
     def _fetch(self, query: str, params: dict | None = None) -> list[dict]:
+        started = time.monotonic()
         with self._pool.connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query, params or {})
-                return cursor.fetchall()
+                rows = cursor.fetchall()
+        logger.trace(
+            "%s returned %s rows in %.0fms",
+            _query_name(query),
+            len(rows),
+            (time.monotonic() - started) * MILLISECONDS_PER_SECOND,
+        )
+        return rows
 
     def _fetch_one(self, query: str, params: dict | None = None) -> dict | None:
         rows = self._fetch(query, params)
@@ -54,6 +74,7 @@ class Database:
         with self._pool.connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query, params or {})
+                logger.trace("%s affected %s rows", _query_name(query), cursor.rowcount)
 
     def user_by_login(self, login: str) -> dict | None:
         return self._fetch_one(queries.USER_BY_LOGIN, {"login": login})
