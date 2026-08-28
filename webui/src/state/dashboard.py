@@ -26,6 +26,21 @@ from src.state.auth import AuthState, guarded
 
 logger = logging.getLogger(__name__)
 
+TOP_MANAGERS_LIMIT = 10
+CHART_NAME_KEY = "name"
+CHART_SCORE_KEY = "score"
+FIRST_MANAGER_NUMBER = 1
+
+
+@dataclass
+class TopManagerRow:
+    agent_id: int
+    number: int
+    name: str
+    score: float
+    score_label: str
+    analyzed: int
+
 
 @dataclass
 class QueueRow:
@@ -64,6 +79,7 @@ class DashboardData:
     worst_manager_id: int
     worst_score: str
     criteria_deltas: list[criteria.CriterionDelta]
+    top_managers: list[TopManagerRow]
     queue_rows: list[QueueRow]
     recent_rows: list[AnalysisRow]
 
@@ -88,6 +104,8 @@ class DashboardState(AuthState):
     criteria_deltas: list[criteria.CriterionDelta] = []
     criteria_chart: list[dict] = []
     criteria_expanded: bool = False
+    top_managers: list[TopManagerRow] = []
+    top_managers_chart: list[dict] = []
     queue_rows: list[QueueRow] = []
     recent_rows: list[AnalysisRow] = []
     watching: bool = False
@@ -208,6 +226,14 @@ class DashboardState(AuthState):
         self.worst_score = data.worst_score
         self.criteria_deltas = data.criteria_deltas
         self.criteria_chart = criteria.chart_points(data.criteria_deltas)
+        self.top_managers = data.top_managers
+        self.top_managers_chart = [
+            {
+                CHART_NAME_KEY: str(entry.number),
+                CHART_SCORE_KEY: entry.score,
+            }
+            for entry in data.top_managers
+        ]
         self.queue_rows = data.queue_rows
         self.recent_rows = data.recent_rows
 
@@ -224,7 +250,8 @@ def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
     totals = database.period_totals(window)
     previous_totals = database.period_totals(previous)
     counts = database.queue_counts()
-    best, worst = _extremes(database, window)
+    scored = [row for row in database.agent_totals(window) if row["ratio"] is not None]
+    best, worst = _extremes(scored)
 
     return DashboardData(
         processed=totals["calls"],
@@ -241,13 +268,13 @@ def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
         worst_manager_id=worst[1],
         worst_score=worst[2],
         criteria_deltas=criteria.deltas(database, window, previous),
+        top_managers=_top_managers(scored),
         queue_rows=_queue_rows(database, types, display.queue_size, offset_hours),
         recent_rows=_recent_rows(database, types, display.queue_size, offset_hours),
     )
 
 
-def _extremes(database, window: dict) -> tuple[tuple, tuple]:
-    scored = [row for row in database.agent_totals(window) if row["ratio"] is not None]
+def _extremes(scored: list[dict]) -> tuple[tuple, tuple]:
     agents = sorted(scored, key=lambda row: row["ratio"])
     if not agents:
         empty = (EMPTY_VALUE, 0, "")
@@ -257,6 +284,21 @@ def _extremes(database, window: dict) -> tuple[tuple, tuple]:
         (best["display_name"], best["agent_id"], formatting.share_label(best["ratio"])),
         (worst["display_name"], worst["agent_id"], formatting.share_label(worst["ratio"])),
     )
+
+
+def _top_managers(scored: list[dict]) -> list[TopManagerRow]:
+    best = sorted(scored, key=lambda row: row["ratio"], reverse=True)[:TOP_MANAGERS_LIMIT]
+    return [
+        TopManagerRow(
+            agent_id=row["agent_id"],
+            number=number,
+            name=row["display_name"],
+            score=formatting.share(row["ratio"]),
+            score_label=formatting.share_label(row["ratio"]),
+            analyzed=row["analyzed"],
+        )
+        for number, row in enumerate(best, start=FIRST_MANAGER_NUMBER)
+    ]
 
 
 def _queue_rows(database, types: list[str], limit: int, offset_hours: int) -> list[QueueRow]:

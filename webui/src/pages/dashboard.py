@@ -1,6 +1,6 @@
 import reflex as rx
 
-from src.components.charts import criteria_deltas_chart
+from src.components.charts import criteria_deltas_chart, top_managers_chart
 from src.components.common import (
     checkbox_menu,
     empty_state,
@@ -22,9 +22,11 @@ from src.constants import (
     SECTION_DASHBOARD,
     TYPES_LABEL,
 )
-from src.state.dashboard import DashboardState
+from src.state.dashboard import CHART_NAME_KEY, CHART_SCORE_KEY, DashboardState
 
 TITLE = SECTION_DASHBOARD
+TOP_MANAGERS_TITLE = "Лучшие менеджеры"
+EMPTY_TOP_MANAGERS = "Нет оценённых звонков за период"
 KPI_PROCESSED = "Состоялось звонков"
 KPI_ANALYZED = "Проанализировано"
 KPI_QUEUED = "В очереди"
@@ -135,6 +137,12 @@ def _criteria_chart() -> rx.Component:
     return criteria_deltas_chart(DashboardState, EMPTY_CRITERIA)
 
 
+def _top_managers_chart() -> rx.Component:
+    return top_managers_chart(
+        DashboardState, CHART_NAME_KEY, CHART_SCORE_KEY, EMPTY_TOP_MANAGERS
+    )
+
+
 def _manager_link(name: rx.Var, manager_id: rx.Var) -> rx.Component:
     return rx.cond(
         manager_id > 0,
@@ -205,6 +213,7 @@ def dashboard_page() -> rx.Component:
     return page_layout(
         rx.vstack(
             _kpi_row(),
+            section_card(TOP_MANAGERS_TITLE, _top_managers_chart()),
             section_card(CRITERIA_TITLE, _criteria_chart()),
             rx.hstack(
                 section_card(

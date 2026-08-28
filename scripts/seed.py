@@ -1,6 +1,7 @@
 import argparse
 import json
 import random
+import re
 import shutil
 import sys
 from datetime import datetime, timedelta, timezone
@@ -11,12 +12,14 @@ from psycopg.rows import dict_row
 
 SOURCE_NAME = "synthetic"
 DEFAULT_DAYS = 30
-DEFAULT_CALLS = 320
+DEFAULT_CALLS = 700
 DEFAULT_SEED = 20260821
 
 DONE_DIR_TEMPLATE = "done/%Y-%m/%d"
+DONE_DIR = "done"
 PENDING_DIR = "pending"
 AUDIO_SUFFIX = ".mp3"
+SEEDED_NAME_PATTERN = r"^\d+_\d{14}\.mp3$"
 
 WORK_START_HOUR = 9
 WORK_END_HOUR = 20
@@ -34,18 +37,24 @@ STATUS_ANALYZING = "analyzing"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 
+ERROR_AUDIO_MISSING = "audio_missing"
+
 ERROR_CODES = (
-    "audio_missing",
+    ERROR_AUDIO_MISSING,
     "asr_empty",
     "transcript_empty",
     "llm_truncated",
     "llm_prompt_too_long",
     "llm_invalid_output",
+    "no_criteria",
+    "no_call_types",
     "out_of_memory",
     "database",
     "stale_claim",
     "unknown",
 )
+
+ERRORS_BEFORE_TRANSCRIPT = (ERROR_AUDIO_MISSING, "asr_empty")
 
 STATUS_WEIGHTS = {
     STATUS_DONE: 74,
@@ -57,10 +66,17 @@ STATUS_WEIGHTS = {
 }
 
 STORED_STATUSES = (STATUS_TRANSCRIBED, STATUS_ANALYZING, STATUS_DONE, STATUS_FAILED)
+CLAIMED_STATUSES = (STATUS_TRANSCRIBING, STATUS_ANALYZING)
+CLAIM_DELAY_MINUTES_RANGE = (1, 45)
+RETRY_CHANCE = 0.2
 
 FIRST_SEGMENT_MIN_MS = 200
 FIRST_SEGMENT_MAX_MS = 1500
 SKILL_RANGE = (0.15, 0.8)
+CALL_SKILL_SPREAD = 0.18
+SKILL_MIN = 0.05
+SKILL_MAX = 0.95
+CALLS_PER_AGENT_RANGE = (0.4, 1.6)
 LIST_ITEMS_RANGE = (1, 3)
 ATTEMPTS_RANGE = (1, 3)
 PROCESSING_RANGE = (40, 400)
@@ -84,6 +100,20 @@ AGENTS = (
     ("14002", "Северова Анастасия Игоревна", "a.severova"),
     ("15530", "Мамедов Тимур Русланович", "t.mamedov"),
     ("16110", "Войтенко Ольга Сергеевна", "o.voytenko"),
+    ("12048", "Соколова Вера Павловна", "v.sokolova"),
+    ("13377", "Бельтюков Роман Игоревич", "r.beltyukov"),
+    ("10925", "Лавренюк Павел Витальевич", "p.lavrenyuk"),
+    ("18204", "Шулембаев Тимур Маратович", "t.shulembaev"),
+    ("14761", "Гордеева Марина Олеговна", "m.gordeeva"),
+    ("16833", "Прохоров Илья Сергеевич", "i.prohorov"),
+    ("11502", "Насонова Юлия Андреевна", "y.nasonova"),
+    ("17690", "Демьяненко Артём Валерьевич", "a.demyanenko"),
+    ("12914", "Ковалёва Светлана Юрьевна", "s.kovaleva"),
+    ("15188", "Тарасов Никита Дмитриевич", "n.tarasov"),
+    ("13640", "Шаповалова Елена Борисовна", "e.shapovalova"),
+    ("18471", "Ремизов Кирилл Антонович", "k.remizov"),
+    ("14395", "Аверина Дарья Максимовна", "d.averina"),
+    ("16257", "Байрамов Эльдар Рустамович", "e.bayramov"),
 )
 
 CALL_TYPES = (
@@ -181,13 +211,19 @@ PROMPT_LABELS = ("v2", "v3")
 LANGUAGE = "ru"
 PORTAL_URL = "https://b24.vinylrussia.ru"
 EMAIL_DOMAIN = "vinylrussia.ru"
-DIRECTIONS = ("outbound", "inbound", "callback")
-SUBJECTS = ("Исходящий звонок", "Входящий звонок", "Перезвон по заявке", None)
+DIRECTION_SUBJECTS = {
+    "outbound": ("Исходящий звонок", None),
+    "inbound": ("Входящий звонок", None),
+    "callback": ("Перезвон по заявке", None),
+}
+DIRECTION_WEIGHTS = {"outbound": 6, "inbound": 3, "callback": 1}
 
 
 CONFIRM_WARNING = (
     "about to delete every call, transcript and analysis, then fill the database "
-    "with synthetic data\nusers, sessions, criteria and call types are kept"
+    "with synthetic data\nsynthetic audio from earlier runs is deleted too: the whole "
+    "done directory and seeded files in pending\nusers, sessions, criteria and call "
+    "types are kept"
 )
 CONFIRM_PROMPT = "type 'yes' to continue: "
 CONFIRM_ANSWER = "yes"
@@ -205,6 +241,27 @@ def read_dsn(path: Path) -> str:
     if not dsn:
         raise SeedError(f"dsn file is empty: {path}")
     return dsn
+
+
+def source_files(root: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in (root / PENDING_DIR).glob(f"*{AUDIO_SUFFIX}")
+        if not re.match(SEEDED_NAME_PATTERN, path.name)
+    )
+
+
+def clear_seeded_audio(root: Path) -> int:
+    removed = 0
+    done_dir = root / DONE_DIR
+    if done_dir.is_dir():
+        removed = sum(1 for _ in done_dir.rglob(f"*{AUDIO_SUFFIX}"))
+        shutil.rmtree(done_dir)
+    for path in (root / PENDING_DIR).glob(f"*{AUDIO_SUFFIX}"):
+        if re.match(SEEDED_NAME_PATTERN, path.name):
+            path.unlink()
+            removed += 1
+    return removed
 
 
 def pick_status(chance: random.Random) -> str:
@@ -261,12 +318,14 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
 
         agents = []
         for external_id, display_name, mailbox in AGENTS:
-            last, first = display_name.split()[0], display_name.split()[1]
+            parts = display_name.split()
+            last, first = parts[0], parts[1]
+            second = parts[2] if len(parts) > 2 else None
             cursor.execute(
                 """
                 INSERT INTO agents (source_id, external_id, display_name, first_name,
-                                    last_name, email, profile_link)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                                    last_name, second_name, email, profile_link)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (source_id, external_id) DO UPDATE
                 SET display_name = EXCLUDED.display_name RETURNING id
                 """,
@@ -276,11 +335,19 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
                     display_name,
                     first,
                     last,
+                    second,
                     f"{mailbox}@{EMAIL_DOMAIN}",
                     f"{PORTAL_URL}/company/personal/user/{external_id}/",
                 ),
             )
-            agents.append((cursor.fetchone()["id"], display_name))
+            agents.append(
+                (
+                    cursor.fetchone()["id"],
+                    display_name,
+                    chance.uniform(*SKILL_RANGE),
+                    chance.uniform(*CALLS_PER_AGENT_RANGE),
+                )
+            )
 
         for position, (code, label, description) in enumerate(CALL_TYPES):
             cursor.execute(
@@ -313,9 +380,16 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
                 microsecond=0,
             )
             duration = chance.randint(MIN_DURATION, MAX_DURATION)
-            agent_id, display_name = chance.choice(agents)
+            direction = chance.choices(
+                list(DIRECTION_WEIGHTS), weights=list(DIRECTION_WEIGHTS.values())
+            )[0]
+            subject = chance.choice(DIRECTION_SUBJECTS[direction])
+            agent_id, display_name, skill, _ = chance.choices(
+                agents, weights=[entry[3] for entry in agents]
+            )[0]
             status = pick_status(chance)
             call_id = number + 1
+            error_code = chance.choice(ERROR_CODES) if status == STATUS_FAILED else None
 
             source_audio = audio_files[number % len(audio_files)]
             if status == STATUS_DONE:
@@ -325,7 +399,9 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
             target_dir.mkdir(parents=True, exist_ok=True)
             file_name = f"{call_id}_{started:%Y%m%d%H%M%S}{AUDIO_SUFFIX}"
             target = target_dir / file_name
-            if not target.exists():
+            if error_code == ERROR_AUDIO_MISSING:
+                target.unlink(missing_ok=True)
+            elif not target.exists():
                 shutil.copyfile(source_audio, target)
             audio_path = target.relative_to(root).as_posix()
 
@@ -343,30 +419,42 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
                     agent_id,
                     started,
                     duration,
-                    chance.choice(DIRECTIONS),
+                    direction,
                     f"+79{chance.randint(PHONE_MIN, PHONE_MAX)}",
-                    chance.choice(SUBJECTS),
+                    subject,
                     f"{PORTAL_URL}/crm/deal/details/{chance.randint(DEAL_MIN, DEAL_MAX)}/",
                     audio_path,
                     json.dumps({"CALL_ID": f"synthetic.{call_id}"}, ensure_ascii=False),
                 ),
             )
 
-            error_code = chance.choice(ERROR_CODES) if status == STATUS_FAILED else None
             last_error = f"synthetic failure: {error_code}" if error_code else None
-            attempts = (
-                chance.randint(*ATTEMPTS_RANGE) if status == STATUS_FAILED else 0
+            if status == STATUS_FAILED:
+                attempts = chance.randint(*ATTEMPTS_RANGE)
+            elif chance.random() < RETRY_CHANCE:
+                attempts = 1
+            else:
+                attempts = 0
+            updated_at = started + timedelta(hours=QUEUE_DELAY_HOURS)
+            claimed_at = (
+                started
+                + timedelta(minutes=chance.randint(*CLAIM_DELAY_MINUTES_RANGE))
+                if status in CLAIMED_STATUSES
+                else None
             )
             cursor.execute(
                 """
-                INSERT INTO processing_jobs (call_id, status, attempts, error_code,
-                                             last_error, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s)
+                INSERT INTO processing_jobs (call_id, status, attempts, claimed_at,
+                                             error_code, last_error, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """,
-                (call_id, status, attempts, error_code, last_error, started + timedelta(hours=QUEUE_DELAY_HOURS)),
+                (call_id, status, attempts, claimed_at, error_code, last_error, updated_at),
             )
 
-            if status in STORED_STATUSES:
+            transcribed = status in STORED_STATUSES and (
+                error_code not in ERRORS_BEFORE_TRANSCRIPT
+            )
+            if transcribed:
                 segments = build_segments(chance, duration, display_name)
                 if segments:
                     plain = " ".join(segment["text"] for segment in segments)
@@ -416,12 +504,15 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
                 ),
             )
 
-            skill = chance.uniform(*SKILL_RANGE)
+            call_skill = min(
+                SKILL_MAX,
+                max(SKILL_MIN, chance.gauss(skill, CALL_SKILL_SPREAD)),
+            )
             for code, _, _ in active_criteria(day_offset):
                 cursor.execute(
                     "INSERT INTO criterion_scores (call_id, criterion_code, score) "
                     "VALUES (%s, %s, %s)",
-                    (call_id, code, 1 if chance.random() < skill else 0),
+                    (call_id, code, 1 if chance.random() < call_skill else 0),
                 )
             stored += 1
 
@@ -457,10 +548,11 @@ def main() -> int:
 
     try:
         root = args.data_dir.resolve()
-        sources = sorted((root / PENDING_DIR).glob(f"*{AUDIO_SUFFIX}"))
+        sources = source_files(root)
         if not sources:
-            raise SeedError(f"no audio files in {root / PENDING_DIR}")
+            raise SeedError(f"no source audio files in {root / PENDING_DIR}")
 
+        removed = clear_seeded_audio(root)
         with psycopg.connect(read_dsn(args.dsn_file), row_factory=dict_row) as connection:
             analyzed = seed(connection, root, sources, args.days, args.calls, args.seed)
     except SeedError as error:
@@ -470,7 +562,10 @@ def main() -> int:
         print(f"seeding failed: {error}", file=sys.stderr)
         return 1
 
-    print(f"seeded {args.calls} calls over {args.days} days, {analyzed} of them analysed")
+    print(
+        f"seeded {args.calls} calls over {args.days} days, {analyzed} of them analysed, "
+        f"{removed} audio files from earlier runs removed"
+    )
     return 0
 
 

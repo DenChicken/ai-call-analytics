@@ -1,8 +1,26 @@
 import reflex as rx
 
-from src.components.common import empty_state
-from src.constants import CHART_MARGIN, CHART_TICK_COUNT, SHARE_MAX
+from src.components.common import empty_state, truncated
+from src.constants import (
+    CHART_MARGIN,
+    CHART_TICK_COUNT,
+    ROUTE_MANAGER,
+    SHARE_MAX,
+)
 from src.criteria import CHART_AFTER_KEY, CHART_BEFORE_KEY, CHART_LABEL_KEY
+
+TOP_BAR_COLOR = "var(--accent-9)"
+TOP_CHART_HEIGHT = 260
+TOP_BAR_SIZE = 28
+TOP_LEGEND_WIDTH = "20rem"
+TOP_LEGEND_SPACING = "2"
+TOP_LEGEND_PADDING = "0.25rem 0.5rem"
+TOP_LEGEND_RADIUS = "var(--radius-2)"
+TOP_LEGEND_NUMBER_WIDTH = "1.4rem"
+TOP_LEGEND_HOVER_BACKGROUND = "var(--gray-a3)"
+TOP_LEGEND_TEXT_SIZE = "1"
+TOP_NAME_MAX_WIDTH = "11rem"
+TOP_ANALYZED_TEMPLATE = "{count} зв."
 
 BAR_BEFORE_COLOR = "var(--gray-8)"
 BAR_AFTER_COLOR = "var(--accent-9)"
@@ -35,6 +53,87 @@ def _toggle(expanded, hidden_count, on_click) -> rx.Component:
             color_scheme="gray",
         ),
         rx.fragment(),
+    )
+
+
+def _top_manager_row(entry) -> rx.Component:
+    return rx.link(
+        rx.hstack(
+            rx.text(
+                entry.number,
+                size=TOP_LEGEND_TEXT_SIZE,
+                color_scheme="gray",
+                flex_shrink="0",
+                width=TOP_LEGEND_NUMBER_WIDTH,
+                text_align="right",
+            ),
+            truncated(
+                entry.name,
+                size=TOP_LEGEND_TEXT_SIZE,
+                flex="1",
+                max_width=TOP_NAME_MAX_WIDTH,
+            ),
+            rx.text(
+                TOP_ANALYZED_TEMPLATE.format(count=entry.analyzed),
+                size=TOP_LEGEND_TEXT_SIZE,
+                color_scheme="gray",
+                white_space="nowrap",
+                flex_shrink="0",
+            ),
+            rx.text(
+                entry.score_label,
+                size=TOP_LEGEND_TEXT_SIZE,
+                weight="medium",
+                flex_shrink="0",
+            ),
+            spacing=TOP_LEGEND_SPACING,
+            align="center",
+            width="100%",
+            padding=TOP_LEGEND_PADDING,
+            border_radius=TOP_LEGEND_RADIUS,
+            _hover={"background": TOP_LEGEND_HOVER_BACKGROUND},
+        ),
+        href=f"{ROUTE_MANAGER}/{entry.agent_id}",
+        underline="none",
+        color="inherit",
+        width="100%",
+    )
+
+
+def top_managers_chart(state, name_key: str, score_key: str, empty: str) -> rx.Component:
+    return rx.cond(
+        state.top_managers.length() > 0,
+        rx.hstack(
+            rx.box(
+                rx.recharts.bar_chart(
+                    rx.recharts.bar(
+                        data_key=score_key, fill=TOP_BAR_COLOR, bar_size=TOP_BAR_SIZE
+                    ),
+                    rx.recharts.x_axis(data_key=name_key),
+                    rx.recharts.y_axis(
+                        domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
+                    ),
+                    rx.recharts.graphing_tooltip(),
+                    rx.recharts.cartesian_grid(stroke_dasharray="3 3", vertical=False),
+                    data=state.top_managers_chart,
+                    height=TOP_CHART_HEIGHT,
+                    width="100%",
+                    margin=CHART_MARGIN,
+                ),
+                width="100%",
+                min_width="0",
+            ),
+            rx.vstack(
+                rx.foreach(state.top_managers, _top_manager_row),
+                spacing="0",
+                width=TOP_LEGEND_WIDTH,
+                flex_shrink="0",
+            ),
+            spacing="4",
+            width="100%",
+            align="start",
+        ),
+        empty_state(empty),
     )
 
 
