@@ -50,6 +50,7 @@ OPEN_LABEL = "открыть"
 
 CHART_HEIGHT = 260
 CRITERIA_CHART_HEIGHT = 320
+LINE_PANEL_BUTTONS_HEIGHT = 40
 RADAR_OPACITY = 0.5
 RADAR_OUTER_RADIUS = "78%"
 RADAR_HEIGHT = 340
@@ -250,7 +251,7 @@ def _line_panel() -> rx.Component:
         _legend_panel(
             rx.foreach(ManagerState.criteria_lines, _line_toggle),
             width="100%",
-            height=CRITERIA_CHART_HEIGHT,
+            height=CRITERIA_CHART_HEIGHT - LINE_PANEL_BUTTONS_HEIGHT,
         ),
         spacing="2",
         width=TREND_LEGEND_WIDTH,

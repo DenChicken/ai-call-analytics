@@ -51,6 +51,7 @@ META_ANALYZED = "Проанализирован"
 MARK_ICON_SIZE = 16
 NAME_MAX_WIDTH = "12rem"
 TRANSCRIPT_HEIGHT = "22rem"
+TRANSCRIPT_SCROLLBAR_GUTTER = "0.75rem"
 TIME_WIDTH = "3rem"
 MET_COLOR = "grass"
 UNMET_COLOR = "gray"
@@ -242,9 +243,11 @@ def _found_view() -> rx.Component:
                                 rx.foreach(CallState.segments, _segment_row),
                                 spacing="2",
                                 width="100%",
+                                padding_right=TRANSCRIPT_SCROLLBAR_GUTTER,
                             ),
                             height=TRANSCRIPT_HEIGHT,
                             type="auto",
+                            scrollbars="vertical",
                         ),
                         empty_state(NO_TRANSCRIPT),
                     ),
