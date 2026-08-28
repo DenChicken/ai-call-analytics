@@ -54,6 +54,7 @@ class BitrixClient:
     def call(self, method: str, params: dict) -> dict:
         url = self._rest_url + method + JSON_SUFFIX
         logger.debug("calling %s", method)
+        logger.trace("%s request params: %s", method, params)
 
         for attempt in range(self._network.max_retries):
             self._limiter.wait()
@@ -76,7 +77,13 @@ class BitrixClient:
             if response.status_code != httpx.codes.OK:
                 raise BitrixError(f"{method} returned HTTP {response.status_code}")
 
-            body = response.json()
+            try:
+                body = response.json()
+            except ValueError as error:
+                raise BitrixError(f"{method} returned a non-json body: {error}") from error
+            if not isinstance(body, dict):
+                raise BitrixError(f"{method} returned {type(body).__name__} instead of an object")
+
             error_code = body.get("error")
             if error_code in RETRYABLE_ERROR_CODES:
                 delay = self._backoff_delay(attempt)
@@ -86,6 +93,13 @@ class BitrixClient:
             if error_code:
                 raise BitrixError(f"{method} returned {error_code}: {body.get('error_description')}")
 
+            result = body.get("result")
+            logger.trace(
+                "%s returned %s of %s",
+                method,
+                len(result) if isinstance(result, list) else type(result).__name__,
+                body.get("total"),
+            )
             return body
 
         raise BitrixError(f"{method} failed after {self._network.max_retries} attempts")
@@ -96,7 +110,10 @@ class BitrixClient:
         for offset in range(0, len(keys), BATCH_MAX_COMMANDS):
             chunk = {key: commands[key] for key in keys[offset : offset + BATCH_MAX_COMMANDS]}
             body = self.call(BATCH_METHOD, {"halt": 0, "cmd": chunk})
-            result = body.get("result") or {}
+            result = body.get("result")
+            if not isinstance(result, dict):
+                logger.warning("batch returned %s instead of an object", type(result).__name__)
+                continue
             errors = result.get("result_error")
             if isinstance(errors, dict):
                 for key, error in errors.items():

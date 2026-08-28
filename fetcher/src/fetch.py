@@ -25,6 +25,9 @@ def run_once(config: Config, database: Database, source: Source) -> None:
     if batch.cursor is None:
         logger.info("source %s: nothing new since cursor %s", source.name, cursor)
         return
+    logger.trace(
+        "source %s: batch cursor %s, %s calls", source.name, batch.cursor, len(batch.calls)
+    )
 
     calls = batch.calls
     known = database.existing_external_ids(source_id, [call.external_id for call in calls])
@@ -49,6 +52,13 @@ def run_once(config: Config, database: Database, source: Source) -> None:
     try:
         for number, call in enumerate(new_calls, start=1):
             shutdown.check()
+            logger.trace(
+                "call %s: %ss, %s, agent %s",
+                call.external_id,
+                call.duration_seconds,
+                call.direction,
+                call.agent.external_id if call.agent else None,
+            )
             agent_id = database.upsert_agent(source_id, call.agent) if call.agent else None
 
             call_id = database.reserve_call_id()

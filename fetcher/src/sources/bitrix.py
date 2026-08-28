@@ -133,6 +133,13 @@ class BitrixSource(Source):
 
         calls = []
         for record in usable:
+            logger.trace(
+                "record %s: call %s, %ss, type %s",
+                record.get("ID"),
+                record.get("CALL_ID"),
+                record.get("CALL_DURATION"),
+                record.get("CALL_TYPE"),
+            )
             call_id = record.get("CALL_ID")
             if not call_id:
                 logger.warning("record without CALL_ID skipped: %s", record.get("ID"))
@@ -169,7 +176,8 @@ class BitrixSource(Source):
         if not file_id:
             raise ValueError(f"call {call.external_id} has no RECORD_FILE_ID")
         body = self._client.call(METHOD_FILE_GET, {"id": file_id})
-        download_url = (body.get("result") or {}).get("DOWNLOAD_URL")
+        result = body.get("result")
+        download_url = result.get("DOWNLOAD_URL") if isinstance(result, dict) else None
         if not download_url:
             raise ValueError(f"no DOWNLOAD_URL for file {file_id}")
         self._client.download(download_url, target)
@@ -188,13 +196,17 @@ class BitrixSource(Source):
                 METHOD_STATISTIC,
                 {"FILTER": call_filter, "SORT": "ID", "ORDER": "ASC", "start": start},
             )
-            page = body.get("result") or []
+            page = body.get("result")
+            if not isinstance(page, list):
+                logger.warning("statistics returned %s instead of a list", type(page).__name__)
+                break
             records.extend(page)
             next_start = body.get("next")
             if next_start is None or not page:
                 break
             start = next_start
-        logger.info("fetched %s call records from %s", len(records), call_filter)
+        logger.info("fetched %s call records", len(records))
+        logger.debug("filter used: %s", call_filter)
         return records
 
     def _resolve_agents(self, records: list[dict]) -> dict[str, Agent]:

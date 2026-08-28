@@ -13,7 +13,18 @@ from src.constants import (
     LOG_FORMAT,
     LOG_LATEST_NAME,
     LOG_MAX_BYTES,
+    LOG_TRACE_LEVEL,
+    LOG_TRACE_NAME,
 )
+
+
+def _trace(self: logging.Logger, message: str, *args, **kwargs) -> None:
+    if self.isEnabledFor(LOG_TRACE_LEVEL):
+        self._log(LOG_TRACE_LEVEL, message, args, **kwargs)
+
+
+logging.addLevelName(LOG_TRACE_LEVEL, LOG_TRACE_NAME)
+logging.Logger.trace = _trace
 
 
 def _link_latest(directory: Path, target: Path) -> None:
@@ -26,12 +37,11 @@ def _link_latest(directory: Path, target: Path) -> None:
 
 
 def setup_logging(config: LoggingConfig) -> None:
-    level = config.level.upper()
     root = logging.getLogger()
-    root.setLevel(level if config.external_logs else config.external_level.upper())
+    root.setLevel(config.level if config.external_logs else config.external_level)
     root.handlers.clear()
     for name in LOG_APPLICATION_LOGGERS:
-        logging.getLogger(name).setLevel(level)
+        logging.getLogger(name).setLevel(config.level)
 
     formatter = logging.Formatter(LOG_FORMAT)
 
