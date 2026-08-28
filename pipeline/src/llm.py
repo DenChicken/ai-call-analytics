@@ -89,6 +89,12 @@ class Llm:
                 f"{self._config.max_input_tokens}, raise it in the config",
             )
         logger.info("generating from %s input tokens", prompt_tokens)
+        logger.trace(
+            "prompt sizes: system %s chars, user %s chars, schema fields %s",
+            len(system_prompt),
+            len(user_prompt),
+            len(schema.get("properties") or {}),
+        )
 
         prefix_allowed_tokens_fn = build_transformers_prefix_allowed_tokens_fn(
             self._tokenizer, JsonSchemaParser(schema)
@@ -133,6 +139,7 @@ class Llm:
         try:
             return json.loads(completion)
         except json.JSONDecodeError as error:
+            logger.debug("model returned %s chars of invalid json", len(completion))
             cut_off = len(produced) >= output.max_new_tokens or elapsed >= output.timeout_seconds
             code = ERROR_LLM_TRUNCATED if cut_off else ERROR_LLM_INVALID_OUTPUT
             reason = (

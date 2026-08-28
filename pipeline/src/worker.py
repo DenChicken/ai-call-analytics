@@ -43,6 +43,7 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm) -> None:
         started = time.monotonic()
         audio_path = config.storage.data_dir / task.audio_path
         logger.info("call %s claimed from %s (attempt %s)", task.call_id, task.stage, task.attempts)
+        logger.trace("call %s audio at %s", task.call_id, audio_path)
         try:
             if task.stage == STATUS_PENDING:
                 _transcribe(config, database, asr, task, audio_path, started)
@@ -127,6 +128,14 @@ def _analyze(
     call_types = database.enabled_reference(CALL_TYPES_TABLE)
     if not call_types:
         raise StageError(ERROR_NO_CALL_TYPES, "no enabled call types")
+
+    logger.trace(
+        "call %s: transcript %s chars, criteria %s, types %s",
+        task.call_id,
+        len(plain),
+        [entry.code for entry in criteria],
+        [entry.code for entry in call_types],
+    )
 
     if not audio_path.is_file():
         raise StageError(ERROR_AUDIO_MISSING, f"audio file not found: {audio_path}")

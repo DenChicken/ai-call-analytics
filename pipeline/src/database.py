@@ -121,6 +121,13 @@ class Database:
                             stale_seconds,
                         ),
                     )
+                    if cursor.rowcount:
+                        logger.trace(
+                            "released %s jobs from %s back to %s",
+                            cursor.rowcount,
+                            claimed,
+                            stage,
+                        )
                     released += cursor.rowcount
         return released
 

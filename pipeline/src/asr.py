@@ -84,6 +84,15 @@ class Asr:
         suspicious = 0
         for segment in raw_segments:
             text = segment.text.strip()
+            logger.trace(
+                "segment %.1f-%.1fs: no_speech=%.2f logprob=%.2f compression=%.2f, %s chars",
+                segment.start,
+                segment.end,
+                segment.no_speech_prob,
+                segment.avg_logprob,
+                segment.compression_ratio,
+                len(text),
+            )
             if not text:
                 continue
             if segment.compression_ratio > SUSPICIOUS_COMPRESSION_RATIO:
