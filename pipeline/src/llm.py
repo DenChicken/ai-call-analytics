@@ -22,14 +22,13 @@ from src.constants import (
     ERROR_LLM_PROMPT_TOO_LONG,
     ERROR_LLM_TRUNCATED,
 )
-from src.errors import StageError
+from src.errors import DEVICE_UNUSABLE, StageError
 
 ROLE_SYSTEM = "system"
 ROLE_USER = "user"
 QUANTIZATION_DTYPE = "bfloat16"
 QUANTIZATION_TYPE = "nf4"
 TENSOR_FORMAT = "pt"
-CUDA_DEVICE = "cuda"
 
 logger = logging.getLogger(__name__)
 
@@ -62,14 +61,14 @@ class Llm:
         self._model.eval()
 
     def unload(self) -> None:
-        if self._model is None:
+        if self._model is None and self._tokenizer is None:
             return
         logger.info("unloading llm %s", self._config.repo_id)
         self._model = None
         self._tokenizer = None
         gc.collect()
-        if self._config.device.startswith(CUDA_DEVICE):
-            torch.cuda.empty_cache()
+        if torch.accelerator.is_available():
+            torch.accelerator.empty_cache()
 
     def generate(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
         self._ensure_loaded()
@@ -112,15 +111,22 @@ class Llm:
 
         output = self._config.output
         started = time.monotonic()
-        with torch.inference_mode():
-            generated = self._model.generate(
-                **inputs,
-                max_new_tokens=output.max_new_tokens,
-                prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
-                stopping_criteria=StoppingCriteriaList([MaxTimeCriteria(output.timeout_seconds)]),
-                pad_token_id=self._tokenizer.eos_token_id,
-                **sampling,
-            )
+        try:
+            with torch.inference_mode():
+                generated = self._model.generate(
+                    **inputs,
+                    max_new_tokens=output.max_new_tokens,
+                    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn,
+                    stopping_criteria=StoppingCriteriaList(
+                        [MaxTimeCriteria(output.timeout_seconds)]
+                    ),
+                    pad_token_id=self._tokenizer.eos_token_id,
+                    **sampling,
+                )
+        except DEVICE_UNUSABLE:
+            logger.warning("generation left the device unusable, unloading the llm")
+            self.unload()
+            raise
 
         produced = generated[0][prompt_tokens:]
         elapsed = time.monotonic() - started

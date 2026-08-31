@@ -11,7 +11,6 @@ from src.constants import MILLISECONDS_PER_SECOND, QUEUE_STATUSES, SECONDS_PER_M
 
 POOL_MIN_SIZE = 1
 POOL_MAX_SIZE = 4
-POOL_STARTUP_TIMEOUT_SECONDS = 10
 MINUTES_PER_HOUR = 60
 ZONE_NAME_TEMPLATE = "{sign}{hours:02d}:{minutes:02d}"
 ZONE_POSITIVE_SIGN = "+"
@@ -44,10 +43,10 @@ class Database:
             min_size=POOL_MIN_SIZE,
             max_size=POOL_MAX_SIZE,
             kwargs={"row_factory": dict_row, "autocommit": True},
+            check=ConnectionPool.check_connection,
             open=True,
         )
-        self._pool.wait(timeout=POOL_STARTUP_TIMEOUT_SECONDS)
-        logger.info("connected to the database")
+        logger.info("database pool ready")
 
     def close(self) -> None:
         self._pool.close()

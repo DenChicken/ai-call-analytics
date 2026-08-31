@@ -3,10 +3,12 @@ import logging
 import time
 from pathlib import Path
 
+import torch
 from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
+from src.errors import DEVICE_UNUSABLE
 from src.transcript import Segment
 
 logger = logging.getLogger(__name__)
@@ -47,6 +49,8 @@ class Asr:
         logger.info("unloading asr model %s", self._config.repo_id)
         self._model = None
         gc.collect()
+        if torch.accelerator.is_available():
+            torch.accelerator.empty_cache()
 
     def transcribe(self, audio_path: Path) -> tuple[list[Segment], float]:
         logger.info("transcribing %s", audio_path.name)
@@ -66,23 +70,29 @@ class Asr:
         )
         started = time.monotonic()
         model = self._ensure_loaded()
-        raw_segments, info = model.transcribe(
-            str(audio_path),
-            language=transcript.language,
-            beam_size=transcript.beam_size,
-            condition_on_previous_text=transcript.condition_on_previous_text,
-            hallucination_silence_threshold=transcript.hallucination_silence_threshold,
-            word_timestamps=transcript.word_timestamps,
-            vad_filter=transcript.vad_filter,
-            vad_parameters={
-                "min_silence_duration_ms": transcript.min_silence_duration_ms,
-                "speech_pad_ms": transcript.speech_pad_ms,
-            },
-        )
+        try:
+            raw_segments, info = model.transcribe(
+                str(audio_path),
+                language=transcript.language,
+                beam_size=transcript.beam_size,
+                condition_on_previous_text=transcript.condition_on_previous_text,
+                hallucination_silence_threshold=transcript.hallucination_silence_threshold,
+                word_timestamps=transcript.word_timestamps,
+                vad_filter=transcript.vad_filter,
+                vad_parameters={
+                    "min_silence_duration_ms": transcript.min_silence_duration_ms,
+                    "speech_pad_ms": transcript.speech_pad_ms,
+                },
+            )
+            decoded = list(raw_segments)
+        except DEVICE_UNUSABLE:
+            logger.warning("transcription left the device unusable, unloading the asr model")
+            self.unload()
+            raise
 
         segments = []
         suspicious = 0
-        for segment in raw_segments:
+        for segment in decoded:
             text = segment.text.strip()
             logger.trace(
                 "segment %.1f-%.1fs: no_speech=%.2f logprob=%.2f compression=%.2f, %s chars",

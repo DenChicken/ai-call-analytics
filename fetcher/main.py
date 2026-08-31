@@ -77,7 +77,6 @@ def main() -> int:
                 except shutdown.ShutdownRequested:
                     raise
                 except Exception:
-                    database.rollback()
                     logger.exception("cycle failed for source %s", source.name)
             if args.once:
                 break
@@ -87,7 +86,6 @@ def main() -> int:
         interrupted = True
         logger.info("shutdown requested, stopped after last stored call")
     finally:
-        database.rollback()
         for source in sources:
             source.close()
         database.close()

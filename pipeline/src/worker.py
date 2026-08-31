@@ -2,6 +2,8 @@ import logging
 import time
 from pathlib import Path
 
+import psycopg
+
 from src import shutdown
 from src.analysis import analyze
 from src.asr import Asr
@@ -30,12 +32,21 @@ logger = logging.getLogger(__name__)
 def run(config: Config, database: Database, asr: Asr, llm: Llm) -> None:
     worker = config.worker
     while not shutdown.is_stopping():
-        task = database.claim_task(worker.max_attempts)
+        try:
+            task = database.claim_task(worker.max_attempts)
+            if task is None:
+                released = database.reset_stale_claims(
+                    worker.stale_claim_seconds, worker.max_attempts
+                )
+                if released:
+                    logger.info("released %s stale claims", released)
+                    continue
+        except psycopg.Error:
+            logger.exception("database unreachable, retrying in %ss", worker.poll_interval_seconds)
+            shutdown.sleep(worker.poll_interval_seconds)
+            continue
+
         if task is None:
-            released = database.reset_stale_claims(worker.stale_claim_seconds, worker.max_attempts)
-            if released:
-                logger.info("released %s stale claims", released)
-                continue
             logger.debug("no tasks, sleeping %ss", worker.poll_interval_seconds)
             shutdown.sleep(worker.poll_interval_seconds)
             continue

@@ -1,25 +1,34 @@
 import json
 import logging
 
-import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from src.constants import STATUS_PENDING
 from src.source import Agent, Call
 
 logger = logging.getLogger(__name__)
 
+POOL_SIZE = 1
+
 
 class Database:
     def __init__(self, dsn: str):
-        self._connection = psycopg.connect(dsn, row_factory=dict_row, autocommit=False)
-        logger.info("connected to the database")
+        self._pool = ConnectionPool(
+            dsn,
+            min_size=POOL_SIZE,
+            max_size=POOL_SIZE,
+            kwargs={"row_factory": dict_row, "autocommit": True},
+            check=ConnectionPool.check_connection,
+            open=True,
+        )
+        logger.info("database pool ready")
 
     def close(self) -> None:
-        self._connection.close()
+        self._pool.close()
 
     def get_source_id(self, name: str) -> int:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO sources (name) VALUES (%s)
@@ -28,44 +37,34 @@ class Database:
                 """,
                 (name,),
             )
-            row = cursor.fetchone()
-        self._connection.commit()
-        return row["id"]
-
-    def rollback(self) -> None:
-        if not self._connection.closed:
-            self._connection.rollback()
+            return cursor.fetchone()["id"]
 
     def get_cursor(self, source_id: int) -> str | None:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT cursor FROM sources WHERE id = %s", (source_id,))
             row = cursor.fetchone()
-        self._connection.commit()
         return row["cursor"] if row else None
 
     def set_cursor(self, source_id: int, value: str) -> None:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 "UPDATE sources SET cursor = %s, updated_at = now() WHERE id = %s",
                 (value, source_id),
             )
-        self._connection.commit()
         logger.debug("cursor for source %s set to %s", source_id, value)
 
     def existing_external_ids(self, source_id: int, external_ids: list[str]) -> set[str]:
         if not external_ids:
             return set()
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 "SELECT external_id FROM calls WHERE source_id = %s AND external_id = ANY(%s)",
                 (source_id, external_ids),
             )
-            known = {row["external_id"] for row in cursor.fetchall()}
-        self._connection.commit()
-        return known
+            return {row["external_id"] for row in cursor.fetchall()}
 
     def upsert_agent(self, source_id: int, agent: Agent) -> int:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 INSERT INTO agents (
@@ -94,16 +93,12 @@ class Database:
                     agent.profile_link,
                 ),
             )
-            row = cursor.fetchone()
-        self._connection.commit()
-        return row["id"]
+            return cursor.fetchone()["id"]
 
     def reserve_call_id(self) -> int:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT nextval(pg_get_serial_sequence('calls', 'id')) AS id")
-            row = cursor.fetchone()
-        self._connection.commit()
-        return row["id"]
+            return cursor.fetchone()["id"]
 
     def insert_call_with_job(
         self,
@@ -114,8 +109,8 @@ class Database:
         audio_path: str,
         cursor_value: str | None,
     ) -> bool:
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 if cursor_value is not None:
                     cursor.execute(
                         "UPDATE sources SET cursor = %s, updated_at = now() WHERE id = %s",

@@ -7,6 +7,8 @@ from src.constants import (
     ERROR_UNKNOWN,
 )
 
+DEVICE_UNUSABLE = (torch.OutOfMemoryError, MemoryError, torch.AcceleratorError)
+
 
 class StageError(Exception):
     def __init__(self, code: str, message: str):
@@ -17,7 +19,7 @@ class StageError(Exception):
 def classify(error: Exception) -> str:
     if isinstance(error, StageError):
         return error.code
-    if isinstance(error, torch.cuda.OutOfMemoryError | MemoryError):
+    if isinstance(error, torch.OutOfMemoryError | MemoryError):
         return ERROR_OUT_OF_MEMORY
     if isinstance(error, psycopg.Error):
         return ERROR_DATABASE

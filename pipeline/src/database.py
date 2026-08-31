@@ -3,8 +3,8 @@ import logging
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 
-import psycopg
 from psycopg.rows import dict_row
+from psycopg_pool import ConnectionPool
 
 from src.analysis import Analysis
 from src.config import Reference
@@ -25,6 +25,7 @@ from src.transcript import Segment
 
 SEGMENTS_KEY = "segments"
 REFERENCE_TABLES = (CRITERIA_TABLE, CALL_TYPES_TABLE)
+POOL_SIZE = 1
 
 logger = logging.getLogger(__name__)
 
@@ -47,18 +48,25 @@ class AnalysisMetadata:
 
 class Database:
     def __init__(self, dsn: str):
-        self._connection = psycopg.connect(dsn, row_factory=dict_row, autocommit=True)
-        logger.info("connected to the database")
+        self._pool = ConnectionPool(
+            dsn,
+            min_size=POOL_SIZE,
+            max_size=POOL_SIZE,
+            kwargs={"row_factory": dict_row, "autocommit": True},
+            check=ConnectionPool.check_connection,
+            open=True,
+        )
+        logger.info("database pool ready")
 
     def close(self) -> None:
-        self._connection.close()
+        self._pool.close()
 
     def sync_reference(self, table: str, entries: list[Reference]) -> int:
         if table not in REFERENCE_TABLES:
             raise ValueError(f"unknown reference table: {table}")
         codes = [entry.code for entry in entries]
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 cursor.executemany(
                     f"""
                     INSERT INTO {table} (code, label, description, position, enabled)
@@ -83,7 +91,7 @@ class Database:
     def enabled_reference(self, table: str) -> list[Reference]:
         if table not in REFERENCE_TABLES:
             raise ValueError(f"unknown reference table: {table}")
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 f"SELECT code, label, description FROM {table} WHERE enabled ORDER BY position"
             )
@@ -95,8 +103,8 @@ class Database:
 
     def reset_stale_claims(self, stale_seconds: float, max_attempts: int) -> int:
         released = 0
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 for claimed, stage in RELEASED_STATUS.items():
                     cursor.execute(
                         """
@@ -132,8 +140,8 @@ class Database:
         return released
 
     def claim_task(self, max_attempts: int) -> Task | None:
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 cursor.execute(
                     """
                     SELECT j.call_id, j.status, c.audio_path
@@ -187,7 +195,7 @@ class Database:
         error: str | None,
         refund_attempt: bool = False,
     ) -> None:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 UPDATE processing_jobs
@@ -204,7 +212,7 @@ class Database:
                 )
 
     def analysis_input(self, call_id: int) -> tuple[str | None, str | None]:
-        with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT r.plain, ag.display_name
@@ -230,8 +238,8 @@ class Database:
         duration_seconds: float,
     ) -> None:
         payload = {SEGMENTS_KEY: [asdict(segment) for segment in segments]}
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO asr_results (call_id, model, language, duration_ms, plain, raw)
@@ -269,8 +277,8 @@ class Database:
         audio_path: str,
         move_audio: Callable[[], None],
     ) -> None:
-        with self._connection.transaction():
-            with self._connection.cursor() as cursor:
+        with self._pool.connection() as connection, connection.transaction():
+            with connection.cursor() as cursor:
                 cursor.execute(
                     """
                     INSERT INTO analyses (

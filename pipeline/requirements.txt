@@ -1,7 +1,7 @@
 psycopg[binary]>=3.2
 psycopg_pool>=3.2
 faster-whisper>=1.1
-torch>=2.4
+torch>=2.9
 transformers>=4.51,<5
 accelerate>=1.0
 bitsandbytes>=0.44
