@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from keygen.constants import (
+from keygen.modules.constants import (
     FIELD_CONTACT,
     FIELD_EXPIRES,
     FIELD_SIGNATURE,
@@ -16,6 +16,14 @@ from keygen.constants import (
     LICENSE_FIELDS,
     LICENSE_LINE_SEPARATOR,
 )
+
+PUBLIC_KEY = ""
+
+EMPTY_KEY_MESSAGE = (
+    "public key is not set: generate a key pair and paste the printed value "
+    "into PUBLIC_KEY in this module"
+)
+BROKEN_KEY_MESSAGE = "public key is invalid, the build is corrupted"
 
 
 class LicenseError(Exception):
@@ -50,8 +58,7 @@ def payload_text(expires: str, contact: str) -> str:
     )
 
 
-def render(license: License, signature: bytes) -> str:
-    payload = payload_text(format_expires(license.expires), license.contact)
+def render(payload: str, signature: bytes) -> str:
     encoded = base64.b64encode(signature).decode(LICENSE_ENCODING)
     return LICENSE_LINE_SEPARATOR.join(
         (payload, _field_line(FIELD_SIGNATURE, encoded), "")
@@ -80,7 +87,17 @@ def _decode_signature(value: str) -> bytes:
         raise LicenseError("signature is not valid base64") from error
 
 
-def verify(public_key_bytes: bytes, text: str) -> License:
+def _public_key() -> Ed25519PublicKey:
+    if not PUBLIC_KEY:
+        raise LicenseError(EMPTY_KEY_MESSAGE)
+    try:
+        raw = base64.b64decode(PUBLIC_KEY, validate=True)
+    except binascii.Error as error:
+        raise LicenseError(BROKEN_KEY_MESSAGE) from error
+    return Ed25519PublicKey.from_public_bytes(raw)
+
+
+def verify(text: str) -> License:
     fields = _parse_fields(text)
     for field in (*LICENSE_FIELDS, FIELD_SIGNATURE):
         if field not in fields:
@@ -89,9 +106,8 @@ def verify(public_key_bytes: bytes, text: str) -> License:
     signature = _decode_signature(fields[FIELD_SIGNATURE])
     payload = payload_text(fields[FIELD_EXPIRES], fields[FIELD_CONTACT])
 
-    key = Ed25519PublicKey.from_public_bytes(public_key_bytes)
     try:
-        key.verify(signature, payload.encode(LICENSE_ENCODING))
+        _public_key().verify(signature, payload.encode(LICENSE_ENCODING))
     except InvalidSignature as error:
         raise LicenseError("signature does not match the license contents") from error
 
