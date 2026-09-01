@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
-from keygen.modules.constants import (
+from licensing.constants import (
     FIELD_CONTACT,
     FIELD_EXPIRES,
     FIELD_SIGNATURE,
@@ -17,7 +17,7 @@ from keygen.modules.constants import (
     LICENSE_LINE_SEPARATOR,
 )
 
-PUBLIC_KEY = ""
+PUBLIC_KEY = "knUcgirjBLDyuwbxXrY14E6haiuyoGmk4zOxVjD/y9U="
 
 EMPTY_KEY_MESSAGE = (
     "public key is not set: generate a key pair and paste the printed value "

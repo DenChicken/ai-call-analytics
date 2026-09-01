@@ -8,10 +8,4 @@ FIELD_CONTACT = "contact"
 FIELD_SIGNATURE = "signature"
 LICENSE_FIELDS = (FIELD_EXPIRES, FIELD_CONTACT)
 
-FILE_TIMESTAMP_FORMAT = "%Y-%m-%dT%H-%M-%S-%fZ"
-FILE_NAME_TEMPLATE = "{stem}_{timestamp}{suffix}"
-FILE_SUFFIX = ".txt"
-PRIVATE_KEY_STEM = "license_private_key"
-LICENSE_STEM = "license"
-
 LICENSE_EXIT_CODE = 3

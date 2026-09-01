@@ -1,8 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from keygen.modules.constants import LICENSE_ENCODING
-from keygen.modules.license import License, LicenseError, verify
+from licensing.constants import LICENSE_ENCODING
+from licensing.license import License, LicenseError, verify
 
 EXPIRED_MESSAGE = "license expired on {expires}, contact the supplier: {contact}"
 

@@ -3,19 +3,19 @@ import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from keygen.modules.generate import (
+from issuing.generate import (
     EXPIRES_EXAMPLE,
     GenerateError,
     generate_key,
     generate_license,
 )
-from keygen.modules.naming import OutputError
+from issuing.naming import OutputError
 
 COMMAND_KEY = "key"
 COMMAND_LICENSE = "license"
-PUBLIC_KEY_NOTICE = "paste this public key into PUBLIC_KEY in keygen/modules/license.py:"
+PUBLIC_KEY_NOTICE = "paste this public key into PUBLIC_KEY in keygen/licensing/license.py:"
 
 
 def _run_key(args: argparse.Namespace) -> int:

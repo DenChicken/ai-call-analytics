@@ -1,12 +1,8 @@
 from datetime import datetime, timezone
 from pathlib import Path
 
-from keygen.modules.constants import (
-    FILE_NAME_TEMPLATE,
-    FILE_SUFFIX,
-    FILE_TIMESTAMP_FORMAT,
-    LICENSE_ENCODING,
-)
+from issuing.constants import FILE_NAME_TEMPLATE, FILE_SUFFIX, FILE_TIMESTAMP_FORMAT
+from licensing.constants import LICENSE_ENCODING
 
 
 class OutputError(Exception):

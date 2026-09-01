@@ -1,0 +1,5 @@
+FILE_TIMESTAMP_FORMAT = "%Y-%m-%dT%H-%M-%S-%fZ"
+FILE_NAME_TEMPLATE = "{stem}_{timestamp}{suffix}"
+FILE_SUFFIX = ".txt"
+PRIVATE_KEY_STEM = "license_private_key"
+LICENSE_STEM = "license"

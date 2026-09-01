@@ -6,14 +6,10 @@ from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from keygen.modules.constants import (
-    LICENSE_DATE_FORMAT,
-    LICENSE_ENCODING,
-    LICENSE_STEM,
-    PRIVATE_KEY_STEM,
-)
-from keygen.modules.license import format_expires, payload_text, render
-from keygen.modules.naming import write_new
+from issuing.constants import LICENSE_STEM, PRIVATE_KEY_STEM
+from issuing.naming import write_new
+from licensing.constants import LICENSE_DATE_FORMAT, LICENSE_ENCODING
+from licensing.license import format_expires, payload_text, render
 
 EXPIRES_EXAMPLE = "2027-01-01T00:00Z"
 
