@@ -12,10 +12,12 @@ from src.constants import (
 
 PATHS_SECTION = "paths"
 LOGGING_SECTION = "logging"
+LICENSE_SECTION = "license"
 DATA_DIR_KEY = "data_dir"
 MODELS_DIR_KEY = "models_dir"
 SECRETS_DIR_KEY = "secrets_dir"
 LOGS_DIR_KEY = "logs_dir"
+LICENSE_FILE_KEY = "file"
 
 REFERENCE_CODE = "code"
 REFERENCE_LABEL = "label"
@@ -116,6 +118,11 @@ class Reference:
 
 
 @dataclass(frozen=True)
+class LicenseConfig:
+    file: Path
+
+
+@dataclass(frozen=True)
 class Config:
     database: DatabaseConfig
     storage: StorageConfig
@@ -124,6 +131,7 @@ class Config:
     llm: LlmConfig
     prompt: PromptConfig
     logging: LoggingConfig
+    license: LicenseConfig
     criteria: list[Reference]
     call_types: list[Reference]
 
@@ -324,6 +332,7 @@ def load_config(path: str | Path) -> Config:
     criteria_raw = _section(raw, "criteria")
     types_raw = _section(raw, "types")
     logging_raw = _section(raw, "logging")
+    license_raw = _section(raw, LICENSE_SECTION)
 
     database = DatabaseConfig(
         dsn=read_secret_file(
@@ -353,6 +362,15 @@ def load_config(path: str | Path) -> Config:
         external_level=_require_level(logging_raw, "external_level"),
     )
 
+    license_config = LicenseConfig(
+        file=resolve_inside(
+            secrets_dir,
+            _require(license_raw, LICENSE_FILE_KEY, LICENSE_SECTION),
+            LICENSE_FILE_KEY,
+            LICENSE_SECTION,
+        )
+    )
+
     return Config(
         database=database,
         storage=storage,
@@ -361,6 +379,7 @@ def load_config(path: str | Path) -> Config:
         llm=_load_llm(raw, models_dir),
         prompt=_load_prompt(raw, base_dir),
         logging=logging_config,
+        license=license_config,
         criteria=_load_reference(
             resolve_path(base_dir, _require(criteria_raw, "file", "criteria")), "criterion"
         ),

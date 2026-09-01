@@ -3,6 +3,8 @@ import time
 from pathlib import Path
 
 import psycopg
+from licensing.license import License
+from licensing.verify_runtime import is_expired
 
 from src import shutdown
 from src.analysis import analyze
@@ -29,9 +31,12 @@ from src.transcript import render_plain
 logger = logging.getLogger(__name__)
 
 
-def run(config: Config, database: Database, asr: Asr, llm: Llm) -> None:
+def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License) -> None:
     worker = config.worker
     while not shutdown.is_stopping():
+        if is_expired(license):
+            logger.error("license expired on %s, stopping", license.expires)
+            raise shutdown.LicenseExpired()
         try:
             task = database.claim_task(worker.max_attempts)
             if task is None:

@@ -2,6 +2,10 @@ import argparse
 import logging
 import sys
 
+from licensing.constants import LICENSE_EXIT_CODE
+from licensing.license import LicenseError
+from licensing.verify_runtime import check, load
+
 from src import shutdown
 from src.asr import Asr
 from src.config import Config, ConfigError, load_config
@@ -33,6 +37,15 @@ def main() -> int:
     _log_startup(config)
     config.storage.done_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        license = load(config.license.file)
+        check(license)
+    except LicenseError as error:
+        print(f"license error: {error}", file=sys.stderr)
+        logger.error("license check failed: %s", error)
+        return LICENSE_EXIT_CODE
+    logger.info("license valid until %s", license.expires)
+
     shutdown.install_handlers()
 
     database = None
@@ -54,9 +67,12 @@ def main() -> int:
         return 1
 
     interrupted = False
+    expired = False
     crashed = False
     try:
-        run(config, database, asr, llm)
+        run(config, database, asr, llm, license)
+    except shutdown.LicenseExpired:
+        expired = True
     except shutdown.ShutdownRequested:
         interrupted = True
     except Exception:
@@ -67,6 +83,9 @@ def main() -> int:
 
     if crashed:
         return 1
+    if expired:
+        logger.info("pipeline stopped: license expired")
+        return LICENSE_EXIT_CODE
     logger.info("pipeline %s", "stopped on request" if interrupted else "finished")
     return SHUTDOWN_EXIT_CODE if interrupted else 0
 

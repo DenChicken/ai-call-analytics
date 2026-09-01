@@ -7,6 +7,10 @@ class ShutdownRequested(Exception):
     pass
 
 
+class LicenseExpired(ShutdownRequested):
+    pass
+
+
 logger = logging.getLogger(__name__)
 
 _stop = threading.Event()
