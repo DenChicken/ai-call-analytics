@@ -6,6 +6,9 @@ logs_dir = "C:/projects/ai-call-analytics/logs"
 [database]
 dsn_file = "database_dsn"
 
+[license]
+file = "license.txt"
+
 [storage]
 pending_dir = "pending"
 temp_dir = "temp"

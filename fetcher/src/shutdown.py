@@ -25,6 +25,10 @@ def _handle(signum, frame) -> None:
     _stop.set()
 
 
+def request_stop() -> None:
+    _stop.set()
+
+
 def is_stopping() -> bool:
     return _stop.is_set()
 

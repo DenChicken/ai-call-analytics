@@ -6,9 +6,11 @@ from src.constants import LOG_LEVELS, LOG_MODULE_DIR
 
 PATHS_SECTION = "paths"
 LOGGING_SECTION = "logging"
+LICENSE_SECTION = "license"
 DATA_DIR_KEY = "data_dir"
 SECRETS_DIR_KEY = "secrets_dir"
 LOGS_DIR_KEY = "logs_dir"
+LICENSE_FILE_KEY = "file"
 
 
 class ConfigError(Exception):
@@ -65,12 +67,18 @@ class SourceConfig:
 
 
 @dataclass(frozen=True)
+class LicenseConfig:
+    file: Path
+
+
+@dataclass(frozen=True)
 class Config:
     database: DatabaseConfig
     storage: StorageConfig
     fetch: FetchConfig
     network: NetworkConfig
     logging: LoggingConfig
+    license: LicenseConfig
     sources: list[SourceConfig]
 
 
@@ -174,6 +182,7 @@ def load_config(path: str | Path) -> Config:
     fetch_raw = _section(raw, "fetch")
     network_raw = _section(raw, "network")
     logging_raw = _section(raw, "logging")
+    license_raw = _section(raw, LICENSE_SECTION)
 
     database = DatabaseConfig(
         dsn=read_secret_file(
@@ -225,11 +234,21 @@ def load_config(path: str | Path) -> Config:
         external_level=_require_level(logging_raw, "external_level"),
     )
 
+    license_config = LicenseConfig(
+        file=resolve_inside(
+            secrets_dir,
+            _require(license_raw, LICENSE_FILE_KEY, LICENSE_SECTION),
+            LICENSE_FILE_KEY,
+            LICENSE_SECTION,
+        )
+    )
+
     return Config(
         database=database,
         storage=storage,
         fetch=fetch,
         network=network,
         logging=logging_config,
+        license=license_config,
         sources=_load_sources(raw.get("source", []), secrets_dir),
     )

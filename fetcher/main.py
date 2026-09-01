@@ -2,6 +2,10 @@ import argparse
 import logging
 import sys
 
+from licensing.constants import LICENSE_EXIT_CODE
+from licensing.license import LicenseError
+from licensing.verify_runtime import check, is_expired, load
+
 from src import shutdown
 from src.config import Config, ConfigError, load_config
 from src.constants import SHUTDOWN_EXIT_CODE
@@ -45,6 +49,15 @@ def main() -> int:
     _log_startup(config, args.once)
 
     try:
+        license = load(config.license.file)
+        check(license)
+    except LicenseError as error:
+        print(f"license error: {error}", file=sys.stderr)
+        logger.error("license check failed: %s", error)
+        return LICENSE_EXIT_CODE
+    logger.info("license valid until %s", license.expires)
+
+    try:
         sources = [
             create_source(entry, config.network, config.fetch) for entry in config.sources
         ]
@@ -66,9 +79,15 @@ def main() -> int:
         return 1
 
     interrupted = False
+    expired = False
     cycle = 0
     try:
         while not shutdown.is_stopping():
+            if is_expired(license):
+                expired = True
+                logger.error("license expired on %s, stopping", license.expires)
+                shutdown.request_stop()
+                break
             cycle += 1
             logger.debug("cycle %s started", cycle)
             for source in sources:
@@ -91,6 +110,8 @@ def main() -> int:
         database.close()
 
     logger.info("fetcher %s after %s cycles", "interrupted" if interrupted else "finished", cycle)
+    if expired:
+        return LICENSE_EXIT_CODE
     return SHUTDOWN_EXIT_CODE if interrupted else 0
 
 
