@@ -15,6 +15,10 @@ from src.constants import (
     CONFIG_ENV_VAR,
     LOG_FILE_ENV_VAR,
     PORT_PROBE_HOST,
+    REFLEX_API_URL_ENV_VAR,
+    REFLEX_BACKEND_PATH_ENV_VAR,
+    REFLEX_BACKEND_PORT_FLAG,
+    REFLEX_FRONTEND_PORT_FLAG,
     REFLEX_MODULE,
     REFLEX_RUN_COMMAND,
     SHUTDOWN_EXIT_CODE,
@@ -100,9 +104,20 @@ def main() -> int:
     environment = dict(os.environ)
     environment[CONFIG_ENV_VAR] = str(Path(args.config).resolve())
     environment[LOG_FILE_ENV_VAR] = str(log_file)
+    environment[REFLEX_BACKEND_PATH_ENV_VAR] = config.server.backend_path
+    environment[REFLEX_API_URL_ENV_VAR] = config.server.api_url
 
     process = subprocess.Popen(
-        [sys.executable, "-m", REFLEX_MODULE, REFLEX_RUN_COMMAND],
+        [
+            sys.executable,
+            "-m",
+            REFLEX_MODULE,
+            REFLEX_RUN_COMMAND,
+            REFLEX_FRONTEND_PORT_FLAG,
+            str(config.server.frontend_port),
+            REFLEX_BACKEND_PORT_FLAG,
+            str(config.server.backend_port),
+        ],
         cwd=Path(__file__).resolve().parent,
         env=environment,
         start_new_session=sys.platform != WINDOWS_PLATFORM,
