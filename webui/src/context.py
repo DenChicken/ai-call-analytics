@@ -1,6 +1,10 @@
 import atexit
+import logging
 import os
 from pathlib import Path
+
+from licensing.license import License, LicenseError
+from licensing.verify_runtime import is_expired, load
 
 from src.audio import AudioStore
 from src.config import Config, ConfigError, load_config
@@ -8,9 +12,12 @@ from src.constants import CONFIG_ENV_VAR
 from src.database import Database
 from src.logging_setup import setup_logging
 
+logger = logging.getLogger(__name__)
+
 _config: Config | None = None
 _database: Database | None = None
 _audio: AudioStore | None = None
+_license: License | None = None
 
 
 def config() -> Config:
@@ -47,3 +54,25 @@ def audio() -> AudioStore:
     if _audio is None:
         _audio = AudioStore(config().storage)
     return _audio
+
+
+def license() -> License:
+    global _license
+    if _license is None:
+        _license = load(config().license.file)
+    return _license
+
+
+def license_expired() -> bool:
+    try:
+        return is_expired(license())
+    except LicenseError:
+        logger.exception("license unavailable")
+        return True
+
+
+def license_contact() -> str:
+    try:
+        return license().contact
+    except LicenseError:
+        return ""

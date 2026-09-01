@@ -12,6 +12,7 @@ from src.constants import (
     FIELD_LOGIN,
     FIELD_PASSWORD,
     INTERNAL_ERROR_MESSAGE,
+    LICENSE_EXPIRED_MESSAGE,
     LOAD_ERROR_MESSAGE,
     LOGIN_ERROR_MESSAGE,
     MAX_UTC_OFFSET,
@@ -163,6 +164,9 @@ class AuthState(rx.State):
 
     @rx.event
     def sign_in(self, form_data: dict):
+        if context.license_expired():
+            self.error = _license_notice()
+            return
         self.busy = True
         yield
 
@@ -198,10 +202,20 @@ class AuthState(rx.State):
         self.session_token = ""
         return rx.redirect(ROUTE_LOGIN)
 
+    @rx.var(cache=False)
+    def license_expired(self) -> bool:
+        return context.license_expired()
+
+    @rx.var(cache=False)
+    def license_notice(self) -> str:
+        return _license_notice()
+
     @rx.event
     def require_session(self):
         if not self.is_hydrated:
             return AuthState.require_session
+        if context.license_expired():
+            return rx.redirect(ROUTE_LOGIN)
         if not self.session_login:
             return rx.redirect(ROUTE_LOGIN)
 
@@ -220,6 +234,11 @@ def guarded(state: AuthState, action) -> None:
         (time.monotonic() - started) * MILLISECONDS_PER_SECOND,
     )
     state.load_error = ""
+
+
+def _license_notice() -> str:
+    contact = context.license_contact()
+    return LICENSE_EXPIRED_MESSAGE.format(contact=contact) if contact else ""
 
 
 def _authenticate(login: str, password: str) -> str | None:

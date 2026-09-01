@@ -32,6 +32,9 @@ NOT_FOUND_STATUS = 404
 UNAUTHORIZED_STATUS = 401
 
 async def serve_audio(request: Request) -> Response:
+    if context.license_expired():
+        return Response(status_code=UNAUTHORIZED_STATUS)
+
     database = context.database()
     token = request.cookies.get(SESSION_COOKIE_NAME, "")
     if database.session_user(token) is None:

@@ -11,9 +11,11 @@ from src.constants import (
 
 PATHS_SECTION = "paths"
 LOGGING_SECTION = "logging"
+LICENSE_SECTION = "license"
 DATA_DIR_KEY = "data_dir"
 SECRETS_DIR_KEY = "secrets_dir"
 LOGS_DIR_KEY = "logs_dir"
+LICENSE_FILE_KEY = "file"
 
 
 class ConfigError(Exception):
@@ -68,6 +70,11 @@ class LoggingConfig:
 
 
 @dataclass(frozen=True)
+class LicenseConfig:
+    file: Path
+
+
+@dataclass(frozen=True)
 class Config:
     database: DatabaseConfig
     storage: StorageConfig
@@ -75,6 +82,7 @@ class Config:
     session: SessionConfig
     display: DisplayConfig
     logging: LoggingConfig
+    license: LicenseConfig
 
 
 def _section(raw: dict, name: str) -> dict:
@@ -148,6 +156,7 @@ def load_config(path: str | Path) -> Config:
     session_raw = _section(raw, "session")
     display_raw = _section(raw, "display")
     logging_raw = _section(raw, "logging")
+    license_raw = _section(raw, LICENSE_SECTION)
 
     return Config(
         database=DatabaseConfig(
@@ -181,5 +190,13 @@ def load_config(path: str | Path) -> Config:
             dir=logs_dir / LOG_MODULE_DIR,
             external_logs=_require(logging_raw, "external_logs", "logging"),
             external_level=_require_level(logging_raw, "external_level"),
+        ),
+        license=LicenseConfig(
+            file=resolve_inside(
+                secrets_dir,
+                _require(license_raw, LICENSE_FILE_KEY, LICENSE_SECTION),
+                LICENSE_FILE_KEY,
+                LICENSE_SECTION,
+            )
         ),
     )

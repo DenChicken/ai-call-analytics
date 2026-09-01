@@ -6,6 +6,10 @@ import subprocess
 import sys
 from pathlib import Path
 
+from licensing.constants import LICENSE_EXIT_CODE
+from licensing.license import LicenseError
+from licensing.verify_runtime import check, load
+
 from src.config import Config, ConfigError, load_config
 from src.constants import (
     CONFIG_ENV_VAR,
@@ -82,6 +86,12 @@ def main() -> int:
     except ConfigError as error:
         print(f"config error: {error}", file=sys.stderr)
         return 1
+
+    try:
+        check(load(config.license.file))
+    except LicenseError as error:
+        print(f"license error: {error}", file=sys.stderr)
+        return LICENSE_EXIT_CODE
 
     config.logging.dir.mkdir(parents=True, exist_ok=True)
     log_file = new_log_file(config.logging.dir)

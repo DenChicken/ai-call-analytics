@@ -70,6 +70,7 @@ FIELD_PASSWORD = "password"
 LOGIN_ERROR_MESSAGE = "Неверный логин или пароль"
 INTERNAL_ERROR_MESSAGE = "Сервис временно недоступен"
 LOAD_ERROR_MESSAGE = "Не удалось загрузить данные"
+LICENSE_EXPIRED_MESSAGE = "Срок действия лицензии истёк. Обратитесь к поставщику: {contact}"
 
 ROUTE_LOGIN = "/login"
 ROUTE_DASHBOARD = "/"

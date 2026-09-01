@@ -20,6 +20,16 @@ def login_page() -> rx.Component:
                 rx.vstack(
                     rx.heading(TITLE, size="6"),
                     rx.text(SUBTITLE, color_scheme="gray", size="2"),
+                    rx.cond(
+                        AuthState.license_expired,
+                        rx.callout(
+                            AuthState.license_notice,
+                            color_scheme="red",
+                            size="1",
+                            width="100%",
+                        ),
+                        rx.fragment(),
+                    ),
                     rx.input(
                         placeholder=LOGIN_LABEL,
                         name=FIELD_LOGIN,
@@ -56,7 +66,7 @@ def login_page() -> rx.Component:
                         type="submit",
                         width="100%",
                         loading=AuthState.busy,
-                        disabled=AuthState.no_users,
+                        disabled=AuthState.no_users | AuthState.license_expired,
                     ),
                     spacing="4",
                     width="100%",
