@@ -33,7 +33,7 @@ NUITKA_FLAGS = (
     "--nofollow-imports",
     "--assume-yes-for-downloads",
     "--remove-output",
-    "--no-pyi-file",
+    "--no-deployment-flag=self-execution",
 )
 NUITKA_OUTPUT_FLAG = "--output-dir"
 NUITKA_NAME_FLAG = "--output-filename"
