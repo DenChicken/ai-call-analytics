@@ -55,7 +55,7 @@ COMPANY_NAME = "ai-call-analytics"
 BYTECODE_OPTIMIZE_LEVEL = 2
 BYTECODE_SOURCE_SUFFIX = ".py"
 BYTECODE_COMPILED_SUFFIX = ".pyc"
-BYTECODE_KEPT_SOURCES = ("rxconfig.py",)
+BYTECODE_KEPT_SOURCES = ("rxconfig.py", "app.py")
 EXCLUDED_PATTERNS = ("__pycache__", ".web", ".states", "reflex.lock", ".gitignore")
 
 VERSION_PATTERN = r"^\d+(\.\d+)*$"
