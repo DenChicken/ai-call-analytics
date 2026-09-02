@@ -7,3 +7,4 @@ accelerate>=1.0
 bitsandbytes>=0.44
 lm-format-enforcer>=0.10
 pydantic>=2.9
+cryptography>=44
