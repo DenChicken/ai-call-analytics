@@ -32,16 +32,22 @@ STAGE_DIR_NAME = "stage"
 SCRIPTS_DIR_NAME = "scripts"
 
 NUITKA_MODULE = "nuitka"
-NUITKA_FLAGS = (
-    "--nofollow-imports",
+NUITKA_COMMON_FLAGS = (
     "--assume-yes-for-downloads",
     "--remove-output",
+)
+NUITKA_FLAGS = (
+    *NUITKA_COMMON_FLAGS,
+    "--nofollow-imports",
     "--no-deployment-flag=self-execution",
 )
 NUITKA_OUTPUT_FLAG = "--output-dir"
 NUITKA_NAME_FLAG = "--output-filename"
 NUITKA_FOLLOW_FLAG = "--follow-import-to"
 NUITKA_INCLUDE_FLAG = "--include-package"
+NUITKA_PACKAGE_MODE = "--mode=package"
+NUITKA_MODULE_SUFFIX = ".so"
+NUITKA_STUB_SUFFIX = ".pyi"
 NUITKA_COMPANY_FLAG = "--company-name"
 NUITKA_PRODUCT_FLAG = "--product-name"
 COMPANY_NAME = "ai-call-analytics"
@@ -69,6 +75,12 @@ HELP_FLAG = "--help"
 NO_USER_SITE_VAR = "PYTHONNOUSERSITE"
 PYTHONPATH_VAR = "PYTHONPATH"
 MISSING_LICENSING_MARKER = "No module named 'licensing'"
+LICENSING_IMPORT_CHECK = (
+    "import licensing.license as l, licensing.verify_runtime as v;"
+    "assert l.PUBLIC_KEY, 'public key is empty';"
+    "assert 'compiled' in type(v.load).__name__, 'not the compiled module';"
+    "print('module verified, public key present')"
+)
 
 DEPLOY_FILES = ("db.py", "user.py", "schema.sql", "requirements.txt")
 
@@ -190,10 +202,61 @@ def compile_bytecode(module: str, output_root: Path) -> Path:
     return output_dir
 
 
+def compile_licensing(output_dir: Path) -> Path:
+    started = time.monotonic()
+    print(f"[{LICENSING_PACKAGE}] compiling to an extension module", flush=True)
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            NUITKA_MODULE,
+            NUITKA_PACKAGE_MODE,
+            *NUITKA_COMMON_FLAGS,
+            f"{NUITKA_OUTPUT_FLAG}={output_dir}",
+            LICENSING_PACKAGE,
+        ],
+        cwd=ROOT,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ReleaseError(
+            f"nuitka failed for {LICENSING_PACKAGE} with exit code {result.returncode}"
+        )
+
+    for stub in output_dir.glob(f"{LICENSING_PACKAGE}*{NUITKA_STUB_SUFFIX}"):
+        stub.unlink()
+
+    compiled = sorted(output_dir.glob(f"{LICENSING_PACKAGE}*{NUITKA_MODULE_SUFFIX}"))
+    if not compiled:
+        present = sorted(entry.name for entry in output_dir.iterdir())
+        raise ReleaseError(
+            f"nuitka produced no {LICENSING_PACKAGE} module, output contains: {present}"
+        )
+    print(f"[{LICENSING_PACKAGE}] compiled in {time.monotonic() - started:.0f}s", flush=True)
+    _verify_compiled_licensing(output_dir)
+    return compiled[0]
+
+
+def _verify_compiled_licensing(output_dir: Path) -> None:
+    result = subprocess.run(
+        [sys.executable, "-c", LICENSING_IMPORT_CHECK],
+        cwd=output_dir,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        raise ReleaseError(
+            f"the compiled {LICENSING_PACKAGE} module does not import: {result.stderr.strip()}"
+        )
+    print(f"[{LICENSING_PACKAGE}] {result.stdout.strip()}", flush=True)
+
+
 def build_modules(modules: tuple[str, ...], stage_dir: Path) -> None:
     for module in modules:
         if module in BYTECODE_MODULES:
-            compile_bytecode(module, stage_dir)
+            output_dir = compile_bytecode(module, stage_dir)
+            compile_licensing(output_dir)
         else:
             compile_binary(module, stage_dir)
 

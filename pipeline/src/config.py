@@ -17,6 +17,7 @@ DATA_DIR_KEY = "data_dir"
 MODELS_DIR_KEY = "models_dir"
 SECRETS_DIR_KEY = "secrets_dir"
 LOGS_DIR_KEY = "logs_dir"
+CONFIGS_DIR_KEY = "configs_dir"
 LICENSE_FILE_KEY = "file"
 
 REFERENCE_CODE = "code"
@@ -260,9 +261,11 @@ def _load_llm(raw: dict, models_dir: Path) -> LlmConfig:
     )
 
 
-def _load_prompt(raw: dict, base_dir: Path) -> PromptConfig:
+def _load_prompt(raw: dict, configs_dir: Path) -> PromptConfig:
     section = _section(raw, "prompt")
-    user_path = resolve_path(base_dir, _require(section, "user_file", "prompt"))
+    user_path = resolve_inside(
+        configs_dir, _require(section, "user_file", "prompt"), "user_file", "prompt"
+    )
     user = _read_text_file(user_path, "prompt")
     for placeholder in PROMPT_PLACEHOLDERS:
         if "{" + placeholder + "}" not in user:
@@ -272,7 +275,13 @@ def _load_prompt(raw: dict, base_dir: Path) -> PromptConfig:
     return PromptConfig(
         label=_require(section, "label", "prompt"),
         system=_read_text_file(
-            resolve_path(base_dir, _require(section, "system_file", "prompt")), "prompt"
+            resolve_inside(
+                configs_dir,
+                _require(section, "system_file", "prompt"),
+                "system_file",
+                "prompt",
+            ),
+            "prompt",
         ),
         user=user,
     )
@@ -318,13 +327,12 @@ def load_config(path: str | Path) -> Config:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
 
-    base_dir = path.resolve().parent
-
     paths_raw = _section(raw, PATHS_SECTION)
     data_dir = resolve_anchor(paths_raw, DATA_DIR_KEY)
     models_dir = resolve_anchor(paths_raw, MODELS_DIR_KEY)
     secrets_dir = resolve_anchor(paths_raw, SECRETS_DIR_KEY)
     logs_dir = resolve_anchor(paths_raw, LOGS_DIR_KEY)
+    configs_dir = resolve_anchor(paths_raw, CONFIGS_DIR_KEY)
 
     database_raw = _section(raw, "database")
     storage_raw = _section(raw, "storage")
@@ -377,13 +385,17 @@ def load_config(path: str | Path) -> Config:
         worker=worker,
         asr=_load_asr(raw, models_dir),
         llm=_load_llm(raw, models_dir),
-        prompt=_load_prompt(raw, base_dir),
+        prompt=_load_prompt(raw, configs_dir),
         logging=logging_config,
         license=license_config,
         criteria=_load_reference(
-            resolve_path(base_dir, _require(criteria_raw, "file", "criteria")), "criterion"
+            resolve_inside(
+                configs_dir, _require(criteria_raw, "file", "criteria"), "file", "criteria"
+            ),
+            "criterion",
         ),
         call_types=_load_reference(
-            resolve_path(base_dir, _require(types_raw, "file", "types")), "type"
+            resolve_inside(configs_dir, _require(types_raw, "file", "types"), "file", "types"),
+            "type",
         ),
     )

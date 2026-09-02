@@ -3,6 +3,7 @@ data_dir = "C:/projects/ai-call-analytics/data"
 models_dir = "C:/projects/ai-call-analytics/models"
 secrets_dir = "C:/projects/ai-call-analytics/secrets"
 logs_dir = "C:/projects/ai-call-analytics/logs"
+configs_dir = "C:/projects/ai-call-analytics/configs/pipeline"
 
 [database]
 dsn_file = "database_dsn"
