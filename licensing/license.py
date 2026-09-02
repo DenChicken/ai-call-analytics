@@ -16,12 +16,11 @@ from licensing.constants import (
     LICENSE_FIELDS,
     LICENSE_LINE_SEPARATOR,
 )
-
-PUBLIC_KEY = "knUcgirjBLDyuwbxXrY14E6haiuyoGmk4zOxVjD/y9U="
+from licensing.pubkey import PUBLIC_KEY
 
 EMPTY_KEY_MESSAGE = (
     "public key is not set: generate a key pair and paste the printed value "
-    "into PUBLIC_KEY in this module"
+    "into PUBLIC_KEY in licensing/pubkey.py"
 )
 BROKEN_KEY_MESSAGE = "public key is invalid, the build is corrupted"
 

@@ -2,6 +2,7 @@ import argparse
 import compileall
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -13,16 +14,18 @@ from pathlib import Path
 
 MODULE_FETCHER = "fetcher"
 MODULE_PIPELINE = "pipeline"
-MODULE_KEYGEN = "keygen"
 MODULE_WEBUI = "webui"
 
-COMPILED_MODULES = (MODULE_FETCHER, MODULE_PIPELINE, MODULE_KEYGEN)
+COMPILED_MODULES = (MODULE_FETCHER, MODULE_PIPELINE)
 BYTECODE_MODULES = (MODULE_WEBUI,)
 ALL_MODULES = (*COMPILED_MODULES, *BYTECODE_MODULES)
+PRIVATE_KEY_STEM = "license_private_key"
+KEYGEN_SCRIPT = "keygen.py"
 
 ENTRY_POINT = "main.py"
 SOURCE_PACKAGE = "src"
-KEYGEN_PACKAGES = ("licensing", "issuing")
+LICENSING_PACKAGE = "licensing"
+PRIVATE_NAMES = (KEYGEN_SCRIPT, PRIVATE_KEY_STEM)
 
 OUTPUT_DIR_NAME = "release"
 STAGE_DIR_NAME = "stage"
@@ -38,6 +41,7 @@ NUITKA_FLAGS = (
 NUITKA_OUTPUT_FLAG = "--output-dir"
 NUITKA_NAME_FLAG = "--output-filename"
 NUITKA_FOLLOW_FLAG = "--follow-import-to"
+NUITKA_INCLUDE_FLAG = "--include-package"
 NUITKA_COMPANY_FLAG = "--company-name"
 NUITKA_PRODUCT_FLAG = "--product-name"
 COMPANY_NAME = "ai-call-analytics"
@@ -60,6 +64,11 @@ GIT_STATUS_ARGS = ("status", "--porcelain")
 MANIFEST_NAME = "manifest.json"
 MANIFEST_INDENT = 2
 CHECKSUM_CHUNK = 1 << 20
+
+HELP_FLAG = "--help"
+NO_USER_SITE_VAR = "PYTHONNOUSERSITE"
+PYTHONPATH_VAR = "PYTHONPATH"
+MISSING_LICENSING_MARKER = "No module named 'licensing'"
 
 DEPLOY_FILES = ("db.py", "user.py", "schema.sql", "requirements.txt")
 
@@ -94,10 +103,6 @@ def _commit_label() -> str:
     return commit[:COMMIT_LENGTH]
 
 
-def _packages(module: str) -> tuple[str, ...]:
-    return KEYGEN_PACKAGES if module == MODULE_KEYGEN else (SOURCE_PACKAGE,)
-
-
 def _nuitka_command(module: str, output_dir: Path) -> list[str]:
     command = [
         sys.executable,
@@ -109,8 +114,8 @@ def _nuitka_command(module: str, output_dir: Path) -> list[str]:
         f"{NUITKA_COMPANY_FLAG}={COMPANY_NAME}",
         f"{NUITKA_PRODUCT_FLAG}={module}",
     ]
-    for package in _packages(module):
-        command.append(f"{NUITKA_FOLLOW_FLAG}={package}")
+    command.append(f"{NUITKA_FOLLOW_FLAG}={SOURCE_PACKAGE}")
+    command.append(f"{NUITKA_INCLUDE_FLAG}={LICENSING_PACKAGE}")
     command.append(ENTRY_POINT)
     return command
 
@@ -136,7 +141,29 @@ def compile_binary(module: str, output_root: Path) -> Path:
             f"nuitka reported success but {binary} is missing, output contains: {present}"
         )
     print(f"[{module}] compiled in {time.monotonic() - started:.0f}s", flush=True)
+    _verify_embedded_licensing(module, binary)
     return binary
+
+
+def _verify_embedded_licensing(module: str, binary: Path) -> None:
+    environment = dict(os.environ)
+    environment[NO_USER_SITE_VAR] = "1"
+    environment.pop(PYTHONPATH_VAR, None)
+
+    result = subprocess.run(
+        [str(binary), HELP_FLAG],
+        cwd=binary.parent,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or MISSING_LICENSING_MARKER in result.stderr:
+        raise ReleaseError(
+            f"{module} does not carry {LICENSING_PACKAGE} inside the binary: "
+            f"{result.stderr.strip() or 'unexpected exit code ' + str(result.returncode)}"
+        )
+    print(f"[{module}] {LICENSING_PACKAGE} is embedded", flush=True)
 
 
 def compile_bytecode(module: str, output_root: Path) -> Path:
@@ -209,6 +236,22 @@ def write_manifest(stage_dir: Path, version: str, commit: str, built_at: datetim
     print(f"[manifest] {len(entries)} files", flush=True)
 
 
+def verify_no_private_content(stage_dir: Path) -> None:
+    leaked = [
+        path.relative_to(stage_dir).as_posix()
+        for path in stage_dir.rglob("*")
+        if any(
+            name in (path.name, path.parent.name) or path.name.startswith(name)
+            for name in PRIVATE_NAMES
+        )
+    ]
+    if leaked:
+        raise ReleaseError(
+            f"private content must never be delivered, found in the bundle: {leaked}"
+        )
+    print("[verify] no private content in the bundle", flush=True)
+
+
 def make_archive(stage_dir: Path, output_dir: Path, name: str) -> Path:
     archive = output_dir / name
     if archive.exists():
@@ -278,6 +321,7 @@ def main() -> int:
     try:
         build_modules(modules, stage_dir)
         collect_deploy_files(stage_dir)
+        verify_no_private_content(stage_dir)
         write_manifest(stage_dir, args.version, commit, built_at)
         archive = make_archive(stage_dir, args.output, name)
     except ReleaseError as error:

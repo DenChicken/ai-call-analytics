@@ -11,3 +11,4 @@ dependencies = ["cryptography>=44"]
 
 [tool.setuptools]
 packages = ["licensing"]
+package-dir = {"licensing" = "."}
