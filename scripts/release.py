@@ -54,6 +54,8 @@ COMPANY_NAME = "ai-call-analytics"
 
 BYTECODE_OPTIMIZE_LEVEL = 2
 BYTECODE_SOURCE_SUFFIX = ".py"
+BYTECODE_COMPILED_SUFFIX = ".pyc"
+BYTECODE_KEPT_SOURCES = ("rxconfig.py",)
 EXCLUDED_PATTERNS = ("__pycache__", ".web", ".states", "reflex.lock", ".gitignore")
 
 VERSION_PATTERN = r"^\d+(\.\d+)*$"
@@ -197,6 +199,9 @@ def compile_bytecode(module: str, output_root: Path) -> Path:
         raise ReleaseError(f"bytecode compilation failed for {module}")
 
     for source in output_dir.rglob(f"*{BYTECODE_SOURCE_SUFFIX}"):
+        if source.name in BYTECODE_KEPT_SOURCES:
+            source.with_suffix(BYTECODE_COMPILED_SUFFIX).unlink(missing_ok=True)
+            continue
         source.unlink()
     print(f"[{module}] compiled in {time.monotonic() - started:.0f}s", flush=True)
     return output_dir
