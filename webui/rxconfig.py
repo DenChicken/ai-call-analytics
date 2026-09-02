@@ -28,3 +28,5 @@ config = rx.Config(
     ],
     disable_plugins=[SitemapPlugin],
 )
+
+config._app_name_is_valid = True
