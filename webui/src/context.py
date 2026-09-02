@@ -8,7 +8,7 @@ from licensing.verify_runtime import is_expired, load
 
 from src.audio import AudioStore
 from src.config import Config, ConfigError, load_config
-from src.constants import CONFIG_ENV_VAR
+from src.constants import CONFIG_ENV_VAR, LICENSE_UNAVAILABLE_MESSAGE
 from src.database import Database
 from src.logging_setup import setup_logging
 
@@ -63,12 +63,24 @@ def license() -> License:
     return _license
 
 
+def _reload_license() -> License:
+    global _license
+    _license = load(config().license.file)
+    return _license
+
+
 def license_expired() -> bool:
     try:
-        return is_expired(license())
+        if not is_expired(license()):
+            return False
+        reloaded = _reload_license()
+        if not is_expired(reloaded):
+            logger.info("license replaced, valid until %s", reloaded.expires)
+            return False
     except LicenseError:
-        logger.exception("license unavailable")
+        logger.exception(LICENSE_UNAVAILABLE_MESSAGE)
         return True
+    return True
 
 
 def license_contact() -> str:

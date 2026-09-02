@@ -5,12 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from issuing.generate import (
-    EXPIRES_EXAMPLE,
-    GenerateError,
-    generate_key,
-    generate_license,
-)
+from issuing.constants import ABSOLUTE_EXAMPLE, RELATIVE_EXAMPLE, RELATIVE_UNIT_SECONDS
+from issuing.generate import GenerateError, generate_key, generate_license
 from issuing.naming import OutputError
 
 COMMAND_KEY = "key"
@@ -32,13 +28,13 @@ def _run_key(args: argparse.Namespace) -> int:
 
 def _run_license(args: argparse.Namespace) -> int:
     try:
-        path = generate_license(
+        result = generate_license(
             args.private_key, args.expires, args.contact, args.out_dir, datetime.now(timezone.utc)
         )
     except (GenerateError, OutputError) as error:
         print(error, file=sys.stderr)
         return 1
-    print(f"license valid until {args.expires} written to {path}")
+    print(f"license valid until {result.expires} written to {result.license_path}")
     return 0
 
 
@@ -59,7 +55,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
     lic = subparsers.add_parser(COMMAND_LICENSE, help="issue a signed license file")
     lic.add_argument("--private-key", type=Path, required=True, help="path to the private key")
-    lic.add_argument("--expires", required=True, help=f"expiry in UTC, like {EXPIRES_EXAMPLE}")
+    lic.add_argument(
+        "--expires",
+        required=True,
+        help=(
+            f"expiry in UTC, like {ABSOLUTE_EXAMPLE}, or an offset from now "
+            f"like {RELATIVE_EXAMPLE} (units: {', '.join(RELATIVE_UNIT_SECONDS)})"
+        ),
+    )
     lic.add_argument(
         "--contact", required=True, help="supplier contact shown to the customer"
     )

@@ -1,17 +1,24 @@
 import base64
 import binascii
+import re
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from issuing.constants import LICENSE_STEM, PRIVATE_KEY_STEM
+from issuing.constants import (
+    ABSOLUTE_EXAMPLE,
+    LICENSE_STEM,
+    PRIVATE_KEY_STEM,
+    RELATIVE_EXAMPLE,
+    RELATIVE_PATTERN,
+    RELATIVE_PREFIX,
+    RELATIVE_UNIT_SECONDS,
+)
 from issuing.naming import write_new
 from licensing.constants import LICENSE_DATE_FORMAT, LICENSE_ENCODING
 from licensing.license import format_expires, payload_text, render
-
-EXPIRES_EXAMPLE = "2027-01-01T00:00Z"
 
 
 class GenerateError(Exception):
@@ -22,6 +29,12 @@ class GenerateError(Exception):
 class KeyResult:
     private_key_path: Path
     public_key: str
+
+
+@dataclass(frozen=True)
+class LicenseResult:
+    license_path: Path
+    expires: str
 
 
 def _encode(raw: bytes) -> str:
@@ -48,21 +61,41 @@ def _read_private_key(path: Path) -> Ed25519PrivateKey:
     return Ed25519PrivateKey.from_private_bytes(raw)
 
 
-def _parse_expires(value: str) -> datetime:
+def _parse_relative(value: str, moment: datetime) -> datetime:
+    matched = re.match(RELATIVE_PATTERN, value)
+    if matched is None:
+        units = ", ".join(RELATIVE_UNIT_SECONDS)
+        raise GenerateError(
+            f"invalid relative expiry '{value}', expected a positive number and "
+            f"one of the units {units}, like {RELATIVE_EXAMPLE}"
+        )
+    amount, unit = matched.groups()
+    seconds = int(amount) * RELATIVE_UNIT_SECONDS[unit]
+    if not seconds:
+        raise GenerateError(f"relative expiry '{value}' is zero, the license would be expired")
+    return moment.astimezone(timezone.utc) + timedelta(seconds=seconds)
+
+
+def _parse_expires(value: str, moment: datetime) -> datetime:
+    if value.startswith(RELATIVE_PREFIX):
+        return _parse_relative(value, moment)
     try:
         parsed = datetime.strptime(value, LICENSE_DATE_FORMAT)
     except ValueError as error:
         raise GenerateError(
-            f"invalid expiry '{value}', expected UTC like {EXPIRES_EXAMPLE}"
+            f"invalid expiry '{value}', expected UTC like {ABSOLUTE_EXAMPLE} "
+            f"or a relative offset like {RELATIVE_EXAMPLE}"
         ) from error
     return parsed.replace(tzinfo=timezone.utc)
 
 
 def generate_license(
     private_key_path: Path, expires: str, contact: str, out_dir: Path, moment: datetime
-) -> Path:
+) -> LicenseResult:
     private_key = _read_private_key(private_key_path)
-    expires_at = _parse_expires(expires)
-    payload = payload_text(format_expires(expires_at), contact)
+    expires_at = _parse_expires(expires, moment)
+    formatted = format_expires(expires_at)
+    payload = payload_text(formatted, contact)
     signature = private_key.sign(payload.encode(LICENSE_ENCODING))
-    return write_new(out_dir, LICENSE_STEM, render(payload, signature), moment)
+    path = write_new(out_dir, LICENSE_STEM, render(payload, signature), moment)
+    return LicenseResult(license_path=path, expires=formatted)

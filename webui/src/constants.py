@@ -70,6 +70,8 @@ SESSION_TOKEN_BYTES = 32
 FIELD_LOGIN = "login"
 FIELD_PASSWORD = "password"
 
+LICENSE_UNAVAILABLE_MESSAGE = "license unavailable"
+
 LOGIN_ERROR_MESSAGE = "Неверный логин или пароль"
 INTERNAL_ERROR_MESSAGE = "Сервис временно недоступен"
 LOAD_ERROR_MESSAGE = "Не удалось загрузить данные"

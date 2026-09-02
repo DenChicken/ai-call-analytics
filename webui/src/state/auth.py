@@ -84,6 +84,7 @@ class AuthState(rx.State):
 
     @rx.event
     def check_users(self):
+        self.error = ""
         try:
             self.no_users = not context.database().users_count()
         except Exception:
@@ -165,7 +166,6 @@ class AuthState(rx.State):
     @rx.event
     def sign_in(self, form_data: dict):
         if context.license_expired():
-            self.error = _license_notice()
             return
         self.busy = True
         yield
