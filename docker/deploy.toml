@@ -14,3 +14,8 @@ configs = "./deploy/configs"
 [server]
 frontend_port = 3000
 backend_port = 8000
+
+# Subnet for the container network. Change it if it clashes with your network;
+# whatever is set here is what PostgreSQL must allow in pg_hba.conf.
+[network]
+subnet = "172.28.0.0/16"

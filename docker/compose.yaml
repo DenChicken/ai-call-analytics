@@ -9,6 +9,12 @@ x-logging: &logging
 x-host-access: &host-access
   - "host.docker.internal:host-gateway"
 
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${DOCKER_SUBNET}
+
 services:
   fetcher:
     image: ai-call-analytics/fetcher:${VERSION}
