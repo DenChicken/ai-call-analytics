@@ -27,9 +27,6 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-**.toml
-!**.example.toml
-!pyproject.toml
 **/secrets/
 *.pem
 *.key

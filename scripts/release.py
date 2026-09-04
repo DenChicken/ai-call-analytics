@@ -1,8 +1,6 @@
 import argparse
-import compileall
 import hashlib
 import json
-import os
 import re
 import shutil
 import subprocess
@@ -16,47 +14,27 @@ MODULE_FETCHER = "fetcher"
 MODULE_PIPELINE = "pipeline"
 MODULE_WEBUI = "webui"
 
-COMPILED_MODULES = (MODULE_FETCHER, MODULE_PIPELINE)
-BYTECODE_MODULES = (MODULE_WEBUI,)
-ALL_MODULES = (*COMPILED_MODULES, *BYTECODE_MODULES)
+ALL_MODULES = (MODULE_FETCHER, MODULE_PIPELINE, MODULE_WEBUI)
 PRIVATE_KEY_STEM = "license_private_key"
 KEYGEN_SCRIPT = "keygen.py"
-
-ENTRY_POINT = "main.py"
-SOURCE_PACKAGE = "src"
-LICENSING_PACKAGE = "licensing"
 PRIVATE_NAMES = (KEYGEN_SCRIPT, PRIVATE_KEY_STEM)
+
+COMPANY_NAME = "ai-call-analytics"
 
 OUTPUT_DIR_NAME = "release"
 STAGE_DIR_NAME = "stage"
 SCRIPTS_DIR_NAME = "scripts"
+DOCKER_DIR_NAME = "docker"
+IMAGES_DIR_NAME = "images"
+CONFIGS_DIR_NAME = "configs"
 
-NUITKA_MODULE = "nuitka"
-NUITKA_COMMON_FLAGS = (
-    "--assume-yes-for-downloads",
-    "--remove-output",
-)
-NUITKA_FLAGS = (
-    *NUITKA_COMMON_FLAGS,
-    "--nofollow-imports",
-    "--no-deployment-flag=self-execution",
-)
-NUITKA_OUTPUT_FLAG = "--output-dir"
-NUITKA_NAME_FLAG = "--output-filename"
-NUITKA_FOLLOW_FLAG = "--follow-import-to"
-NUITKA_INCLUDE_FLAG = "--include-package"
-NUITKA_PACKAGE_MODE = "--mode=package"
-NUITKA_MODULE_SUFFIX = ".so"
-NUITKA_STUB_SUFFIX = ".pyi"
-NUITKA_COMPANY_FLAG = "--company-name"
-NUITKA_PRODUCT_FLAG = "--product-name"
-COMPANY_NAME = "ai-call-analytics"
-
-BYTECODE_OPTIMIZE_LEVEL = 2
-BYTECODE_SOURCE_SUFFIX = ".py"
-BYTECODE_COMPILED_SUFFIX = ".pyc"
-BYTECODE_KEPT_SOURCES = ("rxconfig.py", "app.py")
-EXCLUDED_PATTERNS = ("__pycache__", ".web", ".states", "reflex.lock", ".gitignore")
+DOCKER_COMMAND = "docker"
+DOCKERFILE_TEMPLATE = "{module}.Dockerfile"
+IMAGE_TEMPLATE = "{product}/{module}:{version}"
+IMAGE_ARCHIVE_TEMPLATE = "{module}.tar"
+BUILD_ARGS = ("build", "-f")
+TAG_FLAG = "-t"
+SAVE_ARGS = ("save", "-o")
 
 VERSION_PATTERN = r"^\d+(\.\d+)*$"
 VERSION_TIMESTAMP_FORMAT = "%Y%m%d-%H%M"
@@ -73,18 +51,26 @@ MANIFEST_NAME = "manifest.json"
 MANIFEST_INDENT = 2
 CHECKSUM_CHUNK = 1 << 20
 
-HELP_FLAG = "--help"
-NO_USER_SITE_VAR = "PYTHONNOUSERSITE"
-PYTHONPATH_VAR = "PYTHONPATH"
-MISSING_LICENSING_MARKER = "No module named 'licensing'"
-LICENSING_IMPORT_CHECK = (
-    "import licensing.license as l, licensing.verify_runtime as v;"
-    "assert l.PUBLIC_KEY, 'public key is empty';"
-    "assert 'compiled' in type(v.load).__name__, 'not the compiled module';"
-    "print('module verified, public key present')"
+BUNDLE_FILES = (
+    (SCRIPTS_DIR_NAME, "db.py", SCRIPTS_DIR_NAME),
+    (SCRIPTS_DIR_NAME, "user.py", SCRIPTS_DIR_NAME),
+    (SCRIPTS_DIR_NAME, "fetch_models.py", SCRIPTS_DIR_NAME),
+    (SCRIPTS_DIR_NAME, "schema.sql", SCRIPTS_DIR_NAME),
+    (SCRIPTS_DIR_NAME, "requirements.txt", SCRIPTS_DIR_NAME),
+    (SCRIPTS_DIR_NAME, "deploy.py", ""),
+    (DOCKER_DIR_NAME, "compose.yaml", ""),
+    (DOCKER_DIR_NAME, "deploy.toml", ""),
 )
-
-DEPLOY_FILES = ("db.py", "user.py", "schema.sql", "requirements.txt")
+CONFIG_TEMPLATE_SUFFIX = ".template"
+TOML_SUFFIX = ".toml"
+EXAMPLE_MARKERS = ((".example.toml", ".toml"), ("-example.txt", ".txt"))
+CONTAINER_ANCHORS = {
+    "data_dir": "/data",
+    "models_dir": "/models",
+    "secrets_dir": "/secrets",
+    "logs_dir": "/logs",
+    "configs_dir": "/configs",
+}
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -117,164 +103,107 @@ def _commit_label() -> str:
     return commit[:COMMIT_LENGTH]
 
 
-def _nuitka_command(module: str, output_dir: Path) -> list[str]:
-    command = [
-        sys.executable,
-        "-m",
-        NUITKA_MODULE,
-        *NUITKA_FLAGS,
-        f"{NUITKA_OUTPUT_FLAG}={output_dir}",
-        f"{NUITKA_NAME_FLAG}={module}",
-        f"{NUITKA_COMPANY_FLAG}={COMPANY_NAME}",
-        f"{NUITKA_PRODUCT_FLAG}={module}",
-    ]
-    command.append(f"{NUITKA_FOLLOW_FLAG}={SOURCE_PACKAGE}")
-    command.append(f"{NUITKA_INCLUDE_FLAG}={LICENSING_PACKAGE}")
-    command.append(ENTRY_POINT)
-    return command
+def build_image(module: str, version: str) -> str:
+    dockerfile = ROOT / DOCKER_DIR_NAME / DOCKERFILE_TEMPLATE.format(module=module)
+    if not dockerfile.is_file():
+        raise ReleaseError(f"dockerfile not found: {dockerfile}")
 
-
-def compile_binary(module: str, output_root: Path) -> Path:
-    source_dir = ROOT / module
-    if not (source_dir / ENTRY_POINT).is_file():
-        raise ReleaseError(f"entry point not found: {source_dir / ENTRY_POINT}")
-
-    output_dir = output_root / module
-    output_dir.mkdir(parents=True, exist_ok=True)
-
+    tag = IMAGE_TEMPLATE.format(product=COMPANY_NAME, module=module, version=version)
     started = time.monotonic()
-    print(f"[{module}] compiling with nuitka", flush=True)
-    result = subprocess.run(_nuitka_command(module, output_dir), cwd=source_dir, check=False)
-    if result.returncode != 0:
-        raise ReleaseError(f"nuitka failed for {module} with exit code {result.returncode}")
-
-    binary = output_dir / module
-    if not binary.is_file():
-        present = sorted(entry.name for entry in output_dir.iterdir())
-        raise ReleaseError(
-            f"nuitka reported success but {binary} is missing, output contains: {present}"
-        )
-    print(f"[{module}] compiled in {time.monotonic() - started:.0f}s", flush=True)
-    _verify_embedded_licensing(module, binary)
-    return binary
-
-
-def _verify_embedded_licensing(module: str, binary: Path) -> None:
-    environment = dict(os.environ)
-    environment[NO_USER_SITE_VAR] = "1"
-    environment.pop(PYTHONPATH_VAR, None)
-
+    print(f"[{module}] building {tag}", flush=True)
     result = subprocess.run(
-        [str(binary), HELP_FLAG],
-        cwd=binary.parent,
-        env=environment,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0 or MISSING_LICENSING_MARKER in result.stderr:
-        raise ReleaseError(
-            f"{module} does not carry {LICENSING_PACKAGE} inside the binary: "
-            f"{result.stderr.strip() or 'unexpected exit code ' + str(result.returncode)}"
-        )
-    print(f"[{module}] {LICENSING_PACKAGE} is embedded", flush=True)
-
-
-def compile_bytecode(module: str, output_root: Path) -> Path:
-    source_dir = ROOT / module
-    if not source_dir.is_dir():
-        raise ReleaseError(f"module directory not found: {source_dir}")
-
-    output_dir = output_root / module
-    if output_dir.exists():
-        shutil.rmtree(output_dir)
-
-    started = time.monotonic()
-    print(f"[{module}] compiling to bytecode", flush=True)
-    shutil.copytree(source_dir, output_dir, ignore=shutil.ignore_patterns(*EXCLUDED_PATTERNS))
-
-    if not compileall.compile_dir(
-        output_dir, legacy=True, optimize=BYTECODE_OPTIMIZE_LEVEL, force=True, quiet=1
-    ):
-        raise ReleaseError(f"bytecode compilation failed for {module}")
-
-    for source in output_dir.rglob(f"*{BYTECODE_SOURCE_SUFFIX}"):
-        if source.name in BYTECODE_KEPT_SOURCES:
-            source.with_suffix(BYTECODE_COMPILED_SUFFIX).unlink(missing_ok=True)
-            continue
-        source.unlink()
-    print(f"[{module}] compiled in {time.monotonic() - started:.0f}s", flush=True)
-    return output_dir
-
-
-def compile_licensing(output_dir: Path) -> Path:
-    started = time.monotonic()
-    print(f"[{LICENSING_PACKAGE}] compiling to an extension module", flush=True)
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            NUITKA_MODULE,
-            NUITKA_PACKAGE_MODE,
-            *NUITKA_COMMON_FLAGS,
-            f"{NUITKA_OUTPUT_FLAG}={output_dir}",
-            LICENSING_PACKAGE,
-        ],
-        cwd=ROOT,
-        check=False,
+        [DOCKER_COMMAND, *BUILD_ARGS, str(dockerfile), TAG_FLAG, tag, str(ROOT)], check=False
     )
     if result.returncode != 0:
-        raise ReleaseError(
-            f"nuitka failed for {LICENSING_PACKAGE} with exit code {result.returncode}"
-        )
-
-    for stub in output_dir.glob(f"{LICENSING_PACKAGE}*{NUITKA_STUB_SUFFIX}"):
-        stub.unlink()
-
-    compiled = sorted(output_dir.glob(f"{LICENSING_PACKAGE}*{NUITKA_MODULE_SUFFIX}"))
-    if not compiled:
-        present = sorted(entry.name for entry in output_dir.iterdir())
-        raise ReleaseError(
-            f"nuitka produced no {LICENSING_PACKAGE} module, output contains: {present}"
-        )
-    print(f"[{LICENSING_PACKAGE}] compiled in {time.monotonic() - started:.0f}s", flush=True)
-    _verify_compiled_licensing(output_dir)
-    return compiled[0]
+        raise ReleaseError(f"docker build failed for {module} with exit code {result.returncode}")
+    print(f"[{module}] built in {time.monotonic() - started:.0f}s", flush=True)
+    return tag
 
 
-def _verify_compiled_licensing(output_dir: Path) -> None:
+def save_image(module: str, tag: str, images_dir: Path) -> None:
+    archive = images_dir / IMAGE_ARCHIVE_TEMPLATE.format(module=module)
+    started = time.monotonic()
+    print(f"[{module}] saving to {archive.name}", flush=True)
     result = subprocess.run(
-        [sys.executable, "-c", LICENSING_IMPORT_CHECK],
-        cwd=output_dir,
-        capture_output=True,
-        text=True,
-        check=False,
+        [DOCKER_COMMAND, *SAVE_ARGS, str(archive), tag], check=False
     )
     if result.returncode != 0:
-        raise ReleaseError(
-            f"the compiled {LICENSING_PACKAGE} module does not import: {result.stderr.strip()}"
-        )
-    print(f"[{LICENSING_PACKAGE}] {result.stdout.strip()}", flush=True)
+        raise ReleaseError(f"docker save failed for {module}")
+    size = archive.stat().st_size
+    print(
+        f"[{module}] saved {size / (1 << 20):.0f} MiB in {time.monotonic() - started:.0f}s",
+        flush=True,
+    )
 
 
-def build_modules(modules: tuple[str, ...], stage_dir: Path) -> None:
+def build_modules(modules: tuple[str, ...], stage_dir: Path, version: str) -> None:
+    images_dir = stage_dir / IMAGES_DIR_NAME
+    images_dir.mkdir(parents=True, exist_ok=True)
     for module in modules:
-        if module in BYTECODE_MODULES:
-            output_dir = compile_bytecode(module, stage_dir)
-            compile_licensing(output_dir)
-        else:
-            compile_binary(module, stage_dir)
+        save_image(module, build_image(module, version), images_dir)
 
 
-def collect_deploy_files(stage_dir: Path) -> None:
-    target = stage_dir / SCRIPTS_DIR_NAME
-    target.mkdir(parents=True, exist_ok=True)
-    for name in DEPLOY_FILES:
-        source = ROOT / SCRIPTS_DIR_NAME / name
+def collect_files(stage_dir: Path) -> None:
+    for source_dir, name, target_dir in BUNDLE_FILES:
+        source = ROOT / source_dir / name
         if not source.is_file():
             raise ReleaseError(f"deployment file not found: {source}")
-        shutil.copy2(source, target / name)
-    print(f"[deploy] collected {len(DEPLOY_FILES)} files", flush=True)
+        target = stage_dir / target_dir / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+    collected = _collect_configs(stage_dir)
+    print(
+        f"[collect] {len(BUNDLE_FILES)} files and {collected} config examples",
+        flush=True,
+    )
+
+
+def _collect_configs(stage_dir: Path) -> int:
+    source_root = ROOT / CONFIGS_DIR_NAME
+    if not source_root.is_dir():
+        raise ReleaseError(f"config examples not found: {source_root}")
+
+    collected = 0
+    for example in sorted(source_root.rglob("*")):
+        if not example.is_file():
+            continue
+
+        name = _delivered_name(example.name)
+        if name is None:
+            continue
+
+        target = stage_dir / CONFIGS_DIR_NAME / example.relative_to(source_root).parent / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if example.suffix == TOML_SUFFIX:
+            target.write_text(_for_containers(example), encoding="utf-8")
+        else:
+            shutil.copy2(example, target)
+        collected += 1
+
+    if not collected:
+        raise ReleaseError(f"no config examples matched in {source_root}")
+    return collected
+
+
+def _delivered_name(name: str) -> str | None:
+    for marker, replacement in EXAMPLE_MARKERS:
+        if marker in name:
+            return name.replace(marker, replacement) + CONFIG_TEMPLATE_SUFFIX
+    return None
+
+
+def _for_containers(example: Path) -> str:
+    lines = []
+    for line in example.read_text(encoding="utf-8").splitlines():
+        key = line.split("=", 1)[0].strip()
+        if key in CONTAINER_ANCHORS:
+            lines.append(f'{key} = "{CONTAINER_ANCHORS[key]}"')
+            continue
+        for marker, replacement in EXAMPLE_MARKERS:
+            line = line.replace(marker, replacement)
+        lines.append(line)
+    return "\n".join(lines) + "\n"
 
 
 def _checksum(path: Path) -> str:
@@ -387,8 +316,8 @@ def main() -> int:
     )
 
     try:
-        build_modules(modules, stage_dir)
-        collect_deploy_files(stage_dir)
+        build_modules(modules, stage_dir, args.version)
+        collect_files(stage_dir)
         verify_no_private_content(stage_dir)
         write_manifest(stage_dir, args.version, commit, built_at)
         archive = make_archive(stage_dir, args.output, name)

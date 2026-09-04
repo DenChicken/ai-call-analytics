@@ -1,0 +1,36 @@
+name: ai-call-analytics
+
+services:
+  fetcher:
+    image: ai-call-analytics/fetcher:${VERSION}
+    restart: on-failure:5
+    user: "${RUN_AS}"
+    volumes:
+      - ${DATA_DIR}:/data
+      - ${SECRETS_DIR}:/secrets:ro
+      - ${LOGS_DIR}:/logs
+      - ${CONFIGS_DIR}/fetcher:/configs:ro
+
+  pipeline:
+    image: ai-call-analytics/pipeline:${VERSION}
+    restart: on-failure:5
+    user: "${RUN_AS}"
+    volumes:
+      - ${DATA_DIR}:/data
+      - ${MODELS_DIR}:/models:ro
+      - ${SECRETS_DIR}:/secrets:ro
+      - ${LOGS_DIR}:/logs
+      - ${CONFIGS_DIR}/pipeline:/configs:ro
+
+  webui:
+    image: ai-call-analytics/webui:${VERSION}
+    restart: on-failure:5
+    user: "${RUN_AS}"
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+      - "${BACKEND_PORT}:${BACKEND_PORT}"
+    volumes:
+      - ${DATA_DIR}:/data:ro
+      - ${SECRETS_DIR}:/secrets:ro
+      - ${LOGS_DIR}:/logs
+      - ${CONFIGS_DIR}/webui:/configs:ro
