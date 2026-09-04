@@ -1,6 +1,7 @@
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -51,7 +52,8 @@ GIT_STATUS_ARGS = ("status", "--porcelain")
 
 MANIFEST_NAME = "manifest.json"
 MANIFEST_INDENT = 2
-CHECKSUM_CHUNK = 1 << 20
+BYTES_IN_MIB = 1 << 20
+CHECKSUM_CHUNK = BYTES_IN_MIB
 
 BUNDLE_FILES = (
     (SCRIPTS_DIR_NAME, "db.py", SCRIPTS_DIR_NAME),
@@ -148,7 +150,7 @@ def save_image(module: str, tag: str, images_dir: Path) -> None:
     stamp.write_text(current, encoding="utf-8")
     size = archive.stat().st_size
     print(
-        f"[{module}] saved {size / (1 << 20):.0f} MiB in {time.monotonic() - started:.0f}s",
+        f"[{module}] saved {size / BYTES_IN_MIB:.0f} MiB in {time.monotonic() - started:.0f}s",
         flush=True,
     )
 
@@ -169,7 +171,11 @@ def collect_images(images_dir: Path, stage_dir: Path) -> None:
             raise ReleaseError(
                 f"{archive} is missing: build every module before packing the bundle"
             )
-        shutil.copy2(archive, target / archive.name)
+        link = target / archive.name
+        try:
+            os.link(archive, link)
+        except OSError:
+            shutil.copy2(archive, link)
     print(f"[images] {len(ALL_MODULES)} images in the bundle", flush=True)
 
 
@@ -291,7 +297,7 @@ def make_archive(stage_dir: Path, output_dir: Path, name: str) -> Path:
                 bundle.write(path, path.relative_to(stage_dir).as_posix())
     size = archive.stat().st_size
     print(
-        f"[archive] {archive.name}, {size / (1 << 20):.1f} MiB "
+        f"[archive] {archive.name}, {size / BYTES_IN_MIB:.1f} MiB "
         f"in {time.monotonic() - started:.0f}s",
         flush=True,
     )
