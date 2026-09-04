@@ -1,19 +1,25 @@
-FROM ubuntu:24.04 AS build
+FROM ubuntu:24.04 AS base
 
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 ENV PYTHONDONTWRITEBYTECODE=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-dev python3-pip \
-        build-essential patchelf ccache \
-        curl unzip \
+        python3 python3-pip curl unzip \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /build
+COPY webui/requirements.txt /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
 
-COPY webui/requirements.txt ./
-RUN pip3 install --no-cache-dir -r requirements.txt nuitka
+
+FROM base AS build
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-dev build-essential patchelf \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip3 install --no-cache-dir nuitka
+
+WORKDIR /build
 
 COPY licensing ./licensing
 RUN python3 -m nuitka \
@@ -41,18 +47,7 @@ RUN cd /out/webui && python3 -m reflex export --frontend-only --no-zip \
     && rm -rf .web/node_modules
 
 
-FROM ubuntu:24.04
-
-ENV DEBIAN_FRONTEND=noninteractive
-ENV PIP_BREAK_SYSTEM_PACKAGES=1
-
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3 python3-pip \
-        curl unzip \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY webui/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+FROM base
 
 COPY --from=build /out/webui /app
 RUN chmod -R a+rwX /app

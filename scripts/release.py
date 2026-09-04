@@ -32,9 +32,11 @@ DOCKER_COMMAND = "docker"
 DOCKERFILE_TEMPLATE = "{module}.Dockerfile"
 IMAGE_TEMPLATE = "{product}/{module}:{version}"
 IMAGE_ARCHIVE_TEMPLATE = "{module}.tar"
+STAMP_SUFFIX = ".id"
 BUILD_ARGS = ("build", "-f")
 TAG_FLAG = "-t"
 SAVE_ARGS = ("save", "-o")
+INSPECT_ARGS = ("image", "inspect", "--format", "{{.Id}}")
 
 VERSION_PATTERN = r"^\d+(\.\d+)*$"
 VERSION_TIMESTAMP_FORMAT = "%Y%m%d-%H%M"
@@ -120,15 +122,30 @@ def build_image(module: str, version: str) -> str:
     return tag
 
 
-def save_image(module: str, tag: str, images_dir: Path) -> None:
-    archive = images_dir / IMAGE_ARCHIVE_TEMPLATE.format(module=module)
-    started = time.monotonic()
-    print(f"[{module}] saving to {archive.name}", flush=True)
+def image_id(tag: str) -> str:
     result = subprocess.run(
-        [DOCKER_COMMAND, *SAVE_ARGS, str(archive), tag], check=False
+        [DOCKER_COMMAND, *INSPECT_ARGS, tag], capture_output=True, text=True, check=False
     )
     if result.returncode != 0:
+        raise ReleaseError(f"docker inspect failed for {tag}")
+    return result.stdout.strip()
+
+
+def save_image(module: str, tag: str, images_dir: Path) -> None:
+    archive = images_dir / IMAGE_ARCHIVE_TEMPLATE.format(module=module)
+    stamp = archive.with_suffix(STAMP_SUFFIX)
+    current = image_id(tag)
+
+    if archive.is_file() and stamp.is_file() and stamp.read_text(encoding="utf-8") == current:
+        print(f"[{module}] {archive.name} is up to date, keeping it", flush=True)
+        return
+
+    started = time.monotonic()
+    print(f"[{module}] saving to {archive.name}", flush=True)
+    if subprocess.run([DOCKER_COMMAND, *SAVE_ARGS, str(archive), tag], check=False).returncode != 0:
         raise ReleaseError(f"docker save failed for {module}")
+
+    stamp.write_text(current, encoding="utf-8")
     size = archive.stat().st_size
     print(
         f"[{module}] saved {size / (1 << 20):.0f} MiB in {time.monotonic() - started:.0f}s",
@@ -136,11 +153,24 @@ def save_image(module: str, tag: str, images_dir: Path) -> None:
     )
 
 
-def build_modules(modules: tuple[str, ...], stage_dir: Path, version: str) -> None:
-    images_dir = stage_dir / IMAGES_DIR_NAME
+def build_modules(modules: tuple[str, ...], images_dir: Path, version: str) -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
     for module in modules:
         save_image(module, build_image(module, version), images_dir)
+
+
+def collect_images(images_dir: Path, stage_dir: Path) -> None:
+    target = stage_dir / IMAGES_DIR_NAME
+    target.mkdir(parents=True, exist_ok=True)
+
+    for module in ALL_MODULES:
+        archive = images_dir / IMAGE_ARCHIVE_TEMPLATE.format(module=module)
+        if not archive.is_file():
+            raise ReleaseError(
+                f"{archive} is missing: build every module before packing the bundle"
+            )
+        shutil.copy2(archive, target / archive.name)
+    print(f"[images] {len(ALL_MODULES)} images in the bundle", flush=True)
 
 
 def collect_files(stage_dir: Path) -> None:
@@ -303,6 +333,7 @@ def main() -> int:
     commit = _commit_label()
     modules = tuple(args.modules) or ALL_MODULES
 
+    images_dir = args.output / IMAGES_DIR_NAME
     stage_dir = args.output / STAGE_DIR_NAME
     if stage_dir.exists():
         shutil.rmtree(stage_dir)
@@ -316,7 +347,8 @@ def main() -> int:
     )
 
     try:
-        build_modules(modules, stage_dir, args.version)
+        build_modules(modules, images_dir, args.version)
+        collect_images(images_dir, stage_dir)
         collect_files(stage_dir)
         verify_no_private_content(stage_dir)
         write_manifest(stage_dir, args.version, commit, built_at)

@@ -1,10 +1,17 @@
 name: ai-call-analytics
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   fetcher:
     image: ai-call-analytics/fetcher:${VERSION}
     restart: on-failure:5
     user: "${RUN_AS}"
+    logging: *logging
     volumes:
       - ${DATA_DIR}:/data
       - ${SECRETS_DIR}:/secrets:ro
@@ -15,6 +22,7 @@ services:
     image: ai-call-analytics/pipeline:${VERSION}
     restart: on-failure:5
     user: "${RUN_AS}"
+    logging: *logging
     volumes:
       - ${DATA_DIR}:/data
       - ${MODELS_DIR}:/models:ro
@@ -26,6 +34,7 @@ services:
     image: ai-call-analytics/webui:${VERSION}
     restart: on-failure:5
     user: "${RUN_AS}"
+    logging: *logging
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
       - "${BACKEND_PORT}:${BACKEND_PORT}"
