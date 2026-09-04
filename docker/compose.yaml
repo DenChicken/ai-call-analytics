@@ -6,12 +6,16 @@ x-logging: &logging
     max-size: "10m"
     max-file: "3"
 
+x-host-access: &host-access
+  - "host.docker.internal:host-gateway"
+
 services:
   fetcher:
     image: ai-call-analytics/fetcher:${VERSION}
     restart: on-failure:5
     user: "${RUN_AS}"
     logging: *logging
+    extra_hosts: *host-access
     volumes:
       - ${DATA_DIR}:/data
       - ${SECRETS_DIR}:/secrets:ro
@@ -23,6 +27,7 @@ services:
     restart: on-failure:5
     user: "${RUN_AS}"
     logging: *logging
+    extra_hosts: *host-access
     volumes:
       - ${DATA_DIR}:/data
       - ${MODELS_DIR}:/models:ro
@@ -35,6 +40,7 @@ services:
     restart: on-failure:5
     user: "${RUN_AS}"
     logging: *logging
+    extra_hosts: *host-access
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
       - "${BACKEND_PORT}:${BACKEND_PORT}"
