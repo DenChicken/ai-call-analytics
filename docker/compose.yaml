@@ -41,6 +41,9 @@ services:
     user: "${RUN_AS}"
     logging: *logging
     extra_hosts: *host-access
+    environment:
+      FRONTEND_PORT: ${FRONTEND_PORT}
+      BACKEND_PORT: ${BACKEND_PORT}
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
       - "${BACKEND_PORT}:${BACKEND_PORT}"

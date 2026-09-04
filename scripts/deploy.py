@@ -29,6 +29,9 @@ MODULE_PIPELINE = "pipeline"
 CONFIG_NAME = "config.toml"
 DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
+MODEL_SECTIONS = ("asr", "llm")
+REPO_ID_KEY = "repo_id"
+TOKEN_FILE_NAME = "hf_token"
 
 DOCKER = "docker"
 ROOT_USER = "0:0"
@@ -43,7 +46,8 @@ USER_SCRIPT = "user.py"
 USER_ADD_COMMAND = "add"
 DEFAULT_LOGIN = "admin"
 FETCH_MODELS_SCRIPT = "fetch_models.py"
-CONFIG_FLAG = "-c"
+MODELS_DIR_FLAG = "-d"
+TOKEN_FILE_FLAG = "-t"
 
 COMMAND_INIT = "init"
 COMMAND_UP = "up"
@@ -52,16 +56,23 @@ SECRETS_HINT = "the file names are listed in the module configs"
 HOST_ALIAS = "host.docker.internal"
 DOCKER_GATEWAY = "172.17.0.1"
 DOCKER_SUBNET = "172.17.0.0/16"
+
+PG_DIR_LINUX = "/etc/postgresql/<version>/main"
+PG_DIR_WINDOWS = r"C:\Program Files\PostgreSQL\<version>\data"
+
 DATABASE_ACCESS_STEPS = (
-    f"when it runs on this machine, address it as {HOST_ALIAS} in the connection string:",
-    f"  postgresql://user:password@{HOST_ALIAS}:5432/dbname",
+    f"connection string: postgresql://user:password@{HOST_ALIAS}:5432/dbname",
     "",
-    f'add "127.0.0.1 {HOST_ALIAS}" to /etc/hosts so the scripts here resolve it too',
+    f'hosts file, add "127.0.0.1 {HOST_ALIAS}":',
+    "  linux:    /etc/hosts",
+    r"  windows:  C:\Windows\System32\drivers\etc\hosts",
     "",
-    "let PostgreSQL accept connections from the docker network:",
-    f"  postgresql.conf:  listen_addresses = 'localhost,{DOCKER_GATEWAY}'",
-    f"  pg_hba.conf:      host all all {DOCKER_SUBNET} scram-sha-256",
-    "  then restart PostgreSQL",
+    f"postgresql.conf, set listen_addresses = 'localhost,{DOCKER_GATEWAY}'",
+    f"pg_hba.conf, add:  host all all {DOCKER_SUBNET} scram-sha-256",
+    f"  linux:    {PG_DIR_LINUX}",
+    f"  windows:  {PG_DIR_WINDOWS}",
+    "",
+    "restart PostgreSQL after the edits",
 )
 
 
@@ -120,19 +131,26 @@ def load_deploy_config() -> tuple[dict[str, Path], dict[str, int]]:
     return paths, ports
 
 
-def dsn_path(paths: dict[str, Path]) -> Path:
+def pipeline_config(paths: dict[str, Path]) -> dict:
     config_path = paths["configs"] / MODULE_PIPELINE / CONFIG_NAME
     if not config_path.is_file():
         raise DeployError(
             f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
         )
+    return read_toml(config_path)
 
-    dsn_file = read_toml(config_path).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
+
+def dsn_path(paths: dict[str, Path]) -> Path:
+    dsn_file = pipeline_config(paths).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
     if not dsn_file:
-        raise DeployError(
-            f"missing '{DSN_FILE_KEY}' in [{DATABASE_SECTION}] of {shown(config_path)}"
-        )
+        raise DeployError(f"missing '{DSN_FILE_KEY}' in [{DATABASE_SECTION}] of the pipeline config")
     return paths["secrets"] / dsn_file
+
+
+def model_repos(paths: dict[str, Path]) -> list[str]:
+    config = pipeline_config(paths)
+    repos = [config.get(section, {}).get(REPO_ID_KEY) for section in MODEL_SECTIONS]
+    return list(dict.fromkeys(repo for repo in repos if repo))
 
 
 def run_docker(args: list[str]) -> None:
@@ -193,22 +211,30 @@ def command_init() -> int:
 
 def _print_manual_steps(paths: dict[str, Path]) -> None:
     print("\nwhat is left to do by hand:\n")
-    print(f"  1. put the license and the database connection string into {shown(paths['secrets'])}")
+
+    print(f"  1. secrets -> {shown(paths['secrets'])}")
     print(f"     {SECRETS_HINT}")
-    print(f"\n  2. adjust the configs in {shown(paths['configs'])}")
+
+    print(f"\n  2. configs -> {shown(paths['configs'])}")
     print("     CRM access, scoring criteria, call types")
-    print(f"\n  3. put the models into {shown(paths['models'])} or download them:")
+
+    print(f"\n  3. models -> {shown(paths['models'])}")
     print(
-        "       "
+        "     "
         + script_command(
             FETCH_MODELS_SCRIPT,
-            CONFIG_FLAG,
-            shown(paths["configs"] / MODULE_PIPELINE / CONFIG_NAME),
+            *model_repos(paths),
+            MODELS_DIR_FLAG,
+            shown(paths["models"]),
+            TOKEN_FILE_FLAG,
+            shown(paths["secrets"] / TOKEN_FILE_NAME),
         )
     )
-    print("\n  4. let the containers reach the database")
+
+    print("\n  4. database access")
     for line in DATABASE_ACCESS_STEPS:
         print(f"     {line}" if line else "")
+
     print(f"\nthen:  {self_command(COMMAND_UP)}")
 
 

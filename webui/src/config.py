@@ -1,8 +1,13 @@
+import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.constants import (
+    BACKEND_PORT_ENV_VAR,
+    DEFAULT_BACKEND_PORT,
+    DEFAULT_FRONTEND_PORT,
+    FRONTEND_PORT_ENV_VAR,
     LOG_LEVELS,
     LOG_MODULE_DIR,
     SAME_DOMAIN_HOST,
@@ -89,6 +94,15 @@ def _require(section: dict, key: str, where: str):
     return section[key]
 
 
+def _port(name: str, default: int) -> int:
+    value = os.environ.get(name)
+    if not value:
+        return default
+    if not value.isdigit():
+        raise ConfigError(f"{name} is '{value}', expected a port number")
+    return int(value)
+
+
 def _require_level(section: dict, key: str) -> str:
     value = str(_require(section, key, LOGGING_SECTION)).upper()
     if value not in LOG_LEVELS:
@@ -162,8 +176,8 @@ def load_config(path: str | Path) -> Config:
         ),
         storage=StorageConfig(data_dir=data_dir),
         server=ServerConfig(
-            frontend_port=_require(server_raw, "frontend_port", "server"),
-            backend_port=_require(server_raw, "backend_port", "server"),
+            frontend_port=_port(FRONTEND_PORT_ENV_VAR, DEFAULT_FRONTEND_PORT),
+            backend_port=_port(BACKEND_PORT_ENV_VAR, DEFAULT_BACKEND_PORT),
             backend_path=_require(server_raw, "backend_path", "server"),
         ),
         display=DisplayConfig(

@@ -1,106 +1,47 @@
 import argparse
 import sys
-import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub.errors import GatedRepoError
 
-MODEL_SECTIONS = ("asr", "llm")
-HUGGINGFACE_SECTION = "huggingface"
-PATHS_SECTION = "paths"
-MODELS_DIR_KEY = "models_dir"
-SECRETS_DIR_KEY = "secrets_dir"
-TOKEN_KEY = "token_file"
-REQUIRED_MODEL_KEYS = ("repo_id", "local_dir")
+REPO_SEPARATOR = "/"
+OK = "ok"
+FAILED = "FAILED"
 
 
 class ScriptError(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class ModelSpec:
-    section: str
-    repo_id: str
-    local_dir: Path
-    token: str
-
-
-def read_secret_file(path: Path) -> str:
+def read_token(path: Path | None) -> str | None:
+    if path is None:
+        return None
     if not path.is_file():
-        raise ScriptError(f"secret file not found: {path}")
+        raise ScriptError(f"token file not found: {path}")
     with path.open("r", encoding="utf-8") as handle:
-        value = handle.readline().strip()
-    if not value:
-        raise ScriptError(f"secret file is empty: {path}")
-    return value
+        token = handle.readline().strip()
+    if not token:
+        raise ScriptError(f"token file is empty: {path}")
+    return token
 
 
-def load_specs(config_path: Path) -> list[ModelSpec]:
-    if not config_path.is_file():
-        raise ScriptError(f"config file not found: {config_path}")
-
-    with config_path.open("rb") as handle:
-        raw = tomllib.load(handle)
-
-    def section(name: str) -> dict:
-        if name not in raw:
-            raise ScriptError(f"missing required section [{name}] in {config_path}")
-        return raw[name]
-
-    def anchor(key: str) -> Path:
-        paths = section(PATHS_SECTION)
-        if key not in paths:
-            raise ScriptError(f"missing required key '{key}' in [{PATHS_SECTION}]")
-        value = Path(paths[key])
-        if not value.is_absolute():
-            raise ScriptError(
-                f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}"
-            )
-        return value.resolve()
-
-    models_dir = anchor(MODELS_DIR_KEY)
-    secrets_dir = anchor(SECRETS_DIR_KEY)
-
-    if TOKEN_KEY not in section(HUGGINGFACE_SECTION):
-        raise ScriptError(f"missing required key '{TOKEN_KEY}' in [{HUGGINGFACE_SECTION}]")
-    token = read_secret_file(secrets_dir / section(HUGGINGFACE_SECTION)[TOKEN_KEY])
-
-    specs = []
-    seen = set()
-    for name in MODEL_SECTIONS:
-        entry = section(name)
-        for key in REQUIRED_MODEL_KEYS:
-            if key not in entry:
-                raise ScriptError(f"missing required key '{key}' in [{name}]")
-        if entry["repo_id"] in seen:
-            continue
-        seen.add(entry["repo_id"])
-        specs.append(
-            ModelSpec(
-                section=name,
-                repo_id=entry["repo_id"],
-                local_dir=models_dir / entry["local_dir"],
-                token=token,
-            )
-        )
-    return specs
+def target_dir(models_dir: Path, repo_id: str) -> Path:
+    return models_dir / repo_id.rsplit(REPO_SEPARATOR, 1)[-1]
 
 
-def check_access(specs: list[ModelSpec]) -> int:
+def check_access(repos: list[str], token: str | None) -> int:
     api = HfApi()
     unreachable = []
 
-    for spec in specs:
+    for repo_id in repos:
         try:
-            api.auth_check(spec.repo_id, token=spec.token)
-            print(f"[{spec.section}] {spec.repo_id}: ok")
+            api.auth_check(repo_id, token=token)
+            print(f"{repo_id}: {OK}")
         except Exception as error:
             reason = "gated" if isinstance(error, GatedRepoError) else error
-            print(f"[{spec.section}] {spec.repo_id}: FAILED: {reason}")
-            unreachable.append(spec.repo_id)
+            print(f"{repo_id}: {FAILED}: {reason}")
+            unreachable.append(repo_id)
 
     if unreachable:
         print("\naccept the conditions while signed in with the account owning", file=sys.stderr)
@@ -109,60 +50,81 @@ def check_access(specs: list[ModelSpec]) -> int:
             print(f"  https://huggingface.co/{repo_id}", file=sys.stderr)
         return 1
 
-    print("\nall repositories are reachable")
+    print(f"\nall {len(repos)} repositories are reachable")
     return 0
 
 
-def download(spec: ModelSpec) -> None:
-    print(f"[{spec.section}] {spec.repo_id} -> {spec.local_dir}", flush=True)
-    spec.local_dir.mkdir(parents=True, exist_ok=True)
+def download(repo_id: str, local_dir: Path, token: str | None) -> None:
+    print(f"{repo_id} -> {local_dir}", flush=True)
+    local_dir.mkdir(parents=True, exist_ok=True)
     try:
-        snapshot_download(
-            repo_id=spec.repo_id, local_dir=str(spec.local_dir), token=spec.token
-        )
+        snapshot_download(repo_id=repo_id, local_dir=str(local_dir), token=token)
     except GatedRepoError as error:
-        raise ScriptError(f"{spec.repo_id} is gated, run with --check for details") from error
+        raise ScriptError(f"{repo_id} is gated, run with --check for details") from error
 
 
-def main() -> int:
+def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Download pipeline models declared in the pipeline config"
+        description="Download Hugging Face models into a local directory"
     )
-    parser.add_argument("-c", "--config", required=True, type=Path, help="path to pipeline config")
+    parser.add_argument(
+        "repos",
+        nargs="+",
+        metavar="REPO",
+        help="repository ids, like Qwen/Qwen3-4B-Instruct-2507",
+    )
+    parser.add_argument(
+        "-d",
+        "--models-dir",
+        required=True,
+        type=Path,
+        help="directory to download into, one subdirectory per repository",
+    )
+    parser.add_argument(
+        "-t",
+        "--token-file",
+        type=Path,
+        help="path to a file whose first line is a Hugging Face token",
+    )
     parser.add_argument(
         "--check",
         action="store_true",
-        help="verify token access to every repository without downloading anything",
+        help="verify access to every repository without downloading anything",
     )
-    args = parser.parse_args()
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    repos = list(dict.fromkeys(args.repos))
 
     try:
-        specs = load_specs(args.config)
+        token = read_token(args.token_file)
     except ScriptError as error:
         print(error, file=sys.stderr)
         return 1
 
     if args.check:
-        return check_access(specs)
+        return check_access(repos, token)
 
     failures = {}
-    for spec in specs:
+    for repo_id in repos:
         try:
-            download(spec)
+            download(repo_id, target_dir(args.models_dir, repo_id), token)
         except Exception as error:
-            failures[spec.section] = error
+            failures[repo_id] = error
 
     print()
-    for spec in specs:
-        error = failures.get(spec.section)
-        print(f"[{spec.section}] {spec.repo_id}: {f'FAILED: {error}' if error else 'ok'}")
+    for repo_id in repos:
+        error = failures.get(repo_id)
+        print(f"{repo_id}: {f'{FAILED}: {error}' if error else OK}")
 
     if failures:
-        print(f"\n{len(failures)} of {len(specs)} models failed", file=sys.stderr)
+        print(f"\n{len(failures)} of {len(repos)} models failed", file=sys.stderr)
         print("run with --check to see which repositories the token cannot reach", file=sys.stderr)
         return 1
 
-    print(f"\ndownloaded {len(specs)} models")
+    print(f"\ndownloaded {len(repos)} models into {args.models_dir}")
     return 0
 
 

@@ -37,6 +37,6 @@ portal_url = "https://example.bitrix24.ru"
 rest_url_file = "crm_main_rest_url"
 
 [logging]
-level = "DEBUG"
+level = "INFO"
 external_logs = false
 external_level = "WARNING"

@@ -25,9 +25,6 @@ file = "criteria.toml"
 [types]
 file = "types.toml"
 
-[huggingface]
-token_file = "hf_token"
-
 [asr]
 repo_id = "Systran/faster-whisper-large-v3"
 local_dir = "faster-whisper-large-v3"
