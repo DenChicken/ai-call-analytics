@@ -1,5 +1,4 @@
 from datetime import date, datetime, timedelta, timezone, tzinfo
-from zoneinfo import ZoneInfo
 
 from src.constants import (
     DATETIME_FULL_TEMPLATE,
@@ -14,7 +13,6 @@ from src.constants import (
     PERIOD_DAYS,
     POSITIVE_SIGN,
     SCORE_FRACTION_TEMPLATE,
-    SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
     SHARE_PRECISION,
     UTC_OFFSET_TEMPLATE,
@@ -74,11 +72,6 @@ def zone(offset_hours: int) -> tzinfo:
 def offset_label(offset_hours: int) -> str:
     sign = POSITIVE_SIGN if offset_hours >= 0 else NEGATIVE_SIGN
     return UTC_OFFSET_TEMPLATE.format(sign=sign, hours=abs(offset_hours))
-
-
-def default_offset(timezone_name: str) -> int:
-    offset = datetime.now(ZoneInfo(timezone_name)).utcoffset() or timedelta()
-    return int(offset.total_seconds() // SECONDS_PER_HOUR)
 
 
 def moment(value: datetime | None, offset_hours: int) -> str:

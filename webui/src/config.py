@@ -49,7 +49,6 @@ class ServerConfig:
 
 @dataclass(frozen=True)
 class DisplayConfig:
-    timezone: str
     refresh_seconds: int
     page_size: int
     queue_size: int
@@ -168,7 +167,6 @@ def load_config(path: str | Path) -> Config:
             backend_path=_require(server_raw, "backend_path", "server"),
         ),
         display=DisplayConfig(
-            timezone=_require(display_raw, "timezone", "display"),
             refresh_seconds=_require(display_raw, "refresh_seconds", "display"),
             page_size=_require(display_raw, "page_size", "display"),
             queue_size=_require(display_raw, "queue_size", "display"),

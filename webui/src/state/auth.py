@@ -9,6 +9,7 @@ from argon2.exceptions import VerifyMismatchError
 from src import context, formatting
 from src.constants import (
     BROWSER_OFFSET_SCRIPT,
+    FALLBACK_UTC_OFFSET,
     FIELD_LOGIN,
     FIELD_PASSWORD,
     INTERNAL_ERROR_MESSAGE,
@@ -40,10 +41,6 @@ OFFSET_BY_LABEL = {
     formatting.offset_label(hours): hours
     for hours in range(MIN_UTC_OFFSET, MAX_UTC_OFFSET + 1)
 }
-
-
-def _fallback_utc_offset() -> int:
-    return formatting.default_offset(context.config().display.timezone)
 
 
 def _is_offset(value: str) -> bool:
@@ -110,7 +107,7 @@ class AuthState(rx.State):
     @rx.var
     def utc_offset(self) -> int:
         value = str(self.offset_cookie)
-        return _clamped(int(value)) if _is_offset(value) else _fallback_utc_offset()
+        return _clamped(int(value)) if _is_offset(value) else FALLBACK_UTC_OFFSET
 
     @rx.event
     def detect_offset(self):
@@ -125,7 +122,7 @@ class AuthState(rx.State):
             return
         detected = _clamped(int(hours))
         self.offset_cookie = str(detected)
-        if detected != _fallback_utc_offset():
+        if detected != FALLBACK_UTC_OFFSET:
             return rx.call_script(RELOAD_SCRIPT)
 
     @rx.event
@@ -158,7 +155,7 @@ class AuthState(rx.State):
     def offset_options(self) -> list[str]:
         return list(OFFSET_BY_LABEL)
 
-    @rx.var(cache=False)
+    @rx.var(cache=False, initial_value="")
     def session_login(self) -> str:
         try:
             user = context.database().session_user(str(self.session_token))
@@ -206,11 +203,11 @@ class AuthState(rx.State):
         self.session_token = ""
         return rx.redirect(ROUTE_LOGIN)
 
-    @rx.var(cache=False)
+    @rx.var(cache=False, initial_value=False)
     def license_expired(self) -> bool:
         return context.license_expired()
 
-    @rx.var(cache=False)
+    @rx.var(cache=False, initial_value="")
     def license_notice(self) -> str:
         return _license_notice()
 
