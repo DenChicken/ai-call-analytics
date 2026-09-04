@@ -44,7 +44,6 @@ services:
   webui:
     image: ai-call-analytics/webui:${VERSION}
     restart: on-failure:5
-    user: "${RUN_AS}"
     logging: *logging
     extra_hosts: *host-access
     environment:

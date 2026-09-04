@@ -50,9 +50,7 @@ RUN cd /out/webui && python3 -m reflex export --frontend-only --no-zip \
 FROM base
 
 COPY --from=build /out/webui /app
-RUN chmod -R a+rwX /app
 
 WORKDIR /app
-ENV HOME=/app
 
 ENTRYPOINT ["python3", "main.pyc", "--config", "/configs/config.toml"]
