@@ -48,12 +48,6 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
-class SessionConfig:
-    max_age_seconds: int
-    cookie_secure: bool
-
-
-@dataclass(frozen=True)
 class DisplayConfig:
     timezone: str
     refresh_seconds: int
@@ -79,7 +73,6 @@ class Config:
     database: DatabaseConfig
     storage: StorageConfig
     server: ServerConfig
-    session: SessionConfig
     display: DisplayConfig
     logging: LoggingConfig
     license: LicenseConfig
@@ -153,7 +146,6 @@ def load_config(path: str | Path) -> Config:
 
     database_raw = _section(raw, "database")
     server_raw = _section(raw, "server")
-    session_raw = _section(raw, "session")
     display_raw = _section(raw, "display")
     logging_raw = _section(raw, "logging")
     license_raw = _section(raw, LICENSE_SECTION)
@@ -174,10 +166,6 @@ def load_config(path: str | Path) -> Config:
             frontend_port=_require(server_raw, "frontend_port", "server"),
             backend_port=_require(server_raw, "backend_port", "server"),
             backend_path=_require(server_raw, "backend_path", "server"),
-        ),
-        session=SessionConfig(
-            max_age_seconds=_require(session_raw, "max_age_seconds", "session"),
-            cookie_secure=_require(session_raw, "cookie_secure", "session"),
         ),
         display=DisplayConfig(
             timezone=_require(display_raw, "timezone", "display"),

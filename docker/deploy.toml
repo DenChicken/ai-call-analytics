@@ -1,12 +1,14 @@
 # Host paths. Relative ones are resolved against the directory holding deploy.py,
-# so the script can be started from anywhere.
+# so the script can be started from anywhere. They can point anywhere on the host:
+# put the data and the models on a bigger disk if you need to.
 # Inside the containers these are always mounted as /data, /models, /secrets and /logs,
 # and the module configs already point there, so those do not need editing.
 [paths]
-data = "./data"
-models = "./models"
-secrets = "./secrets"
-logs = "./logs"
+data = "./deploy/data"
+models = "./deploy/models"
+secrets = "./deploy/secrets"
+logs = "./deploy/logs"
+configs = "./deploy/configs"
 
 # Ports the web interface listens on.
 [server]

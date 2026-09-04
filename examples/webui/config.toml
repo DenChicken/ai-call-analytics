@@ -1,7 +1,7 @@
 [paths]
-data_dir = "C:/projects/ai-call-analytics/data"
-secrets_dir = "C:/projects/ai-call-analytics/secrets"
-logs_dir = "C:/projects/ai-call-analytics/logs"
+data_dir = "/data"
+secrets_dir = "/secrets"
+logs_dir = "/logs"
 
 [database]
 dsn_file = "database_dsn"
@@ -13,10 +13,6 @@ file = "license.txt"
 frontend_port = 3000
 backend_port = 8000
 backend_path = ""
-
-[session]
-max_age_seconds = 604800
-cookie_secure = false
 
 [display]
 timezone = "Asia/Tbilisi"

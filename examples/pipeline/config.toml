@@ -1,9 +1,9 @@
 [paths]
-data_dir = "C:/projects/ai-call-analytics/data"
-models_dir = "C:/projects/ai-call-analytics/models"
-secrets_dir = "C:/projects/ai-call-analytics/secrets"
-logs_dir = "C:/projects/ai-call-analytics/logs"
-configs_dir = "C:/projects/ai-call-analytics/configs/pipeline"
+data_dir = "/data"
+models_dir = "/models"
+secrets_dir = "/secrets"
+logs_dir = "/logs"
+configs_dir = "/configs"
 
 [database]
 dsn_file = "database_dsn"
@@ -20,10 +20,10 @@ max_attempts = 3
 stale_claim_seconds = 3600
 
 [criteria]
-file = "criteria.example.toml"
+file = "criteria.toml"
 
 [types]
-file = "types.example.toml"
+file = "types.toml"
 
 [huggingface]
 token_file = "hf_token"
@@ -64,8 +64,8 @@ timeout_seconds = 300
 
 [prompt]
 label = "v3"
-system_file = "prompts/system-example.txt"
-user_file = "prompts/user-example.txt"
+system_file = "prompts/system.txt"
+user_file = "prompts/user.txt"
 
 [logging]
 level = "INFO"

@@ -15,19 +15,18 @@ ENV_NAME = ".env"
 COMPOSE_NAME = "compose.yaml"
 MANIFEST_NAME = "manifest.json"
 IMAGES_DIR_NAME = "images"
-CONFIGS_DIR_NAME = "configs"
+EXAMPLES_DIR_NAME = "examples"
 SCRIPTS_DIR_NAME = "scripts"
 IMAGE_PATTERN = "*.tar"
 
 PATHS_SECTION = "paths"
 SERVER_SECTION = "server"
-PATH_KEYS = ("data", "models", "secrets", "logs")
+PATH_KEYS = ("data", "models", "secrets", "logs", "configs")
 PORT_KEYS = ("frontend_port", "backend_port")
 VERSION_KEY = "version"
 
 MODULE_PIPELINE = "pipeline"
 CONFIG_NAME = "config.toml"
-CONFIG_TEMPLATE_SUFFIX = ".template"
 DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
 
@@ -48,7 +47,7 @@ CONFIG_FLAG = "-c"
 COMMAND_INIT = "init"
 COMMAND_UP = "up"
 
-SECRETS_HINT = "the file names are listed in {configs}/*/{config}"
+SECRETS_HINT = "the file names are listed in the module configs"
 
 
 class DeployError(Exception):
@@ -67,8 +66,12 @@ def self_command(command: str) -> str:
     return f"{python_command()} {SELF_NAME} {command}"
 
 
-def secrets_hint() -> str:
-    return SECRETS_HINT.format(configs=CONFIGS_DIR_NAME, config=CONFIG_NAME)
+def read_toml(path: Path) -> dict:
+    try:
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except tomllib.TOMLDecodeError as error:
+        raise DeployError(f"{shown(path)} is not valid TOML: {error}") from None
 
 
 def load_deploy_config() -> tuple[dict[str, Path], dict[str, int]]:
@@ -76,8 +79,7 @@ def load_deploy_config() -> tuple[dict[str, Path], dict[str, int]]:
     if not config_path.is_file():
         raise DeployError(f"{DEPLOY_CONFIG_NAME} not found next to {SELF_NAME}")
 
-    with config_path.open("rb") as handle:
-        raw = tomllib.load(handle)
+    raw = read_toml(config_path)
 
     for section in (PATHS_SECTION, SERVER_SECTION):
         if section not in raw:
@@ -100,14 +102,13 @@ def load_deploy_config() -> tuple[dict[str, Path], dict[str, int]]:
 
 
 def dsn_path(paths: dict[str, Path]) -> Path:
-    config_path = ROOT / CONFIGS_DIR_NAME / MODULE_PIPELINE / CONFIG_NAME
+    config_path = paths["configs"] / MODULE_PIPELINE / CONFIG_NAME
     if not config_path.is_file():
         raise DeployError(
             f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
         )
 
-    with config_path.open("rb") as handle:
-        dsn_file = tomllib.load(handle).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
+    dsn_file = read_toml(config_path).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
     if not dsn_file:
         raise DeployError(
             f"missing '{DSN_FILE_KEY}' in [{DATABASE_SECTION}] of {shown(config_path)}"
@@ -124,18 +125,21 @@ def run_docker(args: list[str]) -> None:
         raise DeployError(f"{DOCKER} {args[0]} failed with exit code {result.returncode}")
 
 
-def copy_configs() -> list[str]:
-    source_root = ROOT / CONFIGS_DIR_NAME
+def copy_configs(configs_dir: Path) -> list[str]:
+    source_root = ROOT / EXAMPLES_DIR_NAME
     if not source_root.is_dir():
-        raise DeployError(f"configs not found: {shown(source_root)}")
+        raise DeployError(f"examples not found: {shown(source_root)}")
 
     created = []
-    for template in sorted(source_root.rglob(f"*{CONFIG_TEMPLATE_SUFFIX}")):
-        target = template.with_name(template.name[: -len(CONFIG_TEMPLATE_SUFFIX)])
+    for example in sorted(source_root.rglob("*")):
+        if not example.is_file():
+            continue
+        target = configs_dir / example.relative_to(source_root)
         if target.exists():
             continue
-        shutil.copy2(template, target)
-        created.append(shown(target.relative_to(ROOT)))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(example, target)
+        created.append(shown(target.relative_to(configs_dir)))
     return created
 
 
@@ -157,22 +161,29 @@ def command_init() -> int:
         paths[key].mkdir(parents=True, exist_ok=True)
     print(f"directories ready: {', '.join(shown(paths[key]) for key in PATH_KEYS)}")
 
-    created = copy_configs()
-    print(f"created configs: {', '.join(created)}" if created else "configs already in place")
+    created = copy_configs(paths["configs"])
+    if created:
+        print(f"copied into {shown(paths['configs'])}: {', '.join(created)}")
+    else:
+        print("configs already in place, examples were not copied over them")
 
     load_images()
+    _print_manual_steps(paths)
+    return 0
 
+
+def _print_manual_steps(paths: dict[str, Path]) -> None:
     print("\nwhat is left to do by hand:\n")
     print(f"  1. put the license and the database connection string into {shown(paths['secrets'])}")
-    print(f"     {secrets_hint()}")
-    print(f"\n  2. adjust {CONFIGS_DIR_NAME}/ to your setup: CRM access, criteria, call types")
+    print(f"     {SECRETS_HINT}")
+    print(f"\n  2. adjust the configs in {shown(paths['configs'])}")
+    print("     CRM access, scoring criteria, call types")
     print(f"\n  3. put the models into {shown(paths['models'])} or download them:")
     print(
         f"       {python_command()} {SCRIPTS_DIR_NAME}/{FETCH_MODELS_SCRIPT} "
-        f"{CONFIG_FLAG} {CONFIGS_DIR_NAME}/{MODULE_PIPELINE}/{CONFIG_NAME}"
+        f"{CONFIG_FLAG} {shown(paths['configs'] / MODULE_PIPELINE / CONFIG_NAME)}"
     )
     print(f"\nthen:  {self_command(COMMAND_UP)}")
-    return 0
 
 
 def check_secrets(paths: dict[str, Path]) -> None:
@@ -181,7 +192,7 @@ def check_secrets(paths: dict[str, Path]) -> None:
         return
     raise DeployError(
         f"{shown(secrets)} is empty: put the license and the database connection string "
-        f"there, {secrets_hint()}"
+        f"there, {SECRETS_HINT}"
     )
 
 
@@ -202,7 +213,6 @@ def write_env(paths: dict[str, Path], ports: dict[str, int], version: str) -> No
     lines = [
         f"VERSION={version}",
         f"RUN_AS={run_as}",
-        f"CONFIGS_DIR={shown(ROOT / CONFIGS_DIR_NAME)}",
         f"FRONTEND_PORT={ports['frontend_port']}",
         f"BACKEND_PORT={ports['backend_port']}",
     ]

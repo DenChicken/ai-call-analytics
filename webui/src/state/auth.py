@@ -24,6 +24,8 @@ from src.constants import (
     ROUTE_DASHBOARD,
     ROUTE_LOGIN,
     SESSION_COOKIE_NAME,
+    SESSION_COOKIE_SECURE,
+    SESSION_MAX_AGE_SECONDS,
     SESSION_SAME_SITE,
     SESSION_TOKEN_BYTES,
     SIDEBAR_COLLAPSED_VALUE,
@@ -33,13 +35,15 @@ from src.constants import (
 logger = logging.getLogger(__name__)
 
 hasher = PasswordHasher()
-session = context.config().session
 
 OFFSET_BY_LABEL = {
     formatting.offset_label(hours): hours
     for hours in range(MIN_UTC_OFFSET, MAX_UTC_OFFSET + 1)
 }
-FALLBACK_UTC_OFFSET = formatting.default_offset(context.config().display.timezone)
+
+
+def _fallback_utc_offset() -> int:
+    return formatting.default_offset(context.config().display.timezone)
 
 
 def _is_offset(value: str) -> bool:
@@ -54,24 +58,24 @@ class AuthState(rx.State):
     session_token: str = rx.Cookie(
         "",
         name=SESSION_COOKIE_NAME,
-        max_age=session.max_age_seconds,
-        secure=session.cookie_secure,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        secure=SESSION_COOKIE_SECURE,
         same_site=SESSION_SAME_SITE,
     )
 
     offset_cookie: str = rx.Cookie(
         "",
         name=OFFSET_COOKIE_NAME,
-        max_age=session.max_age_seconds,
-        secure=session.cookie_secure,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        secure=SESSION_COOKIE_SECURE,
         same_site=SESSION_SAME_SITE,
     )
 
     sidebar_cookie: str = rx.Cookie(
         "",
         name=SIDEBAR_COOKIE_NAME,
-        max_age=session.max_age_seconds,
-        secure=session.cookie_secure,
+        max_age=SESSION_MAX_AGE_SECONDS,
+        secure=SESSION_COOKIE_SECURE,
         same_site=SESSION_SAME_SITE,
     )
 
@@ -106,7 +110,7 @@ class AuthState(rx.State):
     @rx.var
     def utc_offset(self) -> int:
         value = str(self.offset_cookie)
-        return _clamped(int(value)) if _is_offset(value) else FALLBACK_UTC_OFFSET
+        return _clamped(int(value)) if _is_offset(value) else _fallback_utc_offset()
 
     @rx.event
     def detect_offset(self):
@@ -121,7 +125,7 @@ class AuthState(rx.State):
             return
         detected = _clamped(int(hours))
         self.offset_cookie = str(detected)
-        if detected != FALLBACK_UTC_OFFSET:
+        if detected != _fallback_utc_offset():
             return rx.call_script(RELOAD_SCRIPT)
 
     @rx.event
@@ -249,7 +253,7 @@ def _authenticate(login: str, password: str) -> str | None:
 
     database.purge_sessions()
     token = secrets.token_urlsafe(SESSION_TOKEN_BYTES)
-    database.create_session(token, user["id"], session.max_age_seconds)
+    database.create_session(token, user["id"], SESSION_MAX_AGE_SECONDS)
     return token
 
 

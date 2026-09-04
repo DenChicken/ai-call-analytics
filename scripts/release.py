@@ -27,7 +27,6 @@ STAGE_DIR_NAME = "stage"
 SCRIPTS_DIR_NAME = "scripts"
 DOCKER_DIR_NAME = "docker"
 IMAGES_DIR_NAME = "images"
-CONFIGS_DIR_NAME = "configs"
 
 DOCKER_COMMAND = "docker"
 DOCKERFILE_TEMPLATE = "{module}.Dockerfile"
@@ -65,16 +64,7 @@ BUNDLE_FILES = (
     (DOCKER_DIR_NAME, "compose.yaml", ""),
     (DOCKER_DIR_NAME, "deploy.toml", ""),
 )
-CONFIG_TEMPLATE_SUFFIX = ".template"
-TOML_SUFFIX = ".toml"
-EXAMPLE_MARKERS = ((".example.toml", ".toml"), ("-example.txt", ".txt"))
-CONTAINER_ANCHORS = {
-    "data_dir": "/data",
-    "models_dir": "/models",
-    "secrets_dir": "/secrets",
-    "logs_dir": "/logs",
-    "configs_dir": "/configs",
-}
+EXAMPLES_DIR_NAME = "examples"
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -196,7 +186,7 @@ def collect_files(stage_dir: Path) -> None:
 
 
 def _collect_configs(stage_dir: Path) -> int:
-    source_root = ROOT / CONFIGS_DIR_NAME
+    source_root = ROOT / EXAMPLES_DIR_NAME
     if not source_root.is_dir():
         raise ReleaseError(f"config examples not found: {source_root}")
 
@@ -204,42 +194,14 @@ def _collect_configs(stage_dir: Path) -> int:
     for example in sorted(source_root.rglob("*")):
         if not example.is_file():
             continue
-
-        name = _delivered_name(example.name)
-        if name is None:
-            continue
-
-        target = stage_dir / CONFIGS_DIR_NAME / example.relative_to(source_root).parent / name
+        target = stage_dir / EXAMPLES_DIR_NAME / example.relative_to(source_root)
         target.parent.mkdir(parents=True, exist_ok=True)
-        if example.suffix == TOML_SUFFIX:
-            target.write_text(_for_containers(example), encoding="utf-8")
-        else:
-            shutil.copy2(example, target)
+        shutil.copy2(example, target)
         collected += 1
 
     if not collected:
-        raise ReleaseError(f"no config examples matched in {source_root}")
+        raise ReleaseError(f"no config examples found in {source_root}")
     return collected
-
-
-def _delivered_name(name: str) -> str | None:
-    for marker, replacement in EXAMPLE_MARKERS:
-        if marker in name:
-            return name.replace(marker, replacement) + CONFIG_TEMPLATE_SUFFIX
-    return None
-
-
-def _for_containers(example: Path) -> str:
-    lines = []
-    for line in example.read_text(encoding="utf-8").splitlines():
-        key = line.split("=", 1)[0].strip()
-        if key in CONTAINER_ANCHORS:
-            lines.append(f'{key} = "{CONTAINER_ANCHORS[key]}"')
-            continue
-        for marker, replacement in EXAMPLE_MARKERS:
-            line = line.replace(marker, replacement)
-        lines.append(line)
-    return "\n".join(lines) + "\n"
 
 
 def _checksum(path: Path) -> str:
