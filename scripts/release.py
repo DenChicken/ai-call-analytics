@@ -37,6 +37,7 @@ BUILD_ARGS = ("build", "-f")
 TAG_FLAG = "-t"
 SAVE_ARGS = ("save", "-o")
 INSPECT_ARGS = ("image", "inspect", "--format", "{{.Id}}")
+DANGLING_ARGS = ("images", "-f", "dangling=true", "-q")
 
 VERSION_PATTERN = r"^\d+(\.\d+)*$"
 VERSION_TIMESTAMP_FORMAT = "%Y%m%d-%H%M"
@@ -112,6 +113,16 @@ def build_image(module: str, version: str) -> str:
         raise ReleaseError(f"docker build failed for {module} with exit code {result.returncode}")
     print(f"[{module}] built in {time.monotonic() - started:.0f}s", flush=True)
     return tag
+
+
+def _report_dangling() -> None:
+    result = subprocess.run(
+        [DOCKER_COMMAND, *DANGLING_ARGS], capture_output=True, text=True, check=False
+    )
+    count = len(result.stdout.split()) if result.returncode == 0 else 0
+    if count:
+        print(f"{count} untagged images left from earlier builds, remove them with:")
+        print(f"  {DOCKER_COMMAND} image prune -f")
 
 
 def image_id(tag: str) -> str:
@@ -330,6 +341,7 @@ def main() -> int:
         shutil.rmtree(stage_dir)
 
     print(f"\nrelease {args.version} ({commit}) ready: {archive}")
+    _report_dangling()
     return 0
 
 

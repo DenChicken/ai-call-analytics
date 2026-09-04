@@ -41,6 +41,7 @@ DB_INIT_COMMAND = "init"
 DSN_FLAG = "-d"
 USER_SCRIPT = "user.py"
 USER_ADD_COMMAND = "add"
+DEFAULT_LOGIN = "admin"
 FETCH_MODELS_SCRIPT = "fetch_models.py"
 CONFIG_FLAG = "-c"
 
@@ -48,6 +49,20 @@ COMMAND_INIT = "init"
 COMMAND_UP = "up"
 
 SECRETS_HINT = "the file names are listed in the module configs"
+HOST_ALIAS = "host.docker.internal"
+DOCKER_GATEWAY = "172.17.0.1"
+DOCKER_SUBNET = "172.17.0.0/16"
+DATABASE_ACCESS_STEPS = (
+    f"when it runs on this machine, address it as {HOST_ALIAS} in the connection string:",
+    f"  postgresql://user:password@{HOST_ALIAS}:5432/dbname",
+    "",
+    f'add "127.0.0.1 {HOST_ALIAS}" to /etc/hosts so the scripts here resolve it too',
+    "",
+    "let PostgreSQL accept connections from the docker network:",
+    f"  postgresql.conf:  listen_addresses = 'localhost,{DOCKER_GATEWAY}'",
+    f"  pg_hba.conf:      host all all {DOCKER_SUBNET} scram-sha-256",
+    "  then restart PostgreSQL",
+)
 
 
 class DeployError(Exception):
@@ -64,6 +79,10 @@ def python_command() -> str:
 
 def self_command(command: str) -> str:
     return f"{python_command()} {SELF_NAME} {command}"
+
+
+def script_command(script: str, *args: str) -> str:
+    return " ".join([python_command(), f"{SCRIPTS_DIR_NAME}/{script}", *args])
 
 
 def read_toml(path: Path) -> dict:
@@ -180,10 +199,23 @@ def _print_manual_steps(paths: dict[str, Path]) -> None:
     print("     CRM access, scoring criteria, call types")
     print(f"\n  3. put the models into {shown(paths['models'])} or download them:")
     print(
-        f"       {python_command()} {SCRIPTS_DIR_NAME}/{FETCH_MODELS_SCRIPT} "
-        f"{CONFIG_FLAG} {shown(paths['configs'] / MODULE_PIPELINE / CONFIG_NAME)}"
+        "       "
+        + script_command(
+            FETCH_MODELS_SCRIPT,
+            CONFIG_FLAG,
+            shown(paths["configs"] / MODULE_PIPELINE / CONFIG_NAME),
+        )
     )
+    print("\n  4. let the containers reach the database")
+    for line in DATABASE_ACCESS_STEPS:
+        print(f"     {line}" if line else "")
     print(f"\nthen:  {self_command(COMMAND_UP)}")
+
+
+def _print_database_access() -> None:
+    print("\nthe database must be reachable from the containers:", file=sys.stderr)
+    for line in DATABASE_ACCESS_STEPS:
+        print(f"  {line}" if line else "", file=sys.stderr)
 
 
 def check_secrets(paths: dict[str, Path]) -> None:
@@ -196,15 +228,14 @@ def check_secrets(paths: dict[str, Path]) -> None:
     )
 
 
+def run_script(script: str, *args: str) -> int:
+    command = [sys.executable, str(ROOT / SCRIPTS_DIR_NAME / script), *args]
+    return subprocess.run(command, check=False).returncode
+
+
 def apply_schema(paths: dict[str, Path]) -> None:
-    command = [
-        sys.executable,
-        str(ROOT / SCRIPTS_DIR_NAME / DB_SCRIPT),
-        DB_INIT_COMMAND,
-        DSN_FLAG,
-        str(dsn_path(paths)),
-    ]
-    if subprocess.run(command, check=False).returncode != 0:
+    if run_script(DB_SCRIPT, DB_INIT_COMMAND, DSN_FLAG, str(dsn_path(paths))) != 0:
+        _print_database_access()
         raise DeployError("could not apply the database schema")
 
 
@@ -243,8 +274,10 @@ def command_up() -> int:
     print(f"\nweb interface: http://localhost:{ports['frontend_port']}")
     print("if there are no users yet, create the first one:")
     print(
-        f"  {python_command()} {SCRIPTS_DIR_NAME}/{USER_SCRIPT} {USER_ADD_COMMAND} "
-        f"{DSN_FLAG} {shown(dsn_path(paths))} --username admin"
+        "  "
+        + script_command(
+            USER_SCRIPT, USER_ADD_COMMAND, DEFAULT_LOGIN, DSN_FLAG, shown(dsn_path(paths))
+        )
     )
     print(f"\nservice state and logs, from {shown(ROOT)}:")
     print(f"  {DOCKER} compose ps")

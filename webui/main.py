@@ -40,7 +40,7 @@ def parse_args() -> argparse.Namespace:
 def _print_startup(config: Config, log_file: Path) -> None:
     print(
         f"web interface starting: {config.server.local_url}, "
-        f"backend port {config.server.backend_port}, timezone {config.display.timezone}"
+        f"backend port {config.server.backend_port}"
     )
     print(STARTUP_ACCESS_NOTE.format(port=config.server.frontend_port))
     print(f"logs are written to {log_file}")
