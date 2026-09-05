@@ -7,6 +7,10 @@ configs_dir = "/configs"
 
 [database]
 dsn_file = "database_dsn"
+connect_timeout = 10
+max_retries = 5
+backoff_base_seconds = 2
+backoff_max_seconds = 60
 
 [license]
 file = "license.txt"
@@ -26,9 +30,9 @@ file = "criteria.toml"
 file = "types.toml"
 
 [asr]
-repo_id = "Systran/faster-whisper-large-v3"
-local_dir = "faster-whisper-large-v3"
-device = "cuda"
+repo_id = "Systran/faster-whisper-small"
+local_dir = "faster-whisper-small"
+device = "cpu"
 compute_type = "float32"
 unload_after = false
 
@@ -43,9 +47,9 @@ min_silence_duration_ms = 300
 speech_pad_ms = 400
 
 [llm]
-repo_id = "Qwen/Qwen3-4B-Instruct-2507"
-local_dir = "Qwen3-4B-Instruct-2507"
-device = "cuda"
+repo_id = "Qwen/Qwen3-0.6B"
+local_dir = "Qwen3-0.6B"
+device = "cpu"
 torch_dtype = "float32"
 load_in_4bit = false
 max_input_tokens = 32000

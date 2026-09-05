@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from src.analysis import Analysis
-from src.config import Reference
+from src.config import DatabaseConfig, Reference
 from src.constants import (
     CALL_TYPES_TABLE,
     CLAIMABLE_STATUSES,
@@ -21,6 +21,7 @@ from src.constants import (
     STATUS_FAILED,
     STATUS_TRANSCRIBED,
 )
+from src.retry import retried
 from src.transcript import Segment
 
 SEGMENTS_KEY = "segments"
@@ -47,11 +48,13 @@ class AnalysisMetadata:
 
 
 class Database:
-    def __init__(self, dsn: str):
+    def __init__(self, config: DatabaseConfig):
+        self._config = config
         self._pool = ConnectionPool(
-            dsn,
+            config.dsn,
             min_size=POOL_SIZE,
             max_size=POOL_SIZE,
+            timeout=config.connect_timeout,
             kwargs={"row_factory": dict_row, "autocommit": True},
             check=ConnectionPool.check_connection,
             open=True,
@@ -61,6 +64,7 @@ class Database:
     def close(self) -> None:
         self._pool.close()
 
+    @retried
     def sync_reference(self, table: str, entries: list[Reference]) -> int:
         if table not in REFERENCE_TABLES:
             raise ValueError(f"unknown reference table: {table}")
@@ -88,6 +92,7 @@ class Database:
                 )
                 return cursor.rowcount
 
+    @retried
     def enabled_reference(self, table: str) -> list[Reference]:
         if table not in REFERENCE_TABLES:
             raise ValueError(f"unknown reference table: {table}")
@@ -101,6 +106,7 @@ class Database:
             for row in rows
         ]
 
+    @retried
     def reset_stale_claims(self, stale_seconds: float, max_attempts: int) -> int:
         released = 0
         with self._pool.connection() as connection, connection.transaction():
@@ -139,6 +145,7 @@ class Database:
                     released += cursor.rowcount
         return released
 
+    @retried
     def claim_task(self, max_attempts: int) -> Task | None:
         with self._pool.connection() as connection, connection.transaction():
             with connection.cursor() as cursor:
@@ -186,6 +193,7 @@ class Database:
             attempts=attempts,
         )
 
+    @retried
     def release_task(
         self,
         call_id: int,
@@ -211,6 +219,7 @@ class Database:
                     "call %s is no longer %s, leaving it untouched", call_id, claimed_status
                 )
 
+    @retried
     def analysis_input(self, call_id: int) -> tuple[str | None, str | None]:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -228,6 +237,7 @@ class Database:
             return None, None
         return row["plain"], row["display_name"]
 
+    @retried
     def save_asr_result(
         self,
         call_id: int,
@@ -269,6 +279,7 @@ class Database:
             len(plain),
         )
 
+    @retried
     def save_analysis(
         self,
         call_id: int,

@@ -5,6 +5,10 @@ logs_dir = "/logs"
 
 [database]
 dsn_file = "database_dsn"
+connect_timeout = 10
+max_retries = 5
+backoff_base_seconds = 2
+backoff_max_seconds = 60
 
 [license]
 file = "license.txt"

@@ -4,7 +4,9 @@ import logging
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
+from src.config import DatabaseConfig
 from src.constants import STATUS_PENDING
+from src.retry import retried
 from src.source import Agent, Call
 
 logger = logging.getLogger(__name__)
@@ -13,11 +15,13 @@ POOL_SIZE = 1
 
 
 class Database:
-    def __init__(self, dsn: str):
+    def __init__(self, config: DatabaseConfig):
+        self._config = config
         self._pool = ConnectionPool(
-            dsn,
+            config.dsn,
             min_size=POOL_SIZE,
             max_size=POOL_SIZE,
+            timeout=config.connect_timeout,
             kwargs={"row_factory": dict_row, "autocommit": True},
             check=ConnectionPool.check_connection,
             open=True,
@@ -27,6 +31,7 @@ class Database:
     def close(self) -> None:
         self._pool.close()
 
+    @retried
     def get_source_id(self, name: str) -> int:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -39,12 +44,14 @@ class Database:
             )
             return cursor.fetchone()["id"]
 
+    @retried
     def get_cursor(self, source_id: int) -> str | None:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT cursor FROM sources WHERE id = %s", (source_id,))
             row = cursor.fetchone()
         return row["cursor"] if row else None
 
+    @retried
     def set_cursor(self, source_id: int, value: str) -> None:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -53,6 +60,7 @@ class Database:
             )
         logger.debug("cursor for source %s set to %s", source_id, value)
 
+    @retried
     def existing_external_ids(self, source_id: int, external_ids: list[str]) -> set[str]:
         if not external_ids:
             return set()
@@ -63,6 +71,7 @@ class Database:
             )
             return {row["external_id"] for row in cursor.fetchall()}
 
+    @retried
     def upsert_agent(self, source_id: int, agent: Agent) -> int:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute(
@@ -95,11 +104,13 @@ class Database:
             )
             return cursor.fetchone()["id"]
 
+    @retried
     def reserve_call_id(self) -> int:
         with self._pool.connection() as connection, connection.cursor() as cursor:
             cursor.execute("SELECT nextval(pg_get_serial_sequence('calls', 'id')) AS id")
             return cursor.fetchone()["id"]
 
+    @retried
     def insert_call_with_job(
         self,
         call_id: int,

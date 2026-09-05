@@ -37,6 +37,10 @@ class ConfigError(Exception):
 @dataclass(frozen=True)
 class DatabaseConfig:
     dsn: str
+    connect_timeout: float
+    max_retries: int
+    backoff_base_seconds: float
+    backoff_max_seconds: float
 
 
 @dataclass(frozen=True)
@@ -347,8 +351,22 @@ def load_config(path: str | Path) -> Config:
             resolve_inside(
                 secrets_dir, _require(database_raw, "dsn_file", "database"), "dsn_file", "database"
             )
-        )
+        ),
+        connect_timeout=_require(database_raw, "connect_timeout", "database"),
+        max_retries=_require(database_raw, "max_retries", "database"),
+        backoff_base_seconds=_require(database_raw, "backoff_base_seconds", "database"),
+        backoff_max_seconds=_require(database_raw, "backoff_max_seconds", "database"),
     )
+
+    if database.max_retries < 1:
+        raise ConfigError(
+            f"'max_retries' in [database] is {database.max_retries}, "
+            "it must be at least 1: every query needs one attempt"
+        )
+    if database.connect_timeout <= 0:
+        raise ConfigError(
+            f"'connect_timeout' in [database] is {database.connect_timeout}, it must be positive"
+        )
 
     storage = StorageConfig(
         data_dir=data_dir,

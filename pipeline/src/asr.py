@@ -8,7 +8,7 @@ from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
-from src.errors import DEVICE_UNUSABLE
+from src.errors import DEVICE_UNUSABLE, UnrecoverableError
 from src.transcript import Segment
 
 logger = logging.getLogger(__name__)
@@ -21,7 +21,7 @@ def _to_ms(seconds: float) -> int:
 class Asr:
     def __init__(self, config: AsrConfig):
         if not config.local_dir.is_dir():
-            raise FileNotFoundError(
+            raise UnrecoverableError(
                 f"asr model directory not found: {config.local_dir}, run scripts/fetch_models.py"
             )
         self._config = config
@@ -36,11 +36,17 @@ class Asr:
             logger.info(
                 "loading asr model from %s on %s", self._config.local_dir, self._config.device
             )
-            self._model = WhisperModel(
-                str(self._config.local_dir),
-                device=self._config.device,
-                compute_type=self._config.compute_type,
-            )
+            try:
+                self._model = WhisperModel(
+                    str(self._config.local_dir),
+                    device=self._config.device,
+                    compute_type=self._config.compute_type,
+                )
+            except Exception as error:
+                self.unload()
+                raise UnrecoverableError(
+                    f"asr model could not be loaded on {self._config.device}: {error}"
+                ) from error
         return self._model
 
     def unload(self) -> None:

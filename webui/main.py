@@ -6,6 +6,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import psycopg
+
 from licensing.constants import LICENSE_EXIT_CODE
 from licensing.license import LicenseError
 from licensing.verify_runtime import check, load
@@ -13,6 +15,7 @@ from licensing.verify_runtime import check, load
 from src.config import Config, ConfigError, load_config
 from src.constants import (
     CONFIG_ENV_VAR,
+    DATABASE_CONNECT_TIMEOUT,
     LOG_FILE_ENV_VAR,
     PORT_PROBE_HOST,
     REFLEX_API_URL_ENV_VAR,
@@ -26,8 +29,10 @@ from src.constants import (
     TASKKILL_COMMAND,
     TASKKILL_TREE_FLAGS,
     TERMINATE_TIMEOUT_SECONDS,
+    UNRECOVERABLE_EXIT_CODE,
     WINDOWS_PLATFORM,
 )
+from src.errors import UnrecoverableError
 from src.logging_setup import new_log_file
 
 
@@ -61,6 +66,15 @@ def _check_ports(config: Config) -> None:
                 ) from error
 
 
+def _check_database(config: Config) -> None:
+    try:
+        psycopg.connect(config.database.dsn, connect_timeout=DATABASE_CONNECT_TIMEOUT).close()
+    except psycopg.Error as error:
+        raise UnrecoverableError(
+            f"the database is unreachable, the web interface has nothing to show: {error}"
+        ) from error
+
+
 def _terminate_tree(process: subprocess.Popen) -> None:
     if process.poll() is not None:
         return
@@ -90,6 +104,12 @@ def main() -> int:
     except ConfigError as error:
         print(f"config error: {error}", file=sys.stderr)
         return 1
+
+    try:
+        _check_database(config)
+    except UnrecoverableError as error:
+        print(f"database error: {error}", file=sys.stderr)
+        return UNRECOVERABLE_EXIT_CODE
 
     try:
         check(load(config.license.file))

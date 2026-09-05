@@ -2,7 +2,6 @@ import logging
 import time
 from pathlib import Path
 
-import psycopg
 from licensing.license import License
 from licensing.verify_runtime import is_expired
 
@@ -20,11 +19,12 @@ from src.constants import (
     ERROR_NO_CALL_TYPES,
     ERROR_NO_CRITERIA,
     ERROR_TRANSCRIPT_EMPTY,
+    MAX_CONSECUTIVE_FAILURES,
     STATUS_FAILED,
     STATUS_PENDING,
 )
 from src.database import AnalysisMetadata, Database, Task
-from src.errors import StageError, classify
+from src.errors import StageError, UnrecoverableError, classify
 from src.llm import Llm
 from src.transcript import render_plain
 
@@ -33,25 +33,20 @@ logger = logging.getLogger(__name__)
 
 def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License) -> None:
     worker = config.worker
+    failures = 0
     while not shutdown.is_stopping():
         if is_expired(license):
             logger.error("license expired on %s, stopping", license.expires)
             raise shutdown.LicenseExpired()
-        try:
-            task = database.claim_task(worker.max_attempts)
-            if task is None:
-                released = database.reset_stale_claims(
-                    worker.stale_claim_seconds, worker.max_attempts
-                )
-                if released:
-                    logger.info("released %s stale claims", released)
-                    continue
-        except psycopg.Error:
-            logger.exception("database unreachable, retrying in %ss", worker.poll_interval_seconds)
-            shutdown.sleep(worker.poll_interval_seconds)
-            continue
 
+        task = database.claim_task(worker.max_attempts)
         if task is None:
+            released = database.reset_stale_claims(
+                worker.stale_claim_seconds, worker.max_attempts
+            )
+            if released:
+                logger.info("released %s stale claims", released)
+                continue
             logger.debug("no tasks, sleeping %ss", worker.poll_interval_seconds)
             shutdown.sleep(worker.poll_interval_seconds)
             continue
@@ -68,6 +63,20 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
         except shutdown.ShutdownRequested:
             _release(database, task, task.stage, None)
             raise
+        except UnrecoverableError as error:
+            failures += 1
+            logger.error(
+                "call %s returned to the queue, the environment is unusable (%s of %s): %s",
+                task.call_id,
+                failures,
+                MAX_CONSECUTIVE_FAILURES,
+                error,
+            )
+            _release(database, task, task.stage, None)
+            if failures >= MAX_CONSECUTIVE_FAILURES:
+                raise
+            shutdown.sleep(worker.poll_interval_seconds)
+            continue
         except Exception as error:
             logger.exception(
                 "call %s failed at stage %s after %ss",
@@ -78,6 +87,8 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
             exhausted = task.attempts >= worker.max_attempts
             _release(database, task, STATUS_FAILED if exhausted else task.stage, error)
             shutdown.check()
+
+        failures = 0
 
 
 def _release(database: Database, task: Task, status: str, error: Exception | None) -> None:

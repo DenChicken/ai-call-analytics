@@ -9,8 +9,14 @@ from licensing.verify_runtime import check, load
 from src import shutdown
 from src.asr import Asr
 from src.config import Config, ConfigError, load_config
-from src.constants import CALL_TYPES_TABLE, CRITERIA_TABLE, SHUTDOWN_EXIT_CODE
+from src.constants import (
+    CALL_TYPES_TABLE,
+    CRITERIA_TABLE,
+    SHUTDOWN_EXIT_CODE,
+    UNRECOVERABLE_EXIT_CODE,
+)
 from src.database import Database
+from src.errors import UnrecoverableError
 from src.llm import Llm
 from src.logging_setup import setup_logging
 from src.worker import run
@@ -50,7 +56,7 @@ def main() -> int:
 
     database = None
     try:
-        database = Database(config.database.dsn)
+        database = Database(config.database)
         for table, entries in (
             (CRITERIA_TABLE, config.criteria),
             (CALL_TYPES_TABLE, config.call_types),
@@ -60,34 +66,42 @@ def main() -> int:
 
         asr = Asr(config.asr)
         llm = Llm(config.llm)
-    except Exception:
-        logger.exception("initialization failed")
+    except UnrecoverableError as error:
+        print(f"cannot start: {error}", file=sys.stderr)
+        logger.error("cannot start: %s", error)
         if database is not None:
             database.close()
-        return 1
+        return UNRECOVERABLE_EXIT_CODE
+    except Exception:
+        logger.exception("cannot start: initialization failed")
+        if database is not None:
+            database.close()
+        return UNRECOVERABLE_EXIT_CODE
 
-    interrupted = False
     expired = False
-    crashed = False
+    unusable = False
     try:
         run(config, database, asr, llm, license)
     except shutdown.LicenseExpired:
         expired = True
     except shutdown.ShutdownRequested:
-        interrupted = True
+        pass
+    except UnrecoverableError as error:
+        logger.error("pipeline stopping, the queue is untouched: %s", error)
+        unusable = True
     except Exception:
         logger.exception("pipeline crashed")
-        crashed = True
+        unusable = True
     finally:
         database.close()
 
-    if crashed:
-        return 1
+    if unusable:
+        return UNRECOVERABLE_EXIT_CODE
     if expired:
         logger.info("pipeline stopped: license expired")
         return LICENSE_EXIT_CODE
-    logger.info("pipeline %s", "stopped on request" if interrupted else "finished")
-    return SHUTDOWN_EXIT_CODE if interrupted else 0
+    logger.info("pipeline stopped on request")
+    return SHUTDOWN_EXIT_CODE
 
 
 def _log_startup(config: Config) -> None:

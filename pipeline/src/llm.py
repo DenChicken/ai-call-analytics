@@ -22,7 +22,7 @@ from src.constants import (
     ERROR_LLM_PROMPT_TOO_LONG,
     ERROR_LLM_TRUNCATED,
 )
-from src.errors import DEVICE_UNUSABLE, StageError
+from src.errors import DEVICE_UNUSABLE, StageError, UnrecoverableError
 
 ROLE_SYSTEM = "system"
 ROLE_USER = "user"
@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 class Llm:
     def __init__(self, config: LlmConfig):
         if not config.local_dir.is_dir():
-            raise FileNotFoundError(
+            raise UnrecoverableError(
                 f"llm directory not found: {config.local_dir}, run scripts/fetch_models.py"
             )
         self._config = config
@@ -51,14 +51,20 @@ class Llm:
         if self._model is not None:
             return
         logger.info("loading llm from %s on %s", self._config.local_dir, self._config.device)
-        self._tokenizer = AutoTokenizer.from_pretrained(str(self._config.local_dir))
-        self._model = AutoModelForCausalLM.from_pretrained(
-            str(self._config.local_dir),
-            dtype=getattr(torch, self._config.torch_dtype),
-            quantization_config=_quantization_config(self._config),
-            device_map=self._config.device,
-        )
-        self._model.eval()
+        try:
+            self._tokenizer = AutoTokenizer.from_pretrained(str(self._config.local_dir))
+            self._model = AutoModelForCausalLM.from_pretrained(
+                str(self._config.local_dir),
+                dtype=getattr(torch, self._config.torch_dtype),
+                quantization_config=_quantization_config(self._config),
+                device_map=self._config.device,
+            )
+            self._model.eval()
+        except Exception as error:
+            self.unload()
+            raise UnrecoverableError(
+                f"llm could not be loaded on {self._config.device}: {error}"
+            ) from error
 
     def unload(self) -> None:
         if self._model is None and self._tokenizer is None:

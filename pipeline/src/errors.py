@@ -1,8 +1,6 @@
-import psycopg
 import torch
 
 from src.constants import (
-    ERROR_DATABASE,
     ERROR_OUT_OF_MEMORY,
     ERROR_UNKNOWN,
 )
@@ -16,11 +14,13 @@ class StageError(Exception):
         self.code = code
 
 
+class UnrecoverableError(Exception):
+    pass
+
+
 def classify(error: Exception) -> str:
     if isinstance(error, StageError):
         return error.code
-    if isinstance(error, torch.OutOfMemoryError | MemoryError):
+    if isinstance(error, DEVICE_UNUSABLE):
         return ERROR_OUT_OF_MEMORY
-    if isinstance(error, psycopg.Error):
-        return ERROR_DATABASE
     return ERROR_UNKNOWN

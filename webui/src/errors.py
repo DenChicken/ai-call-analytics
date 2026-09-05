@@ -33,3 +33,7 @@ def describe(code: str | None) -> str:
     if not code:
         return ""
     return ERROR_LABELS.get(code, ERROR_LABELS[ERROR_UNKNOWN])
+
+
+class UnrecoverableError(Exception):
+    pass

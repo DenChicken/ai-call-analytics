@@ -7,7 +7,12 @@ from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
 
 from src import queries
-from src.constants import MILLISECONDS_PER_SECOND, QUEUE_STATUSES, SECONDS_PER_MINUTE
+from src.constants import (
+    DATABASE_CONNECT_TIMEOUT,
+    MILLISECONDS_PER_SECOND,
+    QUEUE_STATUSES,
+    SECONDS_PER_MINUTE,
+)
 
 POOL_MIN_SIZE = 1
 POOL_MAX_SIZE = 4
@@ -42,6 +47,7 @@ class Database:
             dsn,
             min_size=POOL_MIN_SIZE,
             max_size=POOL_MAX_SIZE,
+            timeout=DATABASE_CONNECT_TIMEOUT,
             kwargs={"row_factory": dict_row, "autocommit": True},
             check=ConnectionPool.check_connection,
             open=True,
