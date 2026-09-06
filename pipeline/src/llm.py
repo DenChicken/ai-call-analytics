@@ -29,6 +29,7 @@ ROLE_USER = "user"
 QUANTIZATION_DTYPE = "bfloat16"
 QUANTIZATION_TYPE = "nf4"
 TENSOR_FORMAT = "pt"
+ENABLE_THINKING = False
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,10 @@ class Llm:
             {"role": ROLE_USER, "content": user_prompt},
         ]
         text = self._tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=ENABLE_THINKING,
         )
         inputs = self._tokenizer(text, return_tensors=TENSOR_FORMAT).to(self._model.device)
         prompt_tokens = inputs["input_ids"].shape[1]
