@@ -18,7 +18,7 @@ networks:
 services:
   fetcher:
     image: ai-call-analytics/fetcher:${VERSION}
-    restart: on-failure:5
+    restart: unless-stopped
     user: "${RUN_AS}"
     logging: *logging
     extra_hosts: *host-access
@@ -30,7 +30,7 @@ services:
 
   pipeline:
     image: ai-call-analytics/pipeline:${VERSION}
-    restart: on-failure:5
+    restart: unless-stopped
     user: "${RUN_AS}"
     logging: *logging
     extra_hosts: *host-access
@@ -43,7 +43,7 @@ services:
 
   webui:
     image: ai-call-analytics/webui:${VERSION}
-    restart: on-failure:5
+    restart: unless-stopped
     logging: *logging
     extra_hosts: *host-access
     environment:
