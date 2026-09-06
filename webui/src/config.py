@@ -1,17 +1,12 @@
-import os
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
 from src.constants import (
-    BACKEND_PORT_ENV_VAR,
-    DEFAULT_BACKEND_PORT,
-    DEFAULT_FRONTEND_PORT,
-    FRONTEND_PORT_ENV_VAR,
+    LOCAL_URL_HOST,
+    LOCAL_URL_SCHEME,
     LOG_LEVELS,
     LOG_MODULE_DIR,
-    SAME_DOMAIN_HOST,
-    SAME_DOMAIN_SCHEME,
 )
 
 PATHS_SECTION = "paths"
@@ -39,17 +34,12 @@ class StorageConfig:
 
 @dataclass(frozen=True)
 class ServerConfig:
-    frontend_port: int
-    backend_port: int
+    port: int
     backend_path: str
 
     @property
-    def api_url(self) -> str:
-        return f"{SAME_DOMAIN_SCHEME}://{SAME_DOMAIN_HOST}:{self.backend_port}"
-
-    @property
     def local_url(self) -> str:
-        return f"{SAME_DOMAIN_SCHEME}://{SAME_DOMAIN_HOST}:{self.frontend_port}"
+        return f"{LOCAL_URL_SCHEME}://{LOCAL_URL_HOST}:{self.port}"
 
 
 @dataclass(frozen=True)
@@ -92,15 +82,6 @@ def _require(section: dict, key: str, where: str):
     if key not in section:
         raise ConfigError(f"missing required key '{key}' in [{where}]")
     return section[key]
-
-
-def _port(name: str, default: int) -> int:
-    value = os.environ.get(name)
-    if not value:
-        return default
-    if not value.isdigit():
-        raise ConfigError(f"{name} is '{value}', expected a port number")
-    return int(value)
 
 
 def _require_level(section: dict, key: str) -> str:
@@ -176,8 +157,7 @@ def load_config(path: str | Path) -> Config:
         ),
         storage=StorageConfig(data_dir=data_dir),
         server=ServerConfig(
-            frontend_port=_port(FRONTEND_PORT_ENV_VAR, DEFAULT_FRONTEND_PORT),
-            backend_port=_port(BACKEND_PORT_ENV_VAR, DEFAULT_BACKEND_PORT),
+            port=_require(server_raw, "port", "server"),
             backend_path=_require(server_raw, "backend_path", "server"),
         ),
         display=DisplayConfig(

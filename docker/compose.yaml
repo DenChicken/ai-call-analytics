@@ -46,12 +46,8 @@ services:
     restart: unless-stopped
     logging: *logging
     extra_hosts: *host-access
-    environment:
-      FRONTEND_PORT: ${FRONTEND_PORT}
-      BACKEND_PORT: ${BACKEND_PORT}
     ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
+      - "${WEBUI_PORT}:${WEBUI_PORT}"
     volumes:
       - ${DATA_DIR}:/data:ro
       - ${SECRETS_DIR}:/secrets:ro

@@ -10,11 +10,6 @@ secrets = "./deploy/secrets"
 logs = "./deploy/logs"
 configs = "./deploy/configs"
 
-# Ports the web interface listens on.
-[server]
-frontend_port = 3000
-backend_port = 8000
-
 # Subnet for the container network. Change it if it clashes with your network;
 # whatever is set here is what PostgreSQL must allow in pg_hba.conf.
 [network]

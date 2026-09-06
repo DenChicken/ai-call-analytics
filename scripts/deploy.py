@@ -21,13 +21,14 @@ IMAGE_PATTERN = "*.tar"
 
 PATHS_SECTION = "paths"
 SERVER_SECTION = "server"
+PORT_KEY = "port"
 NETWORK_SECTION = "network"
 PATH_KEYS = ("data", "models", "secrets", "logs", "configs")
-PORT_KEYS = ("frontend_port", "backend_port")
 SUBNET_KEY = "subnet"
 VERSION_KEY = "version"
 
 MODULE_PIPELINE = "pipeline"
+MODULE_WEBUI = "webui"
 CONFIG_NAME = "config.toml"
 DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
@@ -107,14 +108,14 @@ def read_toml(path: Path) -> dict:
         raise DeployError(f"{shown(path)} is not valid TOML: {error}") from None
 
 
-def load_deploy_config() -> tuple[dict[str, Path], dict[str, int], str]:
+def load_deploy_config() -> tuple[dict[str, Path], str]:
     config_path = ROOT / DEPLOY_CONFIG_NAME
     if not config_path.is_file():
         raise DeployError(f"{DEPLOY_CONFIG_NAME} not found next to {SELF_NAME}")
 
     raw = read_toml(config_path)
 
-    for section in (PATHS_SECTION, SERVER_SECTION, NETWORK_SECTION):
+    for section in (PATHS_SECTION, NETWORK_SECTION):
         if section not in raw:
             raise DeployError(f"missing required section [{section}] in {DEPLOY_CONFIG_NAME}")
 
@@ -125,17 +126,11 @@ def load_deploy_config() -> tuple[dict[str, Path], dict[str, int], str]:
         value = Path(raw[PATHS_SECTION][key])
         paths[key] = value if value.is_absolute() else (ROOT / value).resolve()
 
-    ports = {}
-    for key in PORT_KEYS:
-        if key not in raw[SERVER_SECTION]:
-            raise DeployError(f"missing required key '{key}' in [{SERVER_SECTION}]")
-        ports[key] = int(raw[SERVER_SECTION][key])
-
     if SUBNET_KEY not in raw[NETWORK_SECTION]:
         raise DeployError(f"missing required key '{SUBNET_KEY}' in [{NETWORK_SECTION}]")
     subnet = str(raw[NETWORK_SECTION][SUBNET_KEY])
 
-    return paths, ports, subnet
+    return paths, subnet
 
 
 def pipeline_config(paths: dict[str, Path]) -> dict:
@@ -145,6 +140,18 @@ def pipeline_config(paths: dict[str, Path]) -> dict:
             f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
         )
     return read_toml(config_path)
+
+
+def webui_port(paths: dict[str, Path]) -> int:
+    config_path = paths["configs"] / MODULE_WEBUI / CONFIG_NAME
+    if not config_path.is_file():
+        raise DeployError(
+            f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
+        )
+    port = read_toml(config_path).get(SERVER_SECTION, {}).get(PORT_KEY)
+    if not port:
+        raise DeployError(f"missing '{PORT_KEY}' in [{SERVER_SECTION}] of the webui config")
+    return int(port)
 
 
 def dsn_path(paths: dict[str, Path]) -> Path:
@@ -199,7 +206,7 @@ def load_images() -> None:
 
 
 def command_init() -> int:
-    paths, _, subnet = load_deploy_config()
+    paths, subnet = load_deploy_config()
 
     for key in PATH_KEYS:
         paths[key].mkdir(parents=True, exist_ok=True)
@@ -272,14 +279,13 @@ def apply_schema(paths: dict[str, Path], subnet: str) -> None:
         raise DeployError("could not apply the database schema")
 
 
-def write_env(paths: dict[str, Path], ports: dict[str, int], subnet: str, version: str) -> None:
+def write_env(paths: dict[str, Path], port: int, subnet: str, version: str) -> None:
     run_as = f"{os.getuid()}:{os.getgid()}" if hasattr(os, "getuid") else ROOT_USER
     lines = [
         f"VERSION={version}",
         f"RUN_AS={run_as}",
         f"DOCKER_SUBNET={subnet}",
-        f"FRONTEND_PORT={ports['frontend_port']}",
-        f"BACKEND_PORT={ports['backend_port']}",
+        f"WEBUI_PORT={port}",
     ]
     lines += [f"{key.upper()}_DIR={shown(paths[key])}" for key in PATH_KEYS]
     (ROOT / ENV_NAME).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -298,14 +304,15 @@ def read_version() -> str:
 
 
 def command_up() -> int:
-    paths, ports, subnet = load_deploy_config()
+    paths, subnet = load_deploy_config()
+    port = webui_port(paths)
 
     check_secrets(paths)
     apply_schema(paths, subnet)
-    write_env(paths, ports, subnet, read_version())
+    write_env(paths, port, subnet, read_version())
     run_docker([*COMPOSE_ARGS, str(ROOT / COMPOSE_NAME), *UP_ARGS])
 
-    print(f"\nweb interface: http://localhost:{ports['frontend_port']}")
+    print(f"\nweb interface: http://localhost:{port}")
     print("if there are no users yet, create the first one:")
     print(
         "  "

@@ -18,11 +18,11 @@ from src.constants import (
     DATABASE_CONNECT_TIMEOUT,
     LOG_FILE_ENV_VAR,
     PORT_PROBE_HOST,
-    REFLEX_API_URL_ENV_VAR,
     REFLEX_BACKEND_PATH_ENV_VAR,
-    REFLEX_BACKEND_PORT_FLAG,
-    REFLEX_FRONTEND_PORT_FLAG,
+    REFLEX_ENV_FLAG,
+    REFLEX_ENV_PROD,
     REFLEX_MODULE,
+    REFLEX_PORT_FLAG,
     REFLEX_RUN_COMMAND,
     SHUTDOWN_EXIT_CODE,
     STARTUP_ACCESS_NOTE,
@@ -43,27 +43,20 @@ def parse_args() -> argparse.Namespace:
 
 
 def _print_startup(config: Config, log_file: Path) -> None:
-    print(
-        f"web interface starting: {config.server.local_url}, "
-        f"backend port {config.server.backend_port}"
-    )
-    print(STARTUP_ACCESS_NOTE.format(port=config.server.frontend_port))
+    print(f"web interface starting: {config.server.local_url}")
+    print(STARTUP_ACCESS_NOTE.format(port=config.server.port))
     print(f"logs are written to {log_file}")
 
 
-def _check_ports(config: Config) -> None:
-    for key, port in (
-        ("frontend_port", config.server.frontend_port),
-        ("backend_port", config.server.backend_port),
-    ):
-        with socket.socket() as probe:
-            try:
-                probe.bind((PORT_PROBE_HOST, port))
-            except OSError as error:
-                raise ConfigError(
-                    f"'{key}' in [server] is {port}, but that port is already in use: "
-                    "stop whatever is listening on it or pick another port"
-                ) from error
+def _check_port(config: Config) -> None:
+    with socket.socket() as probe:
+        try:
+            probe.bind((PORT_PROBE_HOST, config.server.port))
+        except OSError as error:
+            raise ConfigError(
+                f"'port' in [server] is {config.server.port}, but that port is already "
+                "in use: stop whatever is listening on it or pick another port"
+            ) from error
 
 
 def _check_database(config: Config) -> None:
@@ -100,7 +93,7 @@ def main() -> int:
 
     try:
         config = load_config(args.config)
-        _check_ports(config)
+        _check_port(config)
     except ConfigError as error:
         print(f"config error: {error}", file=sys.stderr)
         return 1
@@ -125,7 +118,6 @@ def main() -> int:
     environment[CONFIG_ENV_VAR] = str(Path(args.config).resolve())
     environment[LOG_FILE_ENV_VAR] = str(log_file)
     environment[REFLEX_BACKEND_PATH_ENV_VAR] = config.server.backend_path
-    environment[REFLEX_API_URL_ENV_VAR] = config.server.api_url
 
     process = subprocess.Popen(
         [
@@ -133,10 +125,10 @@ def main() -> int:
             "-m",
             REFLEX_MODULE,
             REFLEX_RUN_COMMAND,
-            REFLEX_FRONTEND_PORT_FLAG,
-            str(config.server.frontend_port),
-            REFLEX_BACKEND_PORT_FLAG,
-            str(config.server.backend_port),
+            REFLEX_ENV_FLAG,
+            REFLEX_ENV_PROD,
+            REFLEX_PORT_FLAG,
+            str(config.server.port),
         ],
         cwd=Path(__file__).resolve().parent,
         env=environment,

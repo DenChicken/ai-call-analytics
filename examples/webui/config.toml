@@ -10,6 +10,7 @@ dsn_file = "database_dsn"
 file = "license.txt"
 
 [server]
+port = 3000
 backend_path = ""
 
 [display]

@@ -11,11 +11,13 @@ GRAY_COLOR = "slate"
 RADIUS = "medium"
 
 CORS_ALLOWED_ORIGINS = ["*"]
+SHOW_BUILT_WITH_REFLEX = False
 
 config = rx.Config(
     app_name=APP_NAME,
     app_module_import=APP_MODULE_IMPORT,
     cors_allowed_origins=CORS_ALLOWED_ORIGINS,
+    show_built_with_reflex=SHOW_BUILT_WITH_REFLEX,
     plugins=[
         RadixThemesPlugin(
             theme=rx.theme(
