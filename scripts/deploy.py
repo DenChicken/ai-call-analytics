@@ -27,8 +27,10 @@ PATH_KEYS = ("data", "models", "secrets", "logs", "configs")
 SUBNET_KEY = "subnet"
 VERSION_KEY = "version"
 
+MODULE_FETCHER = "fetcher"
 MODULE_PIPELINE = "pipeline"
 MODULE_WEBUI = "webui"
+MODULES = (MODULE_FETCHER, MODULE_PIPELINE, MODULE_WEBUI)
 CONFIG_NAME = "config.toml"
 DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
@@ -38,9 +40,9 @@ TOKEN_FILE_NAME = "hf_token"
 
 DOCKER = "docker"
 ROOT_USER = "0:0"
+LOG_TAIL_LINES = "100"
 LOAD_ARGS = ("load", "-i")
 COMPOSE_ARGS = ("compose", "-f")
-UP_ARGS = ("up", "-d")
 
 DB_SCRIPT = "db.py"
 DB_INIT_COMMAND = "init"
@@ -54,6 +56,16 @@ TOKEN_FILE_FLAG = "-t"
 
 COMMAND_INIT = "init"
 COMMAND_UP = "up"
+COMMAND_STOP = "stop"
+COMMAND_RESTART = "restart"
+COMMAND_LOGS = "logs"
+
+COMPOSE_COMMANDS = {
+    COMMAND_UP: ("up", "-d"),
+    COMMAND_STOP: ("stop",),
+    COMMAND_RESTART: ("restart",),
+    COMMAND_LOGS: ("logs", "-f", "--tail", LOG_TAIL_LINES),
+}
 
 SECRETS_HINT = "the file names are listed in the module configs"
 HOST_ALIAS = "host.docker.internal"
@@ -133,8 +145,8 @@ def load_deploy_config() -> tuple[dict[str, Path], str]:
     return paths, subnet
 
 
-def pipeline_config(paths: dict[str, Path]) -> dict:
-    config_path = paths["configs"] / MODULE_PIPELINE / CONFIG_NAME
+def module_config(paths: dict[str, Path], module: str) -> dict:
+    config_path = paths["configs"] / module / CONFIG_NAME
     if not config_path.is_file():
         raise DeployError(
             f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
@@ -143,26 +155,23 @@ def pipeline_config(paths: dict[str, Path]) -> dict:
 
 
 def webui_port(paths: dict[str, Path]) -> int:
-    config_path = paths["configs"] / MODULE_WEBUI / CONFIG_NAME
-    if not config_path.is_file():
-        raise DeployError(
-            f"config not found: {shown(config_path)}, run {self_command(COMMAND_INIT)}"
-        )
-    port = read_toml(config_path).get(SERVER_SECTION, {}).get(PORT_KEY)
+    port = module_config(paths, MODULE_WEBUI).get(SERVER_SECTION, {}).get(PORT_KEY)
     if not port:
         raise DeployError(f"missing '{PORT_KEY}' in [{SERVER_SECTION}] of the webui config")
     return int(port)
 
 
 def dsn_path(paths: dict[str, Path]) -> Path:
-    dsn_file = pipeline_config(paths).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
+    dsn_file = (
+        module_config(paths, MODULE_PIPELINE).get(DATABASE_SECTION, {}).get(DSN_FILE_KEY)
+    )
     if not dsn_file:
         raise DeployError(f"missing '{DSN_FILE_KEY}' in [{DATABASE_SECTION}] of the pipeline config")
     return paths["secrets"] / dsn_file
 
 
 def model_repos(paths: dict[str, Path]) -> list[str]:
-    config = pipeline_config(paths)
+    config = module_config(paths, MODULE_PIPELINE)
     repos = [config.get(section, {}).get(REPO_ID_KEY) for section in MODEL_SECTIONS]
     return list(dict.fromkeys(repo for repo in repos if repo))
 
@@ -303,15 +312,30 @@ def read_version() -> str:
     return version
 
 
-def command_up() -> int:
+def run_compose(command: str, modules: list[str]) -> None:
+    run_docker(
+        [*COMPOSE_ARGS, str(ROOT / COMPOSE_NAME), *COMPOSE_COMMANDS[command], *modules]
+    )
+
+
+def command_compose(command: str, modules: list[str]) -> int:
     paths, subnet = load_deploy_config()
     port = webui_port(paths)
 
-    check_secrets(paths)
-    apply_schema(paths, subnet)
-    write_env(paths, port, subnet, read_version())
-    run_docker([*COMPOSE_ARGS, str(ROOT / COMPOSE_NAME), *UP_ARGS])
+    starting = command == COMMAND_UP
+    if starting:
+        check_secrets(paths)
+        apply_schema(paths, subnet)
 
+    write_env(paths, port, subnet, read_version())
+    run_compose(command, modules)
+
+    if starting and (not modules or MODULE_WEBUI in modules):
+        _print_running(paths, port)
+    return 0
+
+
+def _print_running(paths: dict[str, Path], port: int) -> None:
     print(f"\nweb interface: http://localhost:{port}")
     print("if there are no users yet, create the first one:")
     print(
@@ -320,26 +344,47 @@ def command_up() -> int:
             USER_SCRIPT, USER_ADD_COMMAND, DEFAULT_LOGIN, DSN_FLAG, shown(dsn_path(paths))
         )
     )
-    print(f"\nservice state and logs, from {shown(ROOT)}:")
+    print(f"\nservice state, from {shown(ROOT)}:")
     print(f"  {DOCKER} compose ps")
-    print(f"  {DOCKER} compose logs -f")
-    return 0
+    print(f"  {self_command(COMMAND_LOGS)}")
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Deploy ai-call-analytics")
     parser.add_argument(
         "command",
-        choices=(COMMAND_INIT, COMMAND_UP),
-        help="init prepares the host, up applies the schema and starts the services",
+        choices=(COMMAND_INIT, *COMPOSE_COMMANDS),
+        help=(
+            "init prepares the host; "
+            "up applies the schema and starts the services; "
+            "stop, restart and logs act on running services"
+        ),
+    )
+    parser.add_argument(
+        "modules",
+        nargs="*",
+        metavar="module",
+        help=f"modules to act on, all of them when omitted: {', '.join(MODULES)}",
     )
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
+    unknown = [module for module in args.modules if module not in MODULES]
+    if unknown:
+        print(
+            f"unknown module: {', '.join(unknown)}, expected one of: {', '.join(MODULES)}",
+            file=sys.stderr,
+        )
+        return 1
+    if args.command == COMMAND_INIT and args.modules:
+        print(f"{COMMAND_INIT} prepares the whole host and takes no modules", file=sys.stderr)
+        return 1
     try:
-        return command_init() if args.command == COMMAND_INIT else command_up()
+        if args.command == COMMAND_INIT:
+            return command_init()
+        return command_compose(args.command, args.modules)
     except DeployError as error:
         print(f"deploy error: {error}", file=sys.stderr)
         return 1

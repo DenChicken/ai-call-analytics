@@ -4,11 +4,11 @@
 # Inside the containers these are always mounted as /data, /models, /secrets and /logs,
 # and the module configs already point there, so those do not need editing.
 [paths]
-data = "./deploy/data"
-models = "./deploy/models"
-secrets = "./deploy/secrets"
-logs = "./deploy/logs"
-configs = "./deploy/configs"
+data = "./runtime/data"
+models = "./runtime/models"
+secrets = "./runtime/secrets"
+logs = "./runtime/logs"
+configs = "./runtime/configs"
 
 # Subnet for the container network. Change it if it clashes with your network;
 # whatever is set here is what PostgreSQL must allow in pg_hba.conf.
