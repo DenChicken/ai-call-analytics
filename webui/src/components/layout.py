@@ -1,5 +1,6 @@
 import reflex as rx
 
+from src.components.common import SELECT_POSITION
 from src.constants import (
     FULL_HEIGHT,
     MUTED_COLOR,
@@ -146,6 +147,7 @@ def _sidebar() -> rx.Component:
                     on_change=AuthState.ask_utc_offset,
                     size="1",
                     width="100%",
+                    position=SELECT_POSITION,
                 ),
                 spacing="1",
                 width="100%",

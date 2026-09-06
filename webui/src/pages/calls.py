@@ -1,6 +1,7 @@
 import reflex as rx
 
 from src.components.common import (
+    SELECT_POSITION,
     checkbox_menu,
     empty_state,
     period_picker,
@@ -41,6 +42,7 @@ def _header() -> rx.Component:
             on_change=CallsState.set_agent_label,
             size="1",
             width=AGENT_SELECT_WIDTH,
+            position=SELECT_POSITION,
         ),
         _type_filters(),
         _status_filters(),
