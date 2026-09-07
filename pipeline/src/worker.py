@@ -57,17 +57,9 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
             if task.stage == STATUS_PENDING:
                 _transcribe(config, database, asr, task, audio_path, started)
             else:
-                _analyze(config, database, asr, llm, task, audio_path, started)
-        except shutdown.ShutdownRequested:
-            _release(database, task, task.stage, None)
-            raise
-        except UnrecoverableError as error:
-            logger.error(
-                "call %s returned to the queue, the environment is unusable: %s",
-                task.call_id,
-                error,
-            )
-            _release(database, task, task.stage, None)
+                _analyze(config, database, llm, task, audio_path, started)
+        except (shutdown.ShutdownRequested, UnrecoverableError):
+            _return_to_queue(database, task)
             raise
         except Exception as error:
             logger.exception(
@@ -76,22 +68,40 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
                 task.stage,
                 int(time.monotonic() - started),
             )
-            exhausted = task.attempts >= worker.max_attempts
-            _release(database, task, STATUS_FAILED if exhausted else task.stage, error)
+            _fail(database, task, error, task.attempts >= worker.max_attempts)
             shutdown.check()
 
 
-def _release(database: Database, task: Task, status: str, error: Exception | None) -> None:
-    claimed = CLAIMED_STATUS[task.stage]
+def _return_to_queue(database: Database, task: Task) -> None:
+    _release(database, task, task.stage, None, refund_attempt=True)
+
+
+def _fail(database: Database, task: Task, error: Exception, exhausted: bool) -> None:
+    _release(
+        database,
+        task,
+        STATUS_FAILED if exhausted else task.stage,
+        error,
+        refund_attempt=False,
+    )
+
+
+def _release(
+    database: Database,
+    task: Task,
+    status: str,
+    error: Exception | None,
+    refund_attempt: bool,
+) -> None:
     code = classify(error) if error else None
     try:
         database.release_task(
             task.call_id,
-            claimed,
+            CLAIMED_STATUS[task.stage],
             status,
             code,
             str(error) if error else None,
-            refund_attempt=error is None,
+            refund_attempt=refund_attempt,
         )
     except Exception:
         logger.exception("could not release call %s, leaving it claimed", task.call_id)
@@ -113,7 +123,7 @@ def _transcribe(
         task.call_id,
         segments,
         plain=render_plain(segments),
-        model=asr.model_name,
+        model=config.asr.repo_id,
         language=config.asr.transcript.language,
         duration_seconds=duration,
     )
@@ -128,7 +138,6 @@ def _transcribe(
 def _analyze(
     config: Config,
     database: Database,
-    asr: Asr,
     llm: Llm,
     task: Task,
     audio_path: Path,
@@ -164,8 +173,8 @@ def _analyze(
         task.call_id,
         analysis,
         AnalysisMetadata(
-            asr_model=asr.model_name,
-            analysis_model=llm.model_name,
+            asr_model=config.asr.repo_id,
+            analysis_model=config.llm.repo_id,
             prompt_label=config.prompt.label,
             processing_seconds=int(time.monotonic() - started),
         ),

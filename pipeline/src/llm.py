@@ -44,10 +44,6 @@ class Llm:
         self._tokenizer = None
         self._model = None
 
-    @property
-    def model_name(self) -> str:
-        return self._config.repo_id
-
     def _ensure_loaded(self) -> None:
         if self._model is not None:
             return
