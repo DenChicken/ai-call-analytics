@@ -102,9 +102,9 @@ class Database:
         with self._cursor() as cursor:
             cursor.execute(
                 """
-                SELECT j.call_id, j.status, j.attempts, c.audio_path
+                SELECT j.call_id, j.status, j.attempts,
+                       (SELECT c.audio_path FROM calls c WHERE c.id = j.call_id) AS audio_path
                 FROM processing_jobs j
-                JOIN calls c ON c.id = j.call_id
                 WHERE j.status = ANY(%s) AND j.attempts < %s
                 ORDER BY array_position(%s, j.status), j.updated_at
                 LIMIT 1
