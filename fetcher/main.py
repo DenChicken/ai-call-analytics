@@ -9,7 +9,6 @@ from licensing.verify_runtime import check, is_expired, load
 from src import shutdown
 from src.config import Config, ConfigError, load_config
 from src.constants import (
-    MAX_CONSECUTIVE_FAILURES,
     SHUTDOWN_EXIT_CODE,
     UNRECOVERABLE_EXIT_CODE,
 )
@@ -88,9 +87,7 @@ def main() -> int:
         return UNRECOVERABLE_EXIT_CODE
 
     expired = False
-    unusable = False
     cycle = 0
-    failures = 0
     try:
         while not shutdown.is_stopping():
             if is_expired(license):
@@ -100,7 +97,7 @@ def main() -> int:
                 break
             cycle += 1
             logger.debug("cycle %s started", cycle)
-            reachable = 0
+            served = 0
             for source in sources:
                 try:
                     run_once(config, database, source)
@@ -109,22 +106,13 @@ def main() -> int:
                 except UnrecoverableError as error:
                     logger.error("source %s cannot be served: %s", source.name, error)
                 except Exception:
-                    reachable += 1
+                    served += 1
                     logger.exception("cycle failed for source %s", source.name)
                 else:
-                    reachable += 1
+                    served += 1
 
-            failures = 0 if reachable else failures + 1
-            if failures:
-                logger.error(
-                    "the environment is unusable, no source was reachable in cycle %s (%s of %s)",
-                    cycle,
-                    failures,
-                    MAX_CONSECUTIVE_FAILURES,
-                )
-                if failures >= MAX_CONSECUTIVE_FAILURES:
-                    unusable = True
-                    break
+            if not served:
+                logger.error("cycle %s served no source, none of them can be used", cycle)
             logger.debug("cycle %s done, sleeping %ss", cycle, config.fetch.interval_seconds)
             shutdown.sleep(config.fetch.interval_seconds)
     except shutdown.ShutdownRequested:
@@ -134,9 +122,6 @@ def main() -> int:
             source.close()
         database.close()
 
-    if unusable:
-        logger.error("fetcher stopped after %s cycles: the environment is unusable", cycle)
-        return UNRECOVERABLE_EXIT_CODE
     if expired:
         logger.info("fetcher stopped after %s cycles: license expired", cycle)
         return LICENSE_EXIT_CODE

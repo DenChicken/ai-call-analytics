@@ -19,7 +19,6 @@ from src.constants import (
     ERROR_NO_CALL_TYPES,
     ERROR_NO_CRITERIA,
     ERROR_TRANSCRIPT_EMPTY,
-    MAX_CONSECUTIVE_FAILURES,
     STATUS_FAILED,
     STATUS_PENDING,
 )
@@ -33,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License) -> None:
     worker = config.worker
-    failures = 0
     while not shutdown.is_stopping():
         if is_expired(license):
             logger.error("license expired on %s, stopping", license.expires)
@@ -64,19 +62,13 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
             _release(database, task, task.stage, None)
             raise
         except UnrecoverableError as error:
-            failures += 1
             logger.error(
-                "call %s returned to the queue, the environment is unusable (%s of %s): %s",
+                "call %s returned to the queue, the environment is unusable: %s",
                 task.call_id,
-                failures,
-                MAX_CONSECUTIVE_FAILURES,
                 error,
             )
             _release(database, task, task.stage, None)
-            if failures >= MAX_CONSECUTIVE_FAILURES:
-                raise
-            shutdown.sleep(worker.poll_interval_seconds)
-            continue
+            raise
         except Exception as error:
             logger.exception(
                 "call %s failed at stage %s after %ss",
@@ -87,8 +79,6 @@ def run(config: Config, database: Database, asr: Asr, llm: Llm, license: License
             exhausted = task.attempts >= worker.max_attempts
             _release(database, task, STATUS_FAILED if exhausted else task.stage, error)
             shutdown.check()
-
-        failures = 0
 
 
 def _release(database: Database, task: Task, status: str, error: Exception | None) -> None:

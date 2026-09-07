@@ -55,7 +55,6 @@ ERROR_DATABASE = "database"
 ERROR_STALE_CLAIM = "stale_claim"
 ERROR_UNKNOWN = "unknown"
 
-MAX_CONSECUTIVE_FAILURES = 5
 UNRECOVERABLE_EXIT_CODE = 70
 
 DEVICE_FAILURE_MARKERS = ("out of memory", "cuda", "cublas", "cudnn")
