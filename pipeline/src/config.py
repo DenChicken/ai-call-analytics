@@ -103,6 +103,7 @@ class Llm(Section):
     local_dir: str
     device: str
     torch_dtype: str
+    attn_implementation: str
     load_in_4bit: bool
     quant_type: str
     max_input_tokens: int

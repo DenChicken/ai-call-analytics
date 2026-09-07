@@ -51,6 +51,7 @@ class Llm:
             self._model = AutoModelForCausalLM.from_pretrained(
                 str(self._model_dir),
                 dtype=getattr(torch, self._config.torch_dtype),
+                attn_implementation=self._config.attn_implementation,
                 quantization_config=_quantization(self._config),
                 device_map=self._config.device,
             )

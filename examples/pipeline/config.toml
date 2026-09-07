@@ -50,6 +50,7 @@ repo_id = "Qwen/Qwen3-0.6B"
 local_dir = "Qwen3-0.6B"
 device = "cpu"
 torch_dtype = "float32"
+attn_implementation = "sdpa"
 load_in_4bit = false
 quant_type = "nf4"
 max_input_tokens = 8000
