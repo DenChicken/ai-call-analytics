@@ -22,7 +22,7 @@ from src.constants import (
     ERROR_LLM_PROMPT_TOO_LONG,
     ERROR_LLM_TRUNCATED,
 )
-from src.errors import DEVICE_UNUSABLE, StageError, UnrecoverableError
+from src.errors import StageError, UnrecoverableError, is_device_failure
 
 ROLE_SYSTEM = "system"
 ROLE_USER = "user"
@@ -133,10 +133,14 @@ class Llm:
                     pad_token_id=self._tokenizer.eos_token_id,
                     **sampling,
                 )
-        except DEVICE_UNUSABLE:
+        except Exception as error:
+            if not is_device_failure(error):
+                raise
             logger.warning("generation left the device unusable, unloading the llm")
             self.unload()
-            raise
+            raise UnrecoverableError(
+                f"llm failed on {self._config.device}: {error}"
+            ) from error
 
         produced = generated[0][prompt_tokens:]
         elapsed = time.monotonic() - started

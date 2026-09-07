@@ -3,12 +3,13 @@ import logging
 import time
 from pathlib import Path
 
+import ctranslate2
 import torch
 from faster_whisper import WhisperModel
 
 from src.config import AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
-from src.errors import DEVICE_UNUSABLE, UnrecoverableError
+from src.errors import UnrecoverableError, is_device_failure
 from src.transcript import Segment
 
 logger = logging.getLogger(__name__)
@@ -18,12 +19,28 @@ def _to_ms(seconds: float) -> int:
     return int(seconds * MILLISECONDS_PER_SECOND)
 
 
+def _check_device(config: AsrConfig) -> None:
+    try:
+        supported = ctranslate2.get_supported_compute_types(config.device)
+    except (ValueError, RuntimeError) as error:
+        raise UnrecoverableError(
+            f"asr device {config.device} is not usable: {error}, "
+            "fix 'device' in [asr] or make the device available"
+        ) from error
+    if config.compute_type not in supported:
+        raise UnrecoverableError(
+            f"asr compute_type {config.compute_type} is not supported on {config.device}, "
+            f"set 'compute_type' in [asr] to one of: {', '.join(sorted(supported))}"
+        )
+
+
 class Asr:
     def __init__(self, config: AsrConfig):
         if not config.local_dir.is_dir():
             raise UnrecoverableError(
                 f"asr model directory not found: {config.local_dir}, run scripts/fetch_models.py"
             )
+        _check_device(config)
         self._config = config
         self._model = None
 
@@ -53,6 +70,8 @@ class Asr:
         if self._model is None:
             return
         logger.info("unloading asr model %s", self._config.repo_id)
+        if self._model.model.model_is_loaded:
+            self._model.model.unload_model()
         self._model = None
         gc.collect()
         if torch.accelerator.is_available():
@@ -91,10 +110,14 @@ class Asr:
                 },
             )
             decoded = list(raw_segments)
-        except DEVICE_UNUSABLE:
+        except Exception as error:
+            if not is_device_failure(error):
+                raise
             logger.warning("transcription left the device unusable, unloading the asr model")
             self.unload()
-            raise
+            raise UnrecoverableError(
+                f"asr failed on {self._config.device}: {error}"
+            ) from error
 
         segments = []
         suspicious = 0
