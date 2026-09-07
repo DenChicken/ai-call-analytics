@@ -43,8 +43,15 @@ RUN /out/pipeline --help > /dev/null
 
 FROM base
 
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV HF_HUB_OFFLINE=1
+ENV TRITON_CACHE_DIR=/app/triton-cache
 
 COPY --from=build /out/pipeline /app/pipeline
+
+RUN mkdir -p ${TRITON_CACHE_DIR} && chmod 777 ${TRITON_CACHE_DIR}
 
 ENTRYPOINT ["/app/pipeline", "--config", "/configs/config.toml"]
