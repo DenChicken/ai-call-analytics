@@ -9,6 +9,7 @@ from src.constants import (
     PARAM_PERIOD,
     PARAM_SEARCH,
     PARAM_SORT,
+    PARAM_TYPES,
     PERIOD_BY_LABEL,
     PERIOD_DAYS,
     PERIOD_LABELS,
@@ -17,6 +18,7 @@ from src.constants import (
 )
 from src.database import build_window
 from src.state.auth import AuthState, guarded
+from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +57,7 @@ class ManagerRow:
     last_call_key: float
 
 
-class ManagersState(AuthState):
+class ManagersState(TypesFilterState, AuthState):
     period: str = PERIOD_WEEK
     search: str = ""
     sort_by: str = DEFAULT_SORT
@@ -67,8 +69,13 @@ class ManagersState(AuthState):
     def load(self):
         if not self.session_login:
             return AuthState.require_session
+        self._load_types()
         self._read_url()
         self._refresh()
+
+    def _types_changed(self):
+        self._refresh()
+        return self._sync_url()
 
     @rx.var
     def period_label(self) -> str:
@@ -105,6 +112,7 @@ class ManagersState(AuthState):
         self.search = urlstate.read(params, PARAM_SEARCH)
         self.sort_by = urlstate.read_choice(params, PARAM_SORT, SORT_LABELS, self.sort_by)
         self.descending = urlstate.read_flag(params, PARAM_DESC, self.descending)
+        self._read_types(params)
 
     def _sync_url(self):
         return rx.redirect(
@@ -119,6 +127,7 @@ class ManagersState(AuthState):
                         if bool(self.descending) == DEFAULT_DESCENDING
                         else DESCENDING_VALUES[bool(self.descending)]
                     ),
+                    PARAM_TYPES: self._types_param,
                 },
             ),
             replace=True,
@@ -128,18 +137,17 @@ class ManagersState(AuthState):
         guarded(self, self._collect)
 
     def _collect(self) -> None:
-        rows = collect(self.period, self.utc_offset)
+        rows = collect(self.period, list(self.selected_types), self.utc_offset)
         self.rows = sorted_rows(
             filtered_rows(rows, self.search), self.sort_by, self.descending
         )
 
 
-def collect(period: str, offset_hours: int) -> list[ManagerRow]:
+def collect(period: str, types: list[str], offset_hours: int) -> list[ManagerRow]:
     database = context.database()
 
     since, until = formatting.period_bounds(period, offset_hours)
     previous_since, previous_until = formatting.previous_bounds(since, until)
-    types = [entry["code"] for entry in database.call_types()]
 
     window = build_window(since, until, types)
     previous = build_window(previous_since, previous_until, types)

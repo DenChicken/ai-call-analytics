@@ -19,10 +19,10 @@ from src.constants import (
     STATUS_COLORS,
     STATUS_FAILED,
     STATUS_LABELS,
-    TYPES_SUMMARY_TEMPLATE,
 )
-from src.database import CallType, build_window
+from src.database import build_window
 from src.state.auth import AuthState, guarded
+from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
 
@@ -84,10 +84,8 @@ class DashboardData:
     recent_rows: list[AnalysisRow]
 
 
-class DashboardState(AuthState):
+class DashboardState(TypesFilterState, AuthState):
     period: str = PERIOD_TODAY
-    selected_types: list[str] = []
-    available_types: list[CallType] = []
 
     processed: int = 0
     processed_delta: int = 0
@@ -114,15 +112,14 @@ class DashboardState(AuthState):
     def load(self):
         if not self.session_login:
             return AuthState.require_session
-        if not self.available_types:
-            self.available_types = [
-                CallType(code=row["code"], label=row["label"])
-                for row in context.database().call_types()
-            ]
-            self.selected_types = [entry.code for entry in self.available_types]
+        self._load_types()
         self._read_url()
         self._refresh()
         return DashboardState.auto_refresh
+
+    def _types_changed(self):
+        self._refresh()
+        return self._sync_url()
 
     @rx.event
     def refresh(self):
@@ -164,45 +161,24 @@ class DashboardState(AuthState):
     def period_label(self) -> str:
         return PERIOD_LABELS[self.period]
 
-    @rx.var
-    def types_summary(self) -> str:
-        return TYPES_SUMMARY_TEMPLATE.format(
-            selected=len(self.selected_types), total=len(self.available_types)
-        )
-
     @rx.event
     def set_period(self, label: str):
         self.period = PERIOD_BY_LABEL.get(label, self.period)
         self._refresh()
         return self._sync_url()
 
-    @rx.event
-    def toggle_type(self, code: str, enabled: bool):
-        codes = {str(entry) for entry in self.selected_types}
-        if enabled:
-            codes.add(code)
-        else:
-            codes.discard(code)
-        self.selected_types = sorted(codes)
-        self._refresh()
-        return self._sync_url()
-
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
         self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
-        codes = [entry.code for entry in self.available_types]
-        self.selected_types = urlstate.read_list(
-            params, PARAM_TYPES, codes, self.selected_types
-        )
+        self._read_types(params)
 
     def _sync_url(self):
-        codes = [entry.code for entry in self.available_types]
         return rx.redirect(
             urlstate.query(
                 ROUTE_DASHBOARD,
                 {
                     PARAM_PERIOD: self.period,
-                    PARAM_TYPES: urlstate.write_list(self.selected_types, codes),
+                    PARAM_TYPES: self._types_param,
                 },
             ),
             replace=True,
@@ -212,7 +188,7 @@ class DashboardState(AuthState):
         guarded(self, self._collect)
 
     def _collect(self) -> None:
-        data = collect(self.period, self.selected_types, self.utc_offset)
+        data = collect(self.period, list(self.selected_types), self.utc_offset)
         self.processed = data.processed
         self.processed_delta = data.processed_delta
         self.analyzed_today = data.analyzed_today

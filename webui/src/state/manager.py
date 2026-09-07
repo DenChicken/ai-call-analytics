@@ -18,10 +18,10 @@ from src.constants import (
     ROUTE_MANAGER,
     STATUS_COLORS,
     STATUS_LABELS,
-    TYPES_SUMMARY_TEMPLATE,
 )
-from src.database import CallType, build_filters, build_window
+from src.database import build_filters, build_window
 from src.state.auth import AuthState, guarded
+from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
 
@@ -105,10 +105,8 @@ class ManagerData:
     calls_total: int
 
 
-class ManagerState(AuthState):
+class ManagerState(TypesFilterState, AuthState):
     period: str = PERIOD_MONTH
-    selected_types: list[str] = []
-    available_types: list[CallType] = []
 
     found: bool = False
     name: str = EMPTY_VALUE
@@ -182,34 +180,26 @@ class ManagerState(AuthState):
         if not self.session_login:
             return AuthState.require_session
         self.current_agent_id = _as_id(self.agent_id)
-        if not self.available_types:
-            self.available_types = [
-                CallType(code=row["code"], label=row["label"])
-                for row in context.database().call_types()
-            ]
-            self.selected_types = [entry.code for entry in self.available_types]
+        self._load_types()
         self._read_url()
         self._refresh()
+
+    def _types_changed(self):
+        self._refresh()
+        return self._sync_url()
 
     @rx.var
     def period_label(self) -> str:
         return PERIOD_LABELS[self.period]
 
     @rx.var
-    def types_summary(self) -> str:
-        return TYPES_SUMMARY_TEMPLATE.format(
-            selected=len(self.selected_types), total=len(self.available_types)
-        )
-
-    @rx.var
     def all_calls_link(self) -> str:
-        codes = [entry.code for entry in self.available_types]
         return urlstate.query(
             ROUTE_CALLS,
             {
                 PARAM_AGENT: str(self.current_agent_id),
                 PARAM_PERIOD: self.period,
-                PARAM_TYPES: urlstate.write_list(self.selected_types, codes),
+                PARAM_TYPES: self._types_param,
             },
         )
 
@@ -219,35 +209,18 @@ class ManagerState(AuthState):
         self._refresh()
         return self._sync_url()
 
-    @rx.event
-    def toggle_type(self, code: str, enabled: bool):
-        codes = {str(entry) for entry in self.selected_types}
-        if enabled:
-            codes.add(code)
-        else:
-            codes.discard(code)
-        self.selected_types = [
-            entry.code for entry in self.available_types if entry.code in codes
-        ]
-        self._refresh()
-        return self._sync_url()
-
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
         self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
-        codes = [entry.code for entry in self.available_types]
-        self.selected_types = urlstate.read_list(
-            params, PARAM_TYPES, codes, self.selected_types
-        )
+        self._read_types(params)
 
     def _sync_url(self):
-        codes = [entry.code for entry in self.available_types]
         return rx.redirect(
             urlstate.query(
                 f"{ROUTE_MANAGER}/{self.current_agent_id}",
                 {
                     PARAM_PERIOD: self.period,
-                    PARAM_TYPES: urlstate.write_list(self.selected_types, codes),
+                    PARAM_TYPES: self._types_param,
                 },
             ),
             replace=True,

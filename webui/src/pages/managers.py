@@ -1,6 +1,7 @@
 import reflex as rx
 
 from src.components.common import (
+    checkbox_menu,
     delta_text,
     empty_state,
     period_picker,
@@ -8,7 +9,7 @@ from src.components.common import (
     truncated,
 )
 from src.components.layout import page_layout, sticky_header
-from src.constants import ROUTE_MANAGER, SECTION_MANAGERS
+from src.constants import ROUTE_MANAGER, SECTION_MANAGERS, TYPES_LABEL
 from src.state.managers import (
     SORT_ANALYZED,
     SORT_CALLS,
@@ -105,6 +106,13 @@ def managers_page() -> rx.Component:
                 size="1",
             ),
             rx.spacer(),
+            checkbox_menu(
+                TYPES_LABEL,
+                ManagersState.types_summary,
+                ManagersState.available_types,
+                lambda entry: ManagersState.selected_types.contains(entry.code),
+                lambda entry, value: ManagersState.toggle_type(entry.code, value),
+            ),
             period_picker(ManagersState.period_label, ManagersState.set_period),
         ),
         on_mount=ManagersState.load,
