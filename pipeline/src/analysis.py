@@ -12,7 +12,7 @@ from src.constants import (
     PROMPT_TRANSCRIPT_PLACEHOLDER,
     UNKNOWN_MANAGER,
 )
-from src.errors import StageError
+from src.errors import CallError
 from src.llm import Llm
 from src.schema import build_analysis_model
 
@@ -29,16 +29,6 @@ class Analysis:
     scores: dict[str, int]
 
 
-def render_criteria(criteria: list[Reference]) -> str:
-    return "\n".join(
-        CRITERIA_LINE_TEMPLATE.format(
-            label=criterion.label,
-            description=criterion.description,
-        )
-        for criterion in criteria
-    )
-
-
 def analyze(
     config: Config,
     llm: Llm,
@@ -53,19 +43,22 @@ def analyze(
         len(criteria),
         len(call_types),
     )
-    model = build_analysis_model(criteria, call_types, config.llm.output.list_items)
-    prompt = config.prompt.user.format(
+    model = build_analysis_model(
+        criteria, call_types, config.fields, config.llm.output.list_items
+    )
+    prompt = config.user_prompt.format(
         **{
-            PROMPT_CRITERIA_PLACEHOLDER: render_criteria(criteria),
+            PROMPT_CRITERIA_PLACEHOLDER: _render_criteria(criteria),
             PROMPT_MANAGER_PLACEHOLDER: manager_name or UNKNOWN_MANAGER,
             PROMPT_TRANSCRIPT_PLACEHOLDER: plain,
         }
     )
-    raw = llm.generate(config.prompt.system, prompt, model.model_json_schema())
+    raw = llm.generate(config.system_prompt, prompt, model.model_json_schema())
+
     try:
         payload = model.model_validate(raw).model_dump()
     except ValidationError as error:
-        raise StageError(
+        raise CallError(
             ERROR_LLM_INVALID_OUTPUT, f"model output does not match the schema: {error}"
         ) from error
 
@@ -77,3 +70,10 @@ def analyze(
         len(analysis.scores),
     )
     return analysis
+
+
+def _render_criteria(criteria: list[Reference]) -> str:
+    return "\n".join(
+        CRITERIA_LINE_TEMPLATE.format(label=entry.label, description=entry.description)
+        for entry in criteria
+    )

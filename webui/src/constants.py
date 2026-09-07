@@ -11,17 +11,13 @@ LOG_TRACE_NAME = "TRACE"
 LOG_LEVELS = (LOG_TRACE_NAME, "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
 
 STATUS_PENDING = "pending"
-STATUS_TRANSCRIBING = "transcribing"
 STATUS_TRANSCRIBED = "transcribed"
-STATUS_ANALYZING = "analyzing"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 
 QUEUE_STATUSES = (
     STATUS_PENDING,
-    STATUS_TRANSCRIBING,
     STATUS_TRANSCRIBED,
-    STATUS_ANALYZING,
     STATUS_FAILED,
 )
 
@@ -33,9 +29,6 @@ ERROR_LLM_PROMPT_TOO_LONG = "llm_prompt_too_long"
 ERROR_LLM_INVALID_OUTPUT = "llm_invalid_output"
 ERROR_NO_CRITERIA = "no_criteria"
 ERROR_NO_CALL_TYPES = "no_call_types"
-ERROR_OUT_OF_MEMORY = "out_of_memory"
-ERROR_DATABASE = "database"
-ERROR_STALE_CLAIM = "stale_claim"
 ERROR_UNKNOWN = "unknown"
 
 APP_TITLE = "Аналитика звонков"
@@ -102,18 +95,14 @@ FULL_HEIGHT = "100vh"
 
 STATUS_LABELS = {
     STATUS_PENDING: "Ожидает",
-    STATUS_TRANSCRIBING: "Расшифровка",
     STATUS_TRANSCRIBED: "Расшифрован",
-    STATUS_ANALYZING: "Анализ",
     STATUS_DONE: "Готово",
     STATUS_FAILED: "Ошибка",
 }
 
 STATUS_ORDER = (
     STATUS_PENDING,
-    STATUS_TRANSCRIBING,
     STATUS_TRANSCRIBED,
-    STATUS_ANALYZING,
     STATUS_DONE,
     STATUS_FAILED,
 )
@@ -124,9 +113,7 @@ DEFAULT_STATUS_COLOR = "gray"
 
 STATUS_COLORS = {
     STATUS_PENDING: "gray",
-    STATUS_TRANSCRIBING: "blue",
     STATUS_TRANSCRIBED: "blue",
-    STATUS_ANALYZING: "amber",
     STATUS_DONE: "grass",
     STATUS_FAILED: "red",
 }

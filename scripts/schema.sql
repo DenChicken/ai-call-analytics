@@ -43,20 +43,17 @@ CREATE TABLE IF NOT EXISTS processing_jobs (
     call_id     BIGINT PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
     status      TEXT NOT NULL DEFAULT 'pending',
     attempts    SMALLINT NOT NULL DEFAULT 0,
-    claimed_at  TIMESTAMPTZ,
     error_code  TEXT,
     last_error  TEXT,
     updated_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT processing_jobs_status_check CHECK (
-        status IN (
-            'pending', 'transcribing', 'transcribed', 'analyzing', 'done', 'failed'
-        )
+        status IN ('pending', 'transcribed', 'done', 'failed')
     ),
     CONSTRAINT processing_jobs_error_code_check CHECK (
         error_code IS NULL OR error_code IN (
             'audio_missing', 'asr_empty', 'transcript_empty', 'llm_truncated',
             'llm_prompt_too_long', 'llm_invalid_output', 'no_criteria',
-            'no_call_types', 'out_of_memory', 'database', 'stale_claim', 'unknown'
+            'no_call_types', 'unknown'
         )
     )
 );

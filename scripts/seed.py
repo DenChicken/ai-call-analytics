@@ -31,9 +31,7 @@ SEGMENT_GAP_MS = 250
 MILLISECONDS_PER_SECOND = 1000
 
 STATUS_PENDING = "pending"
-STATUS_TRANSCRIBING = "transcribing"
 STATUS_TRANSCRIBED = "transcribed"
-STATUS_ANALYZING = "analyzing"
 STATUS_DONE = "done"
 STATUS_FAILED = "failed"
 
@@ -48,9 +46,6 @@ ERROR_CODES = (
     "llm_invalid_output",
     "no_criteria",
     "no_call_types",
-    "out_of_memory",
-    "database",
-    "stale_claim",
     "unknown",
 )
 
@@ -58,16 +53,12 @@ ERRORS_BEFORE_TRANSCRIPT = (ERROR_AUDIO_MISSING, "asr_empty")
 
 STATUS_WEIGHTS = {
     STATUS_DONE: 74,
-    STATUS_PENDING: 9,
+    STATUS_PENDING: 12,
     STATUS_FAILED: 8,
-    STATUS_TRANSCRIBED: 4,
-    STATUS_TRANSCRIBING: 3,
-    STATUS_ANALYZING: 2,
+    STATUS_TRANSCRIBED: 6,
 }
 
-STORED_STATUSES = (STATUS_TRANSCRIBED, STATUS_ANALYZING, STATUS_DONE, STATUS_FAILED)
-CLAIMED_STATUSES = (STATUS_TRANSCRIBING, STATUS_ANALYZING)
-CLAIM_DELAY_MINUTES_RANGE = (1, 45)
+STORED_STATUSES = (STATUS_TRANSCRIBED, STATUS_DONE, STATUS_FAILED)
 RETRY_CHANCE = 0.2
 
 FIRST_SEGMENT_MIN_MS = 200
@@ -436,19 +427,13 @@ def seed(connection, root: Path, audio_files: list[Path], days: int, calls: int,
             else:
                 attempts = 0
             updated_at = started + timedelta(hours=QUEUE_DELAY_HOURS)
-            claimed_at = (
-                started
-                + timedelta(minutes=chance.randint(*CLAIM_DELAY_MINUTES_RANGE))
-                if status in CLAIMED_STATUSES
-                else None
-            )
             cursor.execute(
                 """
-                INSERT INTO processing_jobs (call_id, status, attempts, claimed_at,
+                INSERT INTO processing_jobs (call_id, status, attempts,
                                              error_code, last_error, updated_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s)
                 """,
-                (call_id, status, attempts, claimed_at, error_code, last_error, updated_at),
+                (call_id, status, attempts, error_code, last_error, updated_at),
             )
 
             transcribed = status in STORED_STATUSES and (

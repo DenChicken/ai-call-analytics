@@ -21,7 +21,6 @@ done_dir = "done"
 [worker]
 poll_interval_seconds = 15
 max_attempts = 3
-stale_claim_seconds = 3600
 
 [criteria]
 file = "criteria.toml"
@@ -52,7 +51,8 @@ local_dir = "Qwen3-0.6B"
 device = "cpu"
 torch_dtype = "float32"
 load_in_4bit = false
-max_input_tokens = 32000
+quant_type = "nf4"
+max_input_tokens = 8000
 temperature = 0.7
 top_p = 0.8
 top_k = 20
@@ -67,6 +67,14 @@ timeout_seconds = 300
 label = "v3"
 system_file = "prompts/system.txt"
 user_file = "prompts/user.txt"
+
+[prompt.fields]
+summary = "Кто с кем говорил, о чём и чем закончилось. Строго 2-3 предложения, только о том, что прозвучало в разговоре."
+call_type = "Тип разговора, определённый по его содержанию."
+scores = "Оценка по каждому критерию: 1 только если в стенограмме есть прямое подтверждение словами менеджера, иначе 0."
+strengths = "Что менеджер сделал хорошо, с опорой на прозвучавшие реплики."
+weaknesses = "Что менеджер упустил, не повторяя уже отмеченные сильные стороны."
+recommendations = "Конкретные действия на будущее, не пересказывающие упущения другими словами."
 
 [logging]
 level = "INFO"

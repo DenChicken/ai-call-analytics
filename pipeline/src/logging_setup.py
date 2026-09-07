@@ -4,7 +4,7 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from src.config import LoggingConfig
+from src.config import Logging as LoggingConfig
 from src.constants import (
     LOG_APPLICATION_LOGGERS,
     LOG_BACKUP_COUNT,
@@ -16,16 +16,7 @@ from src.constants import (
 )
 
 
-def _link_latest(directory: Path, target: Path) -> None:
-    latest = directory / LOG_LATEST_NAME
-    latest.unlink(missing_ok=True)
-    try:
-        latest.symlink_to(target.name)
-    except OSError:
-        latest.write_text(target.name, encoding="utf-8")
-
-
-def setup_logging(config: LoggingConfig) -> None:
+def setup_logging(config: LoggingConfig, directory: Path) -> None:
     root = logging.getLogger()
     root.setLevel(config.level if config.external_logs else config.external_level)
     root.handlers.clear()
@@ -38,17 +29,23 @@ def setup_logging(config: LoggingConfig) -> None:
     console.setFormatter(formatter)
     root.addHandler(console)
 
-    config.dir.mkdir(parents=True, exist_ok=True)
+    directory.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime(LOG_FILE_TIME_FORMAT)
-    log_file = config.dir / LOG_FILE_TEMPLATE.format(timestamp=timestamp)
+    log_file = directory / LOG_FILE_TEMPLATE.format(timestamp=timestamp)
 
     file_handler = RotatingFileHandler(
-        log_file,
-        maxBytes=LOG_MAX_BYTES,
-        backupCount=LOG_BACKUP_COUNT,
-        encoding="utf-8",
+        log_file, maxBytes=LOG_MAX_BYTES, backupCount=LOG_BACKUP_COUNT, encoding="utf-8"
     )
     file_handler.setFormatter(formatter)
     root.addHandler(file_handler)
 
-    _link_latest(config.dir, log_file)
+    _link_latest(directory, log_file)
+
+
+def _link_latest(directory: Path, target: Path) -> None:
+    latest = directory / LOG_LATEST_NAME
+    latest.unlink(missing_ok=True)
+    try:
+        latest.symlink_to(target.name)
+    except OSError:
+        latest.write_text(target.name, encoding="utf-8")

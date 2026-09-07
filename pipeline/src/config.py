@@ -1,6 +1,7 @@
 import tomllib
-from dataclasses import dataclass
 from pathlib import Path
+
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from src.constants import (
     LOG_LEVELS,
@@ -10,19 +11,6 @@ from src.constants import (
     PROMPT_TRANSCRIPT_PLACEHOLDER,
 )
 
-PATHS_SECTION = "paths"
-LOGGING_SECTION = "logging"
-LICENSE_SECTION = "license"
-DATA_DIR_KEY = "data_dir"
-MODELS_DIR_KEY = "models_dir"
-SECRETS_DIR_KEY = "secrets_dir"
-LOGS_DIR_KEY = "logs_dir"
-CONFIGS_DIR_KEY = "configs_dir"
-LICENSE_FILE_KEY = "file"
-
-REFERENCE_CODE = "code"
-REFERENCE_LABEL = "label"
-REFERENCE_DESCRIPTION = "description"
 PROMPT_PLACEHOLDERS = (
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
@@ -34,30 +22,57 @@ class ConfigError(Exception):
     pass
 
 
-@dataclass(frozen=True)
-class DatabaseConfig:
-    dsn: str
+class Section(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class Paths(Section):
+    data_dir: Path
+    models_dir: Path
+    secrets_dir: Path
+    logs_dir: Path
+    configs_dir: Path
+
+    @field_validator("*")
+    @classmethod
+    def _absolute(cls, value: Path) -> Path:
+        if not value.is_absolute():
+            raise ValueError(
+                f"{value} must be an absolute path: anchors are mount points "
+                "and cannot depend on where the config file sits"
+            )
+        return value.resolve()
+
+
+class Database(Section):
+    dsn_file: str
     connect_timeout: float
     max_retries: int
     backoff_base_seconds: float
     backoff_max_seconds: float
 
+    @field_validator("connect_timeout", "max_retries")
+    @classmethod
+    def _positive(cls, value: float) -> float:
+        if value <= 0:
+            raise ValueError(f"{value} must be positive")
+        return value
 
-@dataclass(frozen=True)
-class StorageConfig:
-    data_dir: Path
-    done_dir: Path
+
+class License(Section):
+    file: str
 
 
-@dataclass(frozen=True)
-class WorkerConfig:
+class Storage(Section):
+    done_dir: str
+
+
+class Worker(Section):
     poll_interval_seconds: float
     max_attempts: int
-    stale_claim_seconds: float
 
 
-@dataclass(frozen=True)
-class TranscriptConfig:
+class Transcript(Section):
     language: str
     beam_size: int
     condition_on_previous_text: bool
@@ -68,131 +83,167 @@ class TranscriptConfig:
     speech_pad_ms: int
 
 
-@dataclass(frozen=True)
-class AsrConfig:
+class Asr(Section):
     repo_id: str
-    local_dir: Path
+    local_dir: str
     device: str
     compute_type: str
     unload_after: bool
-    transcript: TranscriptConfig
+    transcript: Transcript
 
 
-@dataclass(frozen=True)
-class OutputConfig:
+class Output(Section):
     list_items: int
     max_new_tokens: int
     timeout_seconds: float
 
 
-@dataclass(frozen=True)
-class LlmConfig:
+class Llm(Section):
     repo_id: str
-    local_dir: Path
+    local_dir: str
     device: str
     torch_dtype: str
     load_in_4bit: bool
+    quant_type: str
     max_input_tokens: int
     temperature: float
     top_p: float
     top_k: int
     unload_after: bool
-    output: OutputConfig
+    output: Output
 
 
-@dataclass(frozen=True)
-class PromptConfig:
+class Fields(Section):
+    summary: str
+    call_type: str
+    scores: str
+    strengths: str
+    weaknesses: str
+    recommendations: str
+
+
+class Prompt(Section):
     label: str
-    system: str
-    user: str
+    system_file: str
+    user_file: str
+    fields: Fields
 
 
-@dataclass(frozen=True)
-class LoggingConfig:
+class Logging(Section):
     level: str
-    dir: Path
     external_logs: bool
     external_level: str
 
+    @field_validator("level", "external_level")
+    @classmethod
+    def _known_level(cls, value: str) -> str:
+        value = value.upper()
+        if value not in LOG_LEVELS:
+            raise ValueError(f"{value} is not one of: {', '.join(LOG_LEVELS)}")
+        return value
 
-@dataclass(frozen=True)
-class Reference:
+
+class Reference(Section):
     code: str
     label: str
     description: str
 
+    @field_validator("code")
+    @classmethod
+    def _usable_as_field(cls, value: str) -> str:
+        if value.startswith("_"):
+            raise ValueError(f"'{value}' cannot start with an underscore")
+        if hasattr(BaseModel, value):
+            raise ValueError(f"'{value}' is a reserved name, pick another code")
+        return value
 
-@dataclass(frozen=True)
-class LicenseConfig:
-    file: Path
+
+class Raw(Section):
+    paths: Paths
+    database: Database
+    license: License
+    storage: Storage
+    worker: Worker
+    criteria: dict[str, str]
+    types: dict[str, str]
+    asr: Asr
+    llm: Llm
+    prompt: Prompt
+    logging: Logging
 
 
-@dataclass(frozen=True)
 class Config:
-    database: DatabaseConfig
-    storage: StorageConfig
-    worker: WorkerConfig
-    asr: AsrConfig
-    llm: LlmConfig
-    prompt: PromptConfig
-    logging: LoggingConfig
-    license: LicenseConfig
-    criteria: list[Reference]
-    call_types: list[Reference]
+    def __init__(self, raw: Raw, path: Path):
+        self.paths = raw.paths
+        self.database = raw.database
+        self.worker = raw.worker
+        self.asr = raw.asr
+        self.llm = raw.llm
+        self.logging = raw.logging
 
+        self.dsn = _read_secret(_inside(raw.paths.secrets_dir, raw.database.dsn_file))
+        self.license_file = _inside(raw.paths.secrets_dir, raw.license.file)
+        self.done_dir = _inside(raw.paths.data_dir, raw.storage.done_dir)
+        self.asr_dir = _inside(raw.paths.models_dir, raw.asr.local_dir)
+        self.llm_dir = _inside(raw.paths.models_dir, raw.llm.local_dir)
+        self.logs_dir = raw.paths.logs_dir / LOG_MODULE_DIR
 
-def _section(raw: dict, name: str, parent: str = "") -> dict:
-    if name not in raw:
-        raise ConfigError(f"missing required section [{parent}{name}]")
-    return raw[name]
+        self.prompt_label = raw.prompt.label
+        self.fields = raw.prompt.fields
+        self.system_prompt = _read_text(_inside(raw.paths.configs_dir, raw.prompt.system_file))
+        self.user_prompt = _read_text(_inside(raw.paths.configs_dir, raw.prompt.user_file))
+        for placeholder in PROMPT_PLACEHOLDERS:
+            if "{" + placeholder + "}" not in self.user_prompt:
+                raise ConfigError(f"user prompt must contain the {{{placeholder}}} placeholder")
 
-
-def _require(section: dict, key: str, where: str):
-    if key not in section:
-        raise ConfigError(f"missing required key '{key}' in [{where}]")
-    return section[key]
-
-
-def _require_level(section: dict, key: str) -> str:
-    value = str(_require(section, key, LOGGING_SECTION)).upper()
-    if value not in LOG_LEVELS:
-        raise ConfigError(
-            f"'{key}' in [{LOGGING_SECTION}] is {value}, expected one of: {', '.join(LOG_LEVELS)}"
+        self.criteria = _read_references(
+            _inside(raw.paths.configs_dir, raw.criteria["file"]), "criterion"
         )
-    return value
+        self.call_types = _read_references(
+            _inside(raw.paths.configs_dir, raw.types["file"]), "type"
+        )
+        self.path = path
 
 
-def resolve_path(base_dir: Path, value: str | Path) -> Path:
-    path = Path(value)
-    return path.resolve() if path.is_absolute() else (base_dir / path).resolve()
+def load_config(path: str | Path) -> Config:
+    path = Path(path)
+    try:
+        raw = Raw(**_read_toml(path))
+    except ValidationError as error:
+        raise ConfigError(f"{path}: {_describe(error)}") from error
+    return Config(raw, path)
 
 
 def storage_path(data_dir: Path, path: Path) -> str:
     return path.resolve().relative_to(data_dir).as_posix()
 
 
-def resolve_anchor(raw: dict, key: str) -> Path:
-    value = Path(_require(raw, key, PATHS_SECTION))
-    if not value.is_absolute():
-        raise ConfigError(
-            f"'{key}' in [{PATHS_SECTION}] must be an absolute path, got {value}: "
-            "anchors are mount points and cannot depend on where the config file sits"
-        )
-    return value.resolve()
+def _describe(error: ValidationError) -> str:
+    return "; ".join(
+        f"[{'.'.join(str(part) for part in item['loc'])}] {item['msg']}"
+        for item in error.errors()
+    )
 
 
-def resolve_inside(anchor: Path, value: str | Path, key: str, where: str) -> Path:
-    path = resolve_path(anchor, value)
-    if not path.is_relative_to(anchor):
-        raise ConfigError(
-            f"'{key}' in [{where}] resolves to {path}, which is outside {anchor}: "
-            "it must stay inside its anchor directory"
-        )
-    return path
+def _read_toml(path: Path) -> dict:
+    if not path.is_file():
+        raise ConfigError(f"config file not found: {path}")
+    try:
+        with path.open("rb") as handle:
+            return tomllib.load(handle)
+    except tomllib.TOMLDecodeError as error:
+        raise ConfigError(f"{path} is not valid TOML: {error}") from error
 
 
-def read_secret_file(path: str | Path) -> str:
-    path = Path(path)
+def _inside(anchor: Path, value: str) -> Path:
+    path = Path(value)
+    resolved = path.resolve() if path.is_absolute() else (anchor / path).resolve()
+    if not resolved.is_relative_to(anchor):
+        raise ConfigError(f"{resolved} is outside {anchor}: it must stay inside its anchor")
+    return resolved
+
+
+def _read_secret(path: Path) -> str:
     if not path.is_file():
         raise ConfigError(f"secret file not found: {path}")
     with path.open("r", encoding="utf-8") as handle:
@@ -202,218 +253,27 @@ def read_secret_file(path: str | Path) -> str:
     return value
 
 
-def _read_text_file(path: str | Path, where: str) -> str:
-    path = Path(path)
+def _read_text(path: Path) -> str:
     if not path.is_file():
-        raise ConfigError(f"file not found: {path} (referenced by [{where}])")
+        raise ConfigError(f"file not found: {path}")
     text = path.read_text(encoding="utf-8").strip()
     if not text:
-        raise ConfigError(f"file is empty: {path} (referenced by [{where}])")
+        raise ConfigError(f"file is empty: {path}")
     return text
 
 
-def _load_asr(raw: dict, models_dir: Path) -> AsrConfig:
-    section = _section(raw, "asr")
-    transcript_raw = _section(section, "transcript", "asr.")
-    where = "asr.transcript"
-    return AsrConfig(
-        repo_id=_require(section, "repo_id", "asr"),
-        local_dir=resolve_inside(
-            models_dir, _require(section, "local_dir", "asr"), "local_dir", "asr"
-        ),
-        device=_require(section, "device", "asr"),
-        compute_type=_require(section, "compute_type", "asr"),
-        unload_after=_require(section, "unload_after", "asr"),
-        transcript=TranscriptConfig(
-            language=_require(transcript_raw, "language", where),
-            beam_size=_require(transcript_raw, "beam_size", where),
-            condition_on_previous_text=_require(
-                transcript_raw, "condition_on_previous_text", where
-            ),
-            hallucination_silence_threshold=_require(
-                transcript_raw, "hallucination_silence_threshold", where
-            ),
-            word_timestamps=_require(transcript_raw, "word_timestamps", where),
-            vad_filter=_require(transcript_raw, "vad_filter", where),
-            min_silence_duration_ms=_require(transcript_raw, "min_silence_duration_ms", where),
-            speech_pad_ms=_require(transcript_raw, "speech_pad_ms", where),
-        ),
-    )
-
-
-def _load_llm(raw: dict, models_dir: Path) -> LlmConfig:
-    section = _section(raw, "llm")
-    output_raw = _section(section, "output", "llm.")
-    return LlmConfig(
-        repo_id=_require(section, "repo_id", "llm"),
-        local_dir=resolve_inside(
-            models_dir, _require(section, "local_dir", "llm"), "local_dir", "llm"
-        ),
-        device=_require(section, "device", "llm"),
-        torch_dtype=_require(section, "torch_dtype", "llm"),
-        load_in_4bit=_require(section, "load_in_4bit", "llm"),
-        max_input_tokens=_require(section, "max_input_tokens", "llm"),
-        temperature=_require(section, "temperature", "llm"),
-        top_p=_require(section, "top_p", "llm"),
-        top_k=_require(section, "top_k", "llm"),
-        unload_after=_require(section, "unload_after", "llm"),
-        output=OutputConfig(
-            list_items=_require(output_raw, "list_items", "llm.output"),
-            max_new_tokens=_require(output_raw, "max_new_tokens", "llm.output"),
-            timeout_seconds=_require(output_raw, "timeout_seconds", "llm.output"),
-        ),
-    )
-
-
-def _load_prompt(raw: dict, configs_dir: Path) -> PromptConfig:
-    section = _section(raw, "prompt")
-    user_path = resolve_inside(
-        configs_dir, _require(section, "user_file", "prompt"), "user_file", "prompt"
-    )
-    user = _read_text_file(user_path, "prompt")
-    for placeholder in PROMPT_PLACEHOLDERS:
-        if "{" + placeholder + "}" not in user:
-            raise ConfigError(
-                f"user prompt {user_path} must contain the {{{placeholder}}} placeholder"
-            )
-    return PromptConfig(
-        label=_require(section, "label", "prompt"),
-        system=_read_text_file(
-            resolve_inside(
-                configs_dir,
-                _require(section, "system_file", "prompt"),
-                "system_file",
-                "prompt",
-            ),
-            "prompt",
-        ),
-        user=user,
-    )
-
-
-def _load_reference(path: str | Path, entry_name: str) -> list[Reference]:
-    path = Path(path)
-    if not path.is_file():
-        raise ConfigError(f"{entry_name} file not found: {path}")
-
-    with path.open("rb") as handle:
-        raw = tomllib.load(handle)
-
+def _read_references(path: Path, entry_name: str) -> list[Reference]:
+    raw = _read_toml(path)
     entries = raw.get(entry_name, [])
     if not entries:
         raise ConfigError(f"at least one [[{entry_name}]] must be defined in {path}")
+    try:
+        references = [Reference(**entry) for entry in entries]
+    except ValidationError as error:
+        raise ConfigError(f"{path}: {_describe(error)}") from error
 
-    references = []
-    seen = set()
-    for entry in entries:
-        values = {
-            field: _require(entry, field, entry_name)
-            for field in (REFERENCE_CODE, REFERENCE_LABEL, REFERENCE_DESCRIPTION)
-        }
-        for field, value in values.items():
-            if not isinstance(value, str) or not value.strip():
-                raise ConfigError(
-                    f"{entry_name} {field} must be a non-empty string in {path}, got {value!r}"
-                )
-        code = values[REFERENCE_CODE]
-        if code in seen:
-            raise ConfigError(f"duplicate {entry_name} code '{code}' in {path}")
-        seen.add(code)
-        references.append(Reference(**values))
+    codes = [entry.code for entry in references]
+    duplicates = {code for code in codes if codes.count(code) > 1}
+    if duplicates:
+        raise ConfigError(f"duplicate {entry_name} codes in {path}: {', '.join(duplicates)}")
     return references
-
-
-def load_config(path: str | Path) -> Config:
-    path = Path(path)
-    if not path.is_file():
-        raise ConfigError(f"config file not found: {path}")
-
-    with path.open("rb") as handle:
-        raw = tomllib.load(handle)
-
-    paths_raw = _section(raw, PATHS_SECTION)
-    data_dir = resolve_anchor(paths_raw, DATA_DIR_KEY)
-    models_dir = resolve_anchor(paths_raw, MODELS_DIR_KEY)
-    secrets_dir = resolve_anchor(paths_raw, SECRETS_DIR_KEY)
-    logs_dir = resolve_anchor(paths_raw, LOGS_DIR_KEY)
-    configs_dir = resolve_anchor(paths_raw, CONFIGS_DIR_KEY)
-
-    database_raw = _section(raw, "database")
-    storage_raw = _section(raw, "storage")
-    worker_raw = _section(raw, "worker")
-    criteria_raw = _section(raw, "criteria")
-    types_raw = _section(raw, "types")
-    logging_raw = _section(raw, "logging")
-    license_raw = _section(raw, LICENSE_SECTION)
-
-    database = DatabaseConfig(
-        dsn=read_secret_file(
-            resolve_inside(
-                secrets_dir, _require(database_raw, "dsn_file", "database"), "dsn_file", "database"
-            )
-        ),
-        connect_timeout=_require(database_raw, "connect_timeout", "database"),
-        max_retries=_require(database_raw, "max_retries", "database"),
-        backoff_base_seconds=_require(database_raw, "backoff_base_seconds", "database"),
-        backoff_max_seconds=_require(database_raw, "backoff_max_seconds", "database"),
-    )
-
-    if database.max_retries < 1:
-        raise ConfigError(
-            f"'max_retries' in [database] is {database.max_retries}, "
-            "it must be at least 1: every query needs one attempt"
-        )
-    if database.connect_timeout <= 0:
-        raise ConfigError(
-            f"'connect_timeout' in [database] is {database.connect_timeout}, it must be positive"
-        )
-
-    storage = StorageConfig(
-        data_dir=data_dir,
-        done_dir=resolve_inside(
-            data_dir, _require(storage_raw, "done_dir", "storage"), "done_dir", "storage"
-        ),
-    )
-
-    worker = WorkerConfig(
-        poll_interval_seconds=_require(worker_raw, "poll_interval_seconds", "worker"),
-        max_attempts=_require(worker_raw, "max_attempts", "worker"),
-        stale_claim_seconds=_require(worker_raw, "stale_claim_seconds", "worker"),
-    )
-
-    logging_config = LoggingConfig(
-        level=_require_level(logging_raw, "level"),
-        dir=logs_dir / LOG_MODULE_DIR,
-        external_logs=_require(logging_raw, "external_logs", "logging"),
-        external_level=_require_level(logging_raw, "external_level"),
-    )
-
-    license_config = LicenseConfig(
-        file=resolve_inside(
-            secrets_dir,
-            _require(license_raw, LICENSE_FILE_KEY, LICENSE_SECTION),
-            LICENSE_FILE_KEY,
-            LICENSE_SECTION,
-        )
-    )
-
-    return Config(
-        database=database,
-        storage=storage,
-        worker=worker,
-        asr=_load_asr(raw, models_dir),
-        llm=_load_llm(raw, models_dir),
-        prompt=_load_prompt(raw, configs_dir),
-        logging=logging_config,
-        license=license_config,
-        criteria=_load_reference(
-            resolve_inside(
-                configs_dir, _require(criteria_raw, "file", "criteria"), "file", "criteria"
-            ),
-            "criterion",
-        ),
-        call_types=_load_reference(
-            resolve_inside(configs_dir, _require(types_raw, "file", "types"), "file", "types"),
-            "type",
-        ),
-    )
