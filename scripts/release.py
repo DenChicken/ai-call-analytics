@@ -69,8 +69,10 @@ BUNDLE_FILES = (
 EXAMPLES_DIR_NAME = "examples"
 PLATFORM_DIR_NAME = "platform"
 SHELL_SUFFIX = ".sh"
+IMAGE_SUFFIX = ".tar"
 EXECUTABLE_MODE = 0o755
 REGULAR_MODE = 0o644
+ARCHIVE_CHUNK = BYTES_IN_MIB
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -298,10 +300,13 @@ def make_archive(stage_dir: Path, output_dir: Path, name: str) -> Path:
                 continue
             name = path.relative_to(stage_dir).as_posix()
             info = zipfile.ZipInfo.from_file(path, name)
-            info.compress_type = zipfile.ZIP_DEFLATED
+            info.compress_type = (
+                zipfile.ZIP_STORED if path.suffix == IMAGE_SUFFIX else zipfile.ZIP_DEFLATED
+            )
             mode = EXECUTABLE_MODE if path.suffix == SHELL_SUFFIX else REGULAR_MODE
             info.external_attr = mode << 16
-            bundle.writestr(info, path.read_bytes())
+            with path.open("rb") as source, bundle.open(info, "w") as target:
+                shutil.copyfileobj(source, target, ARCHIVE_CHUNK)
     size = archive.stat().st_size
     print(
         f"[archive] {archive.name}, {size / BYTES_IN_MIB:.1f} MiB "
