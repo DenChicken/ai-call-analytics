@@ -63,9 +63,14 @@ BUNDLE_FILES = (
     (SCRIPTS_DIR_NAME, "requirements.txt", SCRIPTS_DIR_NAME),
     (SCRIPTS_DIR_NAME, "deploy.py", ""),
     (DOCKER_DIR_NAME, "compose.yaml", ""),
+    (DOCKER_DIR_NAME, "compose.gpu.yaml", ""),
     (DOCKER_DIR_NAME, "deploy.toml", ""),
 )
 EXAMPLES_DIR_NAME = "examples"
+PLATFORM_DIR_NAME = "platform"
+SHELL_SUFFIX = ".sh"
+EXECUTABLE_MODE = 0o755
+REGULAR_MODE = 0o644
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -189,11 +194,34 @@ def collect_files(stage_dir: Path) -> None:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
 
+    platform = _collect_platform(stage_dir)
     collected = _collect_configs(stage_dir)
     print(
-        f"[collect] {len(BUNDLE_FILES)} files and {collected} config examples",
+        f"[collect] {len(BUNDLE_FILES)} files, {platform} platform scripts "
+        f"and {collected} config examples",
         flush=True,
     )
+
+
+def _collect_platform(stage_dir: Path) -> int:
+    source_root = ROOT / SCRIPTS_DIR_NAME / PLATFORM_DIR_NAME
+    if not source_root.is_dir():
+        raise ReleaseError(f"platform scripts not found: {source_root}")
+
+    collected = 0
+    for script in sorted(source_root.rglob("*")):
+        if not script.is_file():
+            continue
+        target = (
+            stage_dir / SCRIPTS_DIR_NAME / PLATFORM_DIR_NAME / script.relative_to(source_root)
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(script, target)
+        collected += 1
+
+    if not collected:
+        raise ReleaseError(f"no platform scripts found in {source_root}")
+    return collected
 
 
 def _collect_configs(stage_dir: Path) -> int:
@@ -266,8 +294,14 @@ def make_archive(stage_dir: Path, output_dir: Path, name: str) -> Path:
     started = time.monotonic()
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
         for path in sorted(stage_dir.rglob("*")):
-            if path.is_file():
-                bundle.write(path, path.relative_to(stage_dir).as_posix())
+            if not path.is_file():
+                continue
+            name = path.relative_to(stage_dir).as_posix()
+            info = zipfile.ZipInfo.from_file(path, name)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            mode = EXECUTABLE_MODE if path.suffix == SHELL_SUFFIX else REGULAR_MODE
+            info.external_attr = mode << 16
+            bundle.writestr(info, path.read_bytes())
     size = archive.stat().st_size
     print(
         f"[archive] {archive.name}, {size / BYTES_IN_MIB:.1f} MiB "

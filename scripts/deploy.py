@@ -13,6 +13,7 @@ SELF_NAME = Path(__file__).name
 DEPLOY_CONFIG_NAME = "deploy.toml"
 ENV_NAME = ".env"
 COMPOSE_NAME = "compose.yaml"
+COMPOSE_GPU_NAME = "compose.gpu.yaml"
 MANIFEST_NAME = "manifest.json"
 IMAGES_DIR_NAME = "images"
 EXAMPLES_DIR_NAME = "examples"
@@ -36,13 +37,16 @@ DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
 MODEL_SECTIONS = ("asr", "llm")
 REPO_ID_KEY = "repo_id"
+DEVICE_KEY = "device"
+DEVICE_CUDA = "cuda"
 TOKEN_FILE_NAME = "hf_token"
 
 DOCKER = "docker"
 ROOT_USER = "0:0"
 LOG_TAIL_LINES = "100"
 LOAD_ARGS = ("load", "-i")
-COMPOSE_ARGS = ("compose", "-f")
+COMPOSE_COMMAND = "compose"
+COMPOSE_FILE_FLAG = "-f"
 
 DB_SCRIPT = "db.py"
 DB_INIT_COMMAND = "init"
@@ -51,6 +55,10 @@ USER_SCRIPT = "user.py"
 USER_ADD_COMMAND = "add"
 DEFAULT_LOGIN = "admin"
 FETCH_MODELS_SCRIPT = "fetch_models.py"
+PLATFORM_DIR_NAME = "platform"
+PLATFORM_UBUNTU = "ubuntu"
+NVIDIA_DRIVER_SCRIPT = "install_nvidia_driver.sh"
+NVIDIA_TOOLKIT_SCRIPT = "install_nvidia_docker_tools.sh"
 MODELS_DIR_FLAG = "-d"
 TOKEN_FILE_FLAG = "-t"
 
@@ -92,6 +100,17 @@ def database_access_steps(subnet: str) -> tuple[str, ...]:
     )
 
 
+def gpu_access_steps() -> tuple[str, ...]:
+    return (
+        "the host needs the nvidia driver and the container toolkit:",
+        f"  {platform_script(NVIDIA_DRIVER_SCRIPT)}",
+        "  sudo reboot",
+        f"  {platform_script(NVIDIA_TOOLKIT_SCRIPT)}",
+        "",
+        "the toolkit script ends with a check that the card reaches a container",
+    )
+
+
 class DeployError(Exception):
     pass
 
@@ -106,6 +125,10 @@ def python_command() -> str:
 
 def self_command(command: str) -> str:
     return f"{python_command()} {SELF_NAME} {command}"
+
+
+def platform_script(name: str) -> str:
+    return f"{SCRIPTS_DIR_NAME}/{PLATFORM_DIR_NAME}/{PLATFORM_UBUNTU}/{name}"
 
 
 def script_command(script: str, *args: str) -> str:
@@ -168,6 +191,13 @@ def dsn_path(paths: dict[str, Path]) -> Path:
     if not dsn_file:
         raise DeployError(f"missing '{DSN_FILE_KEY}' in [{DATABASE_SECTION}] of the pipeline config")
     return paths["secrets"] / dsn_file
+
+
+def wants_gpu(paths: dict[str, Path]) -> bool:
+    config = module_config(paths, MODULE_PIPELINE)
+    return any(
+        config.get(section, {}).get(DEVICE_KEY) == DEVICE_CUDA for section in MODEL_SECTIONS
+    )
 
 
 def model_repos(paths: dict[str, Path]) -> list[str]:
@@ -258,6 +288,10 @@ def _print_manual_steps(paths: dict[str, Path], subnet: str) -> None:
     for line in database_access_steps(subnet):
         print(f"     {line}" if line else "")
 
+    print(f"\n  5. gpu, only if the pipeline config asks for {DEVICE_CUDA}")
+    for line in gpu_access_steps():
+        print(f"     {line}" if line else "")
+
     print(f"\nthen:  {self_command(COMMAND_UP)}")
 
 
@@ -312,10 +346,11 @@ def read_version() -> str:
     return version
 
 
-def run_compose(command: str, modules: list[str]) -> None:
-    run_docker(
-        [*COMPOSE_ARGS, str(ROOT / COMPOSE_NAME), *COMPOSE_COMMANDS[command], *modules]
-    )
+def run_compose(command: str, modules: list[str], gpu: bool) -> None:
+    files = [COMPOSE_FILE_FLAG, str(ROOT / COMPOSE_NAME)]
+    if gpu:
+        files += [COMPOSE_FILE_FLAG, str(ROOT / COMPOSE_GPU_NAME)]
+    run_docker([COMPOSE_COMMAND, *files, *COMPOSE_COMMANDS[command], *modules])
 
 
 def command_compose(command: str, modules: list[str]) -> int:
@@ -328,7 +363,7 @@ def command_compose(command: str, modules: list[str]) -> int:
         apply_schema(paths, subnet)
 
     write_env(paths, port, subnet, read_version())
-    run_compose(command, modules)
+    run_compose(command, modules, wants_gpu(paths))
 
     if starting and (not modules or MODULE_WEBUI in modules):
         _print_running(paths, port)
