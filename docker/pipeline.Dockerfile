@@ -44,7 +44,7 @@ RUN /out/pipeline --help > /dev/null
 FROM base
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc libc6-dev \
+        gcc libc6-dev python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 ENV HF_HUB_OFFLINE=1
