@@ -9,7 +9,7 @@ from faster_whisper import WhisperModel
 from src.config import Asr as AsrConfig
 from src.constants import MILLISECONDS_PER_SECOND, SUSPICIOUS_COMPRESSION_RATIO
 from src.errors import FatalError, is_device_failure
-from src.transcript import Segment
+from src.models import Segment
 
 logger = logging.getLogger(__name__)
 

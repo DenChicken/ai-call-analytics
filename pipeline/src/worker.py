@@ -24,7 +24,7 @@ from src.constants import (
 from src.db import Database, Task
 from src.errors import CallError, FatalError, error_code
 from src.llm import Llm
-from src.transcript import render_plain
+from src.models import render_plain
 
 logger = logging.getLogger(__name__)
 

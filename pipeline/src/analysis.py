@@ -1,5 +1,4 @@
 import logging
-from dataclasses import dataclass
 
 from pydantic import ValidationError
 
@@ -14,19 +13,10 @@ from src.constants import (
 )
 from src.errors import CallError
 from src.llm import Llm
+from src.models import Analysis
 from src.schema import build_analysis_model
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass(frozen=True)
-class Analysis:
-    call_type: str
-    summary: str
-    strengths: list[str]
-    weaknesses: list[str]
-    recommendations: list[str]
-    scores: dict[str, int]
 
 
 def analyze(

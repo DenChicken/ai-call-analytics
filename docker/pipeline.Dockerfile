@@ -41,7 +41,9 @@ RUN cd pipeline && PYTHONPATH=/build python3 -m nuitka \
         --product-name=pipeline \
         main.py
 
-RUN /out/pipeline --help > /dev/null
+RUN mkdir -p /stubs \
+    && echo "" | gcc -x c - -shared -o /stubs/libcuda.so.1 \
+    && LD_LIBRARY_PATH=/stubs /out/pipeline --help > /dev/null
 
 
 FROM base

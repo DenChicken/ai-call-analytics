@@ -6,7 +6,6 @@ import psycopg
 from psycopg.rows import dict_row
 
 from src import shutdown
-from src.analysis import Analysis
 from src.config import Config, Reference
 from src.constants import (
     MILLISECONDS_PER_SECOND,
@@ -16,7 +15,7 @@ from src.constants import (
     STATUS_TRANSCRIBED,
 )
 from src.errors import FatalError
-from src.transcript import Segment
+from src.models import Analysis, Segment
 
 SEGMENTS_KEY = "segments"
 
