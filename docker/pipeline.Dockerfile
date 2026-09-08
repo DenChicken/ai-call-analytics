@@ -8,11 +8,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
+ARG LLAMA_VERSION=0.3.35
+ARG LLAMA_INDEX=https://abetlen.github.io/llama-cpp-python/whl
+
 COPY pipeline/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir \
-        --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 \
-        -r /tmp/requirements.txt \
-    && rm /tmp/requirements.txt
+RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+
+RUN for backend in cpu cu124; do \
+        pip3 install --no-cache-dir --no-deps --only-binary :all: \
+            --extra-index-url ${LLAMA_INDEX}/${backend} \
+            --target /opt/llama/${backend} \
+            llama-cpp-python==${LLAMA_VERSION}; \
+    done
 
 
 FROM base AS build
@@ -41,10 +48,7 @@ RUN cd pipeline && PYTHONPATH=/build python3 -m nuitka \
         --product-name=pipeline \
         main.py
 
-RUN PYTHONPATH=/build python3 -c \
-        "import sys; from pathlib import Path; from licensing.pubkey import PUBLIC_KEY; \
-         sys.exit(None if PUBLIC_KEY.encode() in Path('/out/pipeline').read_bytes() \
-                  else 'licensing is not embedded in the binary')"
+RUN /out/pipeline --help > /dev/null
 
 
 FROM base

@@ -1,12 +1,14 @@
 import json
 import logging
+import sys
 import time
 from pathlib import Path
 
-from llama_cpp import Llama
-
 from src.config import Llm as LlmConfig
 from src.constants import (
+    BACKENDS_DIR,
+    BACKEND_CPU,
+    BACKEND_GPU,
     CONTEXT_OVERFLOW_MARKER,
     ERROR_LLM_INVALID_OUTPUT,
     ERROR_LLM_PROMPT_TOO_LONG,
@@ -22,15 +24,29 @@ from src.errors import CallError, FatalError, is_device_failure
 logger = logging.getLogger(__name__)
 
 
+def _load_backend(gpu_layers: int):
+    backend = BACKEND_CPU if gpu_layers == 0 else BACKEND_GPU
+    directory = Path(BACKENDS_DIR) / backend
+    if directory.is_dir() and str(directory) not in sys.path:
+        sys.path.insert(0, str(directory))
+    logger.info("using the %s build of llama.cpp", backend)
+    try:
+        from llama_cpp import Llama
+    except Exception as error:
+        raise FatalError(f"the {backend} build of llama.cpp is not usable: {error}") from error
+    return Llama
+
+
 class Llm:
     def __init__(self, config: LlmConfig, model_path: Path):
         if not model_path.is_file():
             raise FatalError(f"llm not found: {model_path}, run scripts/fetch_models.py")
         self._config = config
         self._model_path = model_path
+        self._llama = _load_backend(config.gpu_layers)
         self._model = None
 
-    def _load(self) -> Llama:
+    def _load(self):
         if self._model is None:
             config = self._config
             logger.info(
@@ -42,7 +58,7 @@ class Llm:
             cache_type = KV_CACHE_TYPES[config.kv_cache_type]
             started = time.monotonic()
             try:
-                self._model = Llama(
+                self._model = self._llama(
                     model_path=str(self._model_path),
                     n_gpu_layers=config.gpu_layers,
                     n_ctx=config.context_tokens,
@@ -135,7 +151,7 @@ class Llm:
             ) from error
 
 
-def _log_applied(model: Llama, config: LlmConfig, cache_type: int) -> None:
+def _log_applied(model, config: LlmConfig, cache_type: int) -> None:
     params = model.context_params
     logger.info(
         "llm ready: context %s tokens, batch %s, %s threads",

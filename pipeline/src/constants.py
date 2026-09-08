@@ -47,6 +47,10 @@ KV_CACHE_TYPES = {
 
 GPU_LAYERS_PRESETS = {"none": 0, "all": -1}
 
+BACKENDS_DIR = "/opt/llama"
+BACKEND_CPU = "cpu"
+BACKEND_GPU = "cu124"
+
 CONTEXT_OVERFLOW_MARKER = "exceed context window"
 
 ERROR_AUDIO_MISSING = "audio_missing"

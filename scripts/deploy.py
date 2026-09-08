@@ -205,7 +205,10 @@ def wants_gpu(paths: dict[str, Path]) -> bool:
     llm = config.get(LLM_SECTION, {})
     if GPU_LAYERS_KEY not in llm:
         raise DeployError(f"missing '{GPU_LAYERS_KEY}' in [{LLM_SECTION}] of the pipeline config")
-    return str(llm[GPU_LAYERS_KEY]) not in (GPU_LAYERS_NONE, "0")
+    layers = str(llm[GPU_LAYERS_KEY])
+    if layers == GPU_LAYERS_NONE:
+        return False
+    return not (layers.isdigit() and int(layers) == 0)
 
 
 def model_repos(paths: dict[str, Path]) -> list[str]:
