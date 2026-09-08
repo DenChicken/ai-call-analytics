@@ -51,6 +51,10 @@ BACKENDS_DIR = "/opt/llama"
 BACKEND_CPU = "cpu"
 BACKEND_GPU = "cu124"
 
+ARCHITECTURE_KEY = "general.architecture"
+BLOCK_COUNT_KEY = "{architecture}.block_count"
+UNKNOWN_LAYERS = "an unknown number of"
+
 CONTEXT_OVERFLOW_MARKER = "exceed context window"
 
 ERROR_AUDIO_MISSING = "audio_missing"

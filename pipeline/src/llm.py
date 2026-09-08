@@ -6,9 +6,11 @@ from pathlib import Path
 
 from src.config import Llm as LlmConfig
 from src.constants import (
+    ARCHITECTURE_KEY,
     BACKENDS_DIR,
     BACKEND_CPU,
     BACKEND_GPU,
+    BLOCK_COUNT_KEY,
     CONTEXT_OVERFLOW_MARKER,
     ERROR_LLM_INVALID_OUTPUT,
     ERROR_LLM_PROMPT_TOO_LONG,
@@ -18,6 +20,7 @@ from src.constants import (
     KV_CACHE_TYPES,
     ROLE_SYSTEM,
     ROLE_USER,
+    UNKNOWN_LAYERS,
 )
 from src.errors import CallError, FatalError, is_device_failure
 
@@ -151,10 +154,17 @@ class Llm:
             ) from error
 
 
+def _layer_count(model) -> str:
+    metadata = model.metadata
+    architecture = metadata.get(ARCHITECTURE_KEY)
+    return metadata.get(BLOCK_COUNT_KEY.format(architecture=architecture), UNKNOWN_LAYERS)
+
+
 def _log_applied(model, config: LlmConfig, cache_type: int) -> None:
     params = model.context_params
     logger.info(
-        "llm ready: context %s tokens, batch %s, %s threads",
+        "llm ready: %s layers total, context %s tokens, batch %s, %s threads",
+        _layer_count(model),
         model.n_ctx(),
         params.n_batch,
         params.n_threads,
