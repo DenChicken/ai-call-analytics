@@ -29,10 +29,10 @@ file = "criteria.toml"
 file = "types.toml"
 
 [asr]
-repo_id = "Systran/faster-whisper-small"
-local_dir = "faster-whisper-small"
+repo_id = "deepdml/faster-whisper-large-v3-turbo-ct2"
+local_dir = "faster-whisper-large-v3-turbo-ct2"
 device = "cpu"
-compute_type = "float32"
+compute_type = "int8"
 unload_after = false
 
 [asr.transcript]
