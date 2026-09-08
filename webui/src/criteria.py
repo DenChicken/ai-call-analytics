@@ -38,7 +38,7 @@ def deltas(database, window: dict, previous: dict) -> list[CriterionDelta]:
                 delta=formatting.delta_label(points),
             )
         )
-    return sorted(entries, key=lambda entry: entry.points)
+    return sorted(entries, key=lambda entry: entry.after, reverse=True)
 
 
 def chart_points(entries: list[CriterionDelta]) -> list[dict]:
