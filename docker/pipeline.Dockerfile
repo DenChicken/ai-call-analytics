@@ -41,9 +41,10 @@ RUN cd pipeline && PYTHONPATH=/build python3 -m nuitka \
         --product-name=pipeline \
         main.py
 
-RUN mkdir -p /stubs \
-    && echo "" | gcc -x c - -shared -o /stubs/libcuda.so.1 \
-    && LD_LIBRARY_PATH=/stubs /out/pipeline --help > /dev/null
+RUN PYTHONPATH=/build python3 -c \
+        "import sys; from pathlib import Path; from licensing.pubkey import PUBLIC_KEY; \
+         sys.exit(None if PUBLIC_KEY.encode() in Path('/out/pipeline').read_bytes() \
+                  else 'licensing is not embedded in the binary')"
 
 
 FROM base
