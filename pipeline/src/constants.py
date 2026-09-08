@@ -49,7 +49,7 @@ GPU_LAYERS_PRESETS = {"none": 0, "all": -1}
 
 BACKENDS_DIR = "/opt/llama"
 BACKEND_CPU = "cpu"
-BACKEND_GPU = "cu124"
+BACKEND_GPU = "cuda"
 
 ARCHITECTURE_KEY = "general.architecture"
 BLOCK_COUNT_KEY = "{architecture}.block_count"

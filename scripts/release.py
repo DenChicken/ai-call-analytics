@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tomllib
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +35,18 @@ IMAGE_TEMPLATE = "{product}/{module}:{version}"
 IMAGE_ARCHIVE_TEMPLATE = "{module}.tar"
 STAMP_SUFFIX = ".id"
 BUILD_ARGS = ("build", "-f")
+BUILD_ARG_FLAG = "--build-arg"
 TAG_FLAG = "-t"
+
+BUILD_CONFIG_NAME = "build.toml"
+LLAMA_SECTION = "llama"
+LLAMA_CUDA_SECTION = "cuda"
+BUILD_ARG_NAMES = {
+    "LLAMA_VERSION": ("version",),
+    "LLAMA_CPU_INDEX": ("cpu_index",),
+    "LLAMA_CUDA_ARCHITECTURES": (LLAMA_CUDA_SECTION, "architectures"),
+    "LLAMA_CUDA_CMAKE_ARGS": (LLAMA_CUDA_SECTION, "cmake_args"),
+}
 SAVE_ARGS = ("save", "-o")
 INSPECT_ARGS = ("image", "inspect", "--format", "{{.Id}}")
 DANGLING_ARGS = ("images", "-f", "dangling=true", "-q")
@@ -105,16 +117,42 @@ def _commit_label() -> str:
     return commit[:COMMIT_LENGTH]
 
 
-def build_image(module: str, version: str) -> str:
+def read_build_config() -> dict[str, str]:
+    path = ROOT / DOCKER_DIR_NAME / BUILD_CONFIG_NAME
+    if not path.is_file():
+        raise ReleaseError(f"build config not found: {path}")
+
+    with path.open("rb") as handle:
+        raw = tomllib.load(handle).get(LLAMA_SECTION, {})
+
+    arguments = {}
+    for name, keys in BUILD_ARG_NAMES.items():
+        value = raw
+        for key in keys:
+            value = value.get(key, {}) if isinstance(value, dict) else {}
+        if not isinstance(value, str) or not value:
+            location = ".".join((LLAMA_SECTION, *keys))
+            raise ReleaseError(f"missing or empty '{location}' in {BUILD_CONFIG_NAME}")
+        arguments[name] = value
+    return arguments
+
+
+def build_image(module: str, version: str, build_args: dict[str, str]) -> str:
     dockerfile = ROOT / DOCKER_DIR_NAME / DOCKERFILE_TEMPLATE.format(module=module)
     if not dockerfile.is_file():
         raise ReleaseError(f"dockerfile not found: {dockerfile}")
+
+    arguments = []
+    if module == MODULE_PIPELINE:
+        for name, value in build_args.items():
+            arguments += [BUILD_ARG_FLAG, f"{name}={value}"]
 
     tag = IMAGE_TEMPLATE.format(product=COMPANY_NAME, module=module, version=version)
     started = time.monotonic()
     print(f"[{module}] building {tag}", flush=True)
     result = subprocess.run(
-        [DOCKER_COMMAND, *BUILD_ARGS, str(dockerfile), TAG_FLAG, tag, str(ROOT)], check=False
+        [DOCKER_COMMAND, *BUILD_ARGS, str(dockerfile), *arguments, TAG_FLAG, tag, str(ROOT)],
+        check=False,
     )
     if result.returncode != 0:
         raise ReleaseError(f"docker build failed for {module} with exit code {result.returncode}")
@@ -163,10 +201,12 @@ def save_image(module: str, tag: str, images_dir: Path) -> None:
     )
 
 
-def build_modules(modules: tuple[str, ...], images_dir: Path, version: str) -> None:
+def build_modules(
+    modules: tuple[str, ...], images_dir: Path, version: str, build_args: dict[str, str]
+) -> None:
     images_dir.mkdir(parents=True, exist_ok=True)
     for module in modules:
-        save_image(module, build_image(module, version), images_dir)
+        save_image(module, build_image(module, version, build_args), images_dir)
 
 
 def collect_images(images_dir: Path, stage_dir: Path) -> None:
@@ -253,7 +293,9 @@ def _checksum(path: Path) -> str:
     return digest.hexdigest()
 
 
-def write_manifest(stage_dir: Path, version: str, commit: str, built_at: datetime) -> None:
+def write_manifest(
+    stage_dir: Path, version: str, commit: str, built_at: datetime, build_args: dict[str, str]
+) -> None:
     entries = {}
     for path in sorted(stage_dir.rglob("*")):
         if path.is_file():
@@ -264,6 +306,7 @@ def write_manifest(stage_dir: Path, version: str, commit: str, built_at: datetim
         "version": version,
         "commit": commit,
         "built_at": built_at.isoformat(),
+        "build": build_args,
         "files": entries,
     }
     (stage_dir / MANIFEST_NAME).write_text(
@@ -365,11 +408,12 @@ def main() -> int:
     )
 
     try:
-        build_modules(modules, images_dir, args.version)
+        build_args = read_build_config()
+        build_modules(modules, images_dir, args.version, build_args)
         collect_images(images_dir, stage_dir)
         collect_files(stage_dir)
         verify_no_private_content(stage_dir)
-        write_manifest(stage_dir, args.version, commit, built_at)
+        write_manifest(stage_dir, args.version, commit, built_at, build_args)
         archive = make_archive(stage_dir, args.output, name)
     except ReleaseError as error:
         print(f"release error: {error}", file=sys.stderr)

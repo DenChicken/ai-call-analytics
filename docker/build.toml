@@ -1,0 +1,18 @@
+# How the llm engine is built into the pipeline image.
+# The cpu build comes as a prebuilt wheel, the gpu build is compiled from source:
+# prebuilt cuda wheels expect tensor cores and crash on cards without them.
+
+[llama]
+version = "0.3.35"
+cpu_index = "https://abetlen.github.io/llama-cpp-python/whl/cpu"
+
+# Architectures the cuda kernels are compiled for. Virtual ones keep PTX in the wheel
+# and the driver compiles it for its own card on first run, so the list covers more
+# cards than it names: 61 is Pascal, 75 is Turing, 80 is Ampere and newer.
+# More architectures mean a longer build.
+#
+# GGML_CUDA_FORCE_MMQ is what llama.cpp itself suggests for cards without tensor cores,
+# the whole GTX 16xx line among them. Without it they die with an illegal instruction.
+[llama.cuda]
+architectures = "61-virtual;75;80-virtual"
+cmake_args = "-DGGML_CUDA=on -DGGML_CUDA_FORCE_MMQ=on"
