@@ -79,6 +79,7 @@ BUNDLE_FILES = (
     (DOCKER_DIR_NAME, "deploy.toml", ""),
 )
 EXAMPLES_DIR_NAME = "examples"
+DOCS_DIR_NAME = "docs"
 PLATFORM_DIR_NAME = "platform"
 SHELL_SUFFIX = ".sh"
 IMAGE_SUFFIX = ".tar"
@@ -238,9 +239,10 @@ def collect_files(stage_dir: Path) -> None:
 
     platform = _collect_platform(stage_dir)
     collected = _collect_configs(stage_dir)
+    docs = _collect_docs(stage_dir)
     print(
-        f"[collect] {len(BUNDLE_FILES)} files, {platform} platform scripts "
-        f"and {collected} config examples",
+        f"[collect] {len(BUNDLE_FILES)} files, {platform} platform scripts, "
+        f"{collected} config examples and {docs} documentation pages",
         flush=True,
     )
 
@@ -282,6 +284,25 @@ def _collect_configs(stage_dir: Path) -> int:
 
     if not collected:
         raise ReleaseError(f"no config examples found in {source_root}")
+    return collected
+
+
+def _collect_docs(stage_dir: Path) -> int:
+    source_root = ROOT / DOCS_DIR_NAME
+    if not source_root.is_dir():
+        raise ReleaseError(f"documentation not found: {source_root}")
+
+    collected = 0
+    for page in sorted(source_root.rglob("*")):
+        if not page.is_file():
+            continue
+        target = stage_dir / DOCS_DIR_NAME / page.relative_to(source_root)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(page, target)
+        collected += 1
+
+    if not collected:
+        raise ReleaseError(f"no documentation found in {source_root}")
     return collected
 
 
