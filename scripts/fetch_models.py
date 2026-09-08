@@ -2,10 +2,11 @@ import argparse
 import sys
 from pathlib import Path
 
-from huggingface_hub import HfApi, snapshot_download
+from huggingface_hub import HfApi, hf_hub_download, snapshot_download
 from huggingface_hub.errors import GatedRepoError
 
 REPO_SEPARATOR = "/"
+FILE_SEPARATOR = ":"
 OK = "ok"
 FAILED = "FAILED"
 
@@ -26,15 +27,20 @@ def read_token(path: Path | None) -> str | None:
     return token
 
 
+def split_target(target: str) -> tuple[str, str | None]:
+    repo_id, separator, file_name = target.partition(FILE_SEPARATOR)
+    return repo_id, file_name if separator else None
+
+
 def target_dir(models_dir: Path, repo_id: str) -> Path:
     return models_dir / repo_id.rsplit(REPO_SEPARATOR, 1)[-1]
 
 
-def check_access(repos: list[str], token: str | None) -> int:
+def check_access(targets: list[str], token: str | None) -> int:
     api = HfApi()
     unreachable = []
 
-    for repo_id in repos:
+    for repo_id in dict.fromkeys(split_target(target)[0] for target in targets):
         try:
             api.auth_check(repo_id, token=token)
             print(f"{repo_id}: {OK}")
@@ -50,14 +56,26 @@ def check_access(repos: list[str], token: str | None) -> int:
             print(f"  https://huggingface.co/{repo_id}", file=sys.stderr)
         return 1
 
-    print(f"\nall {len(repos)} repositories are reachable")
+    print(f"\nall {len(targets)} repositories are reachable")
     return 0
 
 
-def download(repo_id: str, local_dir: Path, token: str | None) -> None:
-    print(f"{repo_id} -> {local_dir}", flush=True)
-    local_dir.mkdir(parents=True, exist_ok=True)
+def download(target: str, models_dir: Path, token: str | None) -> None:
+    repo_id, file_name = split_target(target)
     try:
+        if file_name:
+            print(f"{repo_id} [{file_name}] -> {models_dir}", flush=True)
+            models_dir.mkdir(parents=True, exist_ok=True)
+            hf_hub_download(
+                repo_id=repo_id,
+                filename=file_name,
+                local_dir=str(models_dir),
+                token=token,
+            )
+            return
+        local_dir = target_dir(models_dir, repo_id)
+        print(f"{repo_id} -> {local_dir}", flush=True)
+        local_dir.mkdir(parents=True, exist_ok=True)
         snapshot_download(repo_id=repo_id, local_dir=str(local_dir), token=token)
     except GatedRepoError as error:
         raise ScriptError(f"{repo_id} is gated, run with --check for details") from error
@@ -71,7 +89,10 @@ def parse_args() -> argparse.Namespace:
         "repos",
         nargs="+",
         metavar="REPO",
-        help="repository ids, like Qwen/Qwen3-4B-Instruct-2507",
+        help=(
+            "repository ids, like Qwen/Qwen3-4B-Instruct-2507; "
+            "append ':filename' to fetch a single file instead of the whole repository"
+        ),
     )
     parser.add_argument(
         "-d",
@@ -96,7 +117,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
-    repos = list(dict.fromkeys(args.repos))
+    targets = list(dict.fromkeys(args.repos))
 
     try:
         token = read_token(args.token_file)
@@ -105,26 +126,26 @@ def main() -> int:
         return 1
 
     if args.check:
-        return check_access(repos, token)
+        return check_access(targets, token)
 
     failures = {}
-    for repo_id in repos:
+    for target in targets:
         try:
-            download(repo_id, target_dir(args.models_dir, repo_id), token)
+            download(target, args.models_dir, token)
         except Exception as error:
-            failures[repo_id] = error
+            failures[target] = error
 
     print()
-    for repo_id in repos:
-        error = failures.get(repo_id)
-        print(f"{repo_id}: {f'{FAILED}: {error}' if error else OK}")
+    for target in targets:
+        error = failures.get(target)
+        print(f"{target}: {f'{FAILED}: {error}' if error else OK}")
 
     if failures:
-        print(f"\n{len(failures)} of {len(repos)} models failed", file=sys.stderr)
+        print(f"\n{len(failures)} of {len(targets)} models failed", file=sys.stderr)
         print("run with --check to see which repositories the token cannot reach", file=sys.stderr)
         return 1
 
-    print(f"\ndownloaded {len(repos)} models into {args.models_dir}")
+    print(f"\ndownloaded {len(targets)} models into {args.models_dir}")
     return 0
 
 

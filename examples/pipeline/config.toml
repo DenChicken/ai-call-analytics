@@ -46,23 +46,28 @@ min_silence_duration_ms = 300
 speech_pad_ms = 400
 
 [llm]
-repo_id = "Qwen/Qwen3-0.6B"
-local_dir = "Qwen3-0.6B"
-device = "cpu"
-torch_dtype = "float32"
-attn_implementation = "sdpa"
-load_in_4bit = false
-quant_type = "nf4"
-max_input_tokens = 8000
-temperature = 0.7
+repo_id = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
+model_file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+gpu_layers = "none"
+context_tokens = 8192
+batch_tokens = 256
+threads = 8
+flash_attention = true
+kv_cache_type = "int8"
+offload_kv_cache = true
+unload_after = false
+
+[llm.sampling]
+temperature = 0
 top_p = 0.8
 top_k = 20
-unload_after = false
+min_p = 0.0
+repeat_penalty = 1.05
+seed = 0
 
 [llm.output]
 list_items = 3
-max_new_tokens = 2048
-timeout_seconds = 300
+max_tokens = 1024
 
 [prompt]
 label = "v3"

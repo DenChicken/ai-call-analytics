@@ -1,8 +1,4 @@
-import torch
-
 from src.constants import DEVICE_FAILURE_MARKERS, ERROR_UNKNOWN
-
-DEVICE_ERRORS = (torch.OutOfMemoryError, MemoryError, torch.AcceleratorError)
 
 
 class CallError(Exception):
@@ -16,10 +12,10 @@ class FatalError(Exception):
 
 
 def is_device_failure(error: BaseException) -> bool:
-    if isinstance(error, DEVICE_ERRORS):
-        return True
-    if type(error) is not RuntimeError:
+    if isinstance(error, CallError):
         return False
+    if isinstance(error, MemoryError):
+        return True
     message = str(error).lower()
     return any(marker in message for marker in DEVICE_FAILURE_MARKERS)
 

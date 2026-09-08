@@ -1,160 +1,157 @@
-import gc
 import json
 import logging
 import time
 from pathlib import Path
 
-import torch
-from lmformatenforcer import JsonSchemaParser
-from lmformatenforcer.integrations.transformers import (
-    build_transformers_prefix_allowed_tokens_fn,
-)
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-    MaxTimeCriteria,
-    StoppingCriteriaList,
-)
+from llama_cpp import Llama
 
 from src.config import Llm as LlmConfig
 from src.constants import (
+    CONTEXT_OVERFLOW_MARKER,
     ERROR_LLM_INVALID_OUTPUT,
     ERROR_LLM_PROMPT_TOO_LONG,
     ERROR_LLM_TRUNCATED,
+    FINISH_REASON_LENGTH,
+    JSON_RESPONSE_FORMAT,
+    KV_CACHE_TYPES,
+    ROLE_SYSTEM,
+    ROLE_USER,
 )
 from src.errors import CallError, FatalError, is_device_failure
-
-ROLE_SYSTEM = "system"
-ROLE_USER = "user"
-TENSOR_FORMAT = "pt"
-ENABLE_THINKING = False
 
 logger = logging.getLogger(__name__)
 
 
 class Llm:
-    def __init__(self, config: LlmConfig, model_dir: Path):
-        if not model_dir.is_dir():
-            raise FatalError(f"llm not found: {model_dir}, run scripts/fetch_models.py")
+    def __init__(self, config: LlmConfig, model_path: Path):
+        if not model_path.is_file():
+            raise FatalError(f"llm not found: {model_path}, run scripts/fetch_models.py")
         self._config = config
-        self._model_dir = model_dir
-        self._tokenizer = None
+        self._model_path = model_path
         self._model = None
 
-    def _load(self) -> None:
-        if self._model is not None:
-            return
-        logger.info("loading llm from %s on %s", self._model_dir, self._config.device)
-        try:
-            self._tokenizer = AutoTokenizer.from_pretrained(str(self._model_dir))
-            self._model = AutoModelForCausalLM.from_pretrained(
-                str(self._model_dir),
-                dtype=getattr(torch, self._config.torch_dtype),
-                attn_implementation=self._config.attn_implementation,
-                quantization_config=_quantization(self._config),
-                device_map=self._config.device,
+    def _load(self) -> Llama:
+        if self._model is None:
+            config = self._config
+            logger.info(
+                "loading llm from %s, %s layers on gpu, context %s tokens",
+                self._model_path.name,
+                config.gpu_layers,
+                config.context_tokens,
             )
-            self._model.eval()
-        except Exception as error:
-            self.unload()
-            raise FatalError(f"llm could not be loaded on {self._config.device}: {error}") from error
+            cache_type = KV_CACHE_TYPES[config.kv_cache_type]
+            started = time.monotonic()
+            try:
+                self._model = Llama(
+                    model_path=str(self._model_path),
+                    n_gpu_layers=config.gpu_layers,
+                    n_ctx=config.context_tokens,
+                    n_batch=config.batch_tokens,
+                    n_threads=config.threads,
+                    flash_attn=config.flash_attention,
+                    type_k=cache_type,
+                    type_v=cache_type,
+                    offload_kqv=config.offload_kv_cache,
+                    verbose=False,
+                )
+            except Exception as error:
+                raise FatalError(f"llm could not be loaded: {error}") from error
+            logger.info("llm loaded in %.0fs", time.monotonic() - started)
+            _log_applied(self._model, config, cache_type)
+        return self._model
 
     def unload(self) -> None:
-        if self._model is None and self._tokenizer is None:
+        if self._model is None:
             return
         logger.info("unloading llm")
+        self._model.close()
         self._model = None
-        self._tokenizer = None
-        gc.collect()
-        if torch.accelerator.is_available():
-            torch.accelerator.empty_cache()
 
     def generate(self, system_prompt: str, user_prompt: str, schema: dict) -> dict:
-        self._load()
-        text = self._tokenizer.apply_chat_template(
-            [
-                {"role": ROLE_SYSTEM, "content": system_prompt},
-                {"role": ROLE_USER, "content": user_prompt},
-            ],
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=ENABLE_THINKING,
-        )
-        inputs = self._tokenizer(text, return_tensors=TENSOR_FORMAT).to(self._model.device)
-        prompt_tokens = inputs["input_ids"].shape[1]
-        if prompt_tokens > self._config.max_input_tokens:
-            raise CallError(
-                ERROR_LLM_PROMPT_TOO_LONG,
-                f"prompt is {prompt_tokens} tokens, over the max_input_tokens limit "
-                f"of {self._config.max_input_tokens}, raise it in the config",
-            )
+        model = self._load()
+        messages = [
+            {"role": ROLE_SYSTEM, "content": system_prompt},
+            {"role": ROLE_USER, "content": user_prompt},
+        ]
 
+        prompt_tokens = sum(
+            len(model.tokenize(message["content"].encode("utf-8"))) for message in messages
+        )
         logger.info("generating from %s input tokens", prompt_tokens)
-        output = self._config.output
+        sampling = self._config.sampling
         started = time.monotonic()
         try:
-            with torch.inference_mode():
-                generated = self._model.generate(
-                    **inputs,
-                    max_new_tokens=output.max_new_tokens,
-                    prefix_allowed_tokens_fn=build_transformers_prefix_allowed_tokens_fn(
-                        self._tokenizer, JsonSchemaParser(schema)
-                    ),
-                    stopping_criteria=StoppingCriteriaList(
-                        [MaxTimeCriteria(output.timeout_seconds)]
-                    ),
-                    pad_token_id=self._tokenizer.eos_token_id,
-                    **_sampling(self._config),
-                )
+            completion = model.create_chat_completion(
+                messages=messages,
+                response_format={"type": JSON_RESPONSE_FORMAT, "schema": schema},
+                max_tokens=self._config.output.max_tokens,
+                temperature=sampling.temperature,
+                top_p=sampling.top_p,
+                top_k=sampling.top_k,
+                min_p=sampling.min_p,
+                repeat_penalty=sampling.repeat_penalty,
+                seed=sampling.seed,
+            )
         except Exception as error:
+            if CONTEXT_OVERFLOW_MARKER in str(error):
+                raise CallError(
+                    ERROR_LLM_PROMPT_TOO_LONG,
+                    f"{error}, raise 'context_tokens' in [llm] or shorten the prompt",
+                ) from error
             if not is_device_failure(error):
                 raise
             self.unload()
-            raise FatalError(f"llm failed on {self._config.device}: {error}") from error
+            raise FatalError(f"llm failed: {error}") from error
 
-        produced = generated[0][prompt_tokens:]
         elapsed = time.monotonic() - started
-        completion = self._tokenizer.decode(produced, skip_special_tokens=True)
+        choice = completion["choices"][0]
+        produced = completion["usage"]["completion_tokens"]
+        text = choice["message"]["content"]
+
         logger.info(
             "generated %s tokens in %.0fs (%.1f tokens/s)",
-            len(produced),
+            produced,
             elapsed,
-            len(produced) / elapsed if elapsed else 0,
+            produced / elapsed if elapsed else 0,
         )
+        logger.trace("finished as %s, %s chars", choice["finish_reason"], len(text or ""))
 
         if self._config.unload_after:
             self.unload()
 
-        try:
-            return json.loads(completion)
-        except json.JSONDecodeError as error:
-            cut_off = len(produced) >= output.max_new_tokens or elapsed >= output.timeout_seconds
-            logger.debug("model returned %s chars of invalid json", len(completion))
+        if choice["finish_reason"] == FINISH_REASON_LENGTH:
             raise CallError(
-                ERROR_LLM_TRUNCATED if cut_off else ERROR_LLM_INVALID_OUTPUT,
-                f"generation was cut off after {len(produced)} tokens and {elapsed:.0f}s"
-                if cut_off
-                else f"model returned invalid json: {error}",
+                ERROR_LLM_TRUNCATED,
+                f"generation was cut off after {produced} tokens, "
+                "raise 'max_tokens' in [llm.output]",
+            )
+
+        try:
+            return json.loads(text)
+        except (json.JSONDecodeError, TypeError) as error:
+            logger.debug("model returned %s chars of invalid json", len(text or ""))
+            raise CallError(
+                ERROR_LLM_INVALID_OUTPUT, f"model returned invalid json: {error}"
             ) from error
 
 
-def _sampling(config: LlmConfig) -> dict:
-    if config.temperature <= 0:
-        return {"do_sample": False}
-    return {
-        "do_sample": True,
-        "temperature": config.temperature,
-        "top_p": config.top_p,
-        "top_k": config.top_k,
-    }
-
-
-def _quantization(config: LlmConfig) -> BitsAndBytesConfig | None:
-    if not config.load_in_4bit:
-        return None
-    return BitsAndBytesConfig(
-        load_in_4bit=True,
-        bnb_4bit_compute_dtype=getattr(torch, config.torch_dtype),
-        bnb_4bit_quant_type=config.quant_type,
+def _log_applied(model: Llama, config: LlmConfig, cache_type: int) -> None:
+    params = model.context_params
+    logger.info(
+        "llm ready: context %s tokens, batch %s, %s threads",
+        model.n_ctx(),
+        params.n_batch,
+        params.n_threads,
+    )
+    if params.type_k != cache_type or params.type_v != cache_type:
+        logger.warning(
+            "kv_cache_type %s was not applied, the model uses another one",
+            config.kv_cache_type,
+        )
+    logger.debug(
+        "llm context params: type_k=%s type_v=%s flash_attn=%s offload_kqv=%s",
+        params.type_k,
+        params.type_v,
+        params.flash_attn_type,
+        params.offload_kqv,
     )

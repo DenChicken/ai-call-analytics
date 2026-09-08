@@ -35,10 +35,15 @@ MODULES = (MODULE_FETCHER, MODULE_PIPELINE, MODULE_WEBUI)
 CONFIG_NAME = "config.toml"
 DATABASE_SECTION = "database"
 DSN_FILE_KEY = "dsn_file"
-MODEL_SECTIONS = ("asr", "llm")
+ASR_SECTION = "asr"
+LLM_SECTION = "llm"
 REPO_ID_KEY = "repo_id"
+MODEL_FILE_KEY = "model_file"
+MODEL_FILE_SEPARATOR = ":"
 DEVICE_KEY = "device"
 DEVICE_CUDA = "cuda"
+GPU_LAYERS_KEY = "gpu_layers"
+GPU_LAYERS_NONE = "none"
 TOKEN_FILE_NAME = "hf_token"
 
 DOCKER = "docker"
@@ -195,15 +200,22 @@ def dsn_path(paths: dict[str, Path]) -> Path:
 
 def wants_gpu(paths: dict[str, Path]) -> bool:
     config = module_config(paths, MODULE_PIPELINE)
-    return any(
-        config.get(section, {}).get(DEVICE_KEY) == DEVICE_CUDA for section in MODEL_SECTIONS
-    )
+    if config.get(ASR_SECTION, {}).get(DEVICE_KEY) == DEVICE_CUDA:
+        return True
+    llm = config.get(LLM_SECTION, {})
+    if GPU_LAYERS_KEY not in llm:
+        raise DeployError(f"missing '{GPU_LAYERS_KEY}' in [{LLM_SECTION}] of the pipeline config")
+    return str(llm[GPU_LAYERS_KEY]) not in (GPU_LAYERS_NONE, "0")
 
 
 def model_repos(paths: dict[str, Path]) -> list[str]:
     config = module_config(paths, MODULE_PIPELINE)
-    repos = [config.get(section, {}).get(REPO_ID_KEY) for section in MODEL_SECTIONS]
-    return list(dict.fromkeys(repo for repo in repos if repo))
+    asr = config.get(ASR_SECTION, {}).get(REPO_ID_KEY)
+    llm = config.get(LLM_SECTION, {})
+    targets = [asr]
+    if llm.get(REPO_ID_KEY) and llm.get(MODEL_FILE_KEY):
+        targets.append(f"{llm[REPO_ID_KEY]}{MODEL_FILE_SEPARATOR}{llm[MODEL_FILE_KEY]}")
+    return list(dict.fromkeys(target for target in targets if target))
 
 
 def run_docker(args: list[str]) -> None:

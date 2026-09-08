@@ -9,7 +9,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY pipeline/requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+RUN pip3 install --no-cache-dir \
+        --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cu124 \
+        -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
 
 FROM base AS build
@@ -43,15 +46,8 @@ RUN /out/pipeline --help > /dev/null
 
 FROM base
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
-        gcc libc6-dev python3-dev \
-    && rm -rf /var/lib/apt/lists/*
-
 ENV HF_HUB_OFFLINE=1
-ENV TRITON_CACHE_DIR=/app/triton-cache
 
 COPY --from=build /out/pipeline /app/pipeline
-
-RUN mkdir -p ${TRITON_CACHE_DIR} && chmod 777 ${TRITON_CACHE_DIR}
 
 ENTRYPOINT ["/app/pipeline", "--config", "/configs/config.toml"]

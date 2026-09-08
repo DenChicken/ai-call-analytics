@@ -1,9 +1,11 @@
 import tomllib
 from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator, model_validator
 
 from src.constants import (
+    GPU_LAYERS_PRESETS,
+    KV_CACHE_TYPES,
     LOG_LEVELS,
     LOG_MODULE_DIR,
     PROMPT_CRITERIA_PLACEHOLDER,
@@ -94,24 +96,62 @@ class Asr(Section):
 
 class Output(Section):
     list_items: int
-    max_new_tokens: int
-    timeout_seconds: float
+    max_tokens: int
+
+
+class Sampling(Section):
+    temperature: float
+    top_p: float
+    top_k: int
+    min_p: float
+    repeat_penalty: float
+    seed: int
 
 
 class Llm(Section):
     repo_id: str
-    local_dir: str
-    device: str
-    torch_dtype: str
-    attn_implementation: str
-    load_in_4bit: bool
-    quant_type: str
-    max_input_tokens: int
-    temperature: float
-    top_p: float
-    top_k: int
+    model_file: str
+    gpu_layers: str
+    context_tokens: int
+    batch_tokens: int
+    threads: int
+    flash_attention: bool
+    kv_cache_type: str
+    offload_kv_cache: bool
     unload_after: bool
+    sampling: Sampling
     output: Output
+
+    @field_validator("gpu_layers")
+    @classmethod
+    def _resolve_layers(cls, value: str) -> int:
+        if value in GPU_LAYERS_PRESETS:
+            return GPU_LAYERS_PRESETS[value]
+        if value.isdigit():
+            return int(value)
+        raise ValueError(
+            f"{value} is not a layer count or one of: {', '.join(GPU_LAYERS_PRESETS)}"
+        )
+
+    @field_validator("kv_cache_type")
+    @classmethod
+    def _known_cache_type(cls, value: str) -> str:
+        if value not in KV_CACHE_TYPES:
+            raise ValueError(f"{value} is not one of: {', '.join(KV_CACHE_TYPES)}")
+        return value
+
+    @model_validator(mode="after")
+    def _fits_context(self) -> "Llm":
+        if self.output.max_tokens >= self.context_tokens:
+            raise ValueError(
+                f"max_tokens {self.output.max_tokens} leaves no room in context_tokens "
+                f"{self.context_tokens}: the prompt would never fit"
+            )
+        if self.batch_tokens > self.context_tokens:
+            raise ValueError(
+                f"batch_tokens {self.batch_tokens} is over context_tokens {self.context_tokens}"
+            )
+        return self
 
 
 class Fields(Section):
@@ -186,7 +226,7 @@ class Config:
         self.license_file = _inside(raw.paths.secrets_dir, raw.license.file)
         self.done_dir = _inside(raw.paths.data_dir, raw.storage.done_dir)
         self.asr_dir = _inside(raw.paths.models_dir, raw.asr.local_dir)
-        self.llm_dir = _inside(raw.paths.models_dir, raw.llm.local_dir)
+        self.llm_file = _inside(raw.paths.models_dir, raw.llm.model_file)
         self.logs_dir = raw.paths.logs_dir / LOG_MODULE_DIR
 
         self.prompt_label = raw.prompt.label

@@ -32,6 +32,23 @@ PROMPT_TRANSCRIPT_PLACEHOLDER = "transcript"
 PROMPT_MANAGER_PLACEHOLDER = "manager"
 UNKNOWN_MANAGER = "имя неизвестно"
 
+ROLE_SYSTEM = "system"
+ROLE_USER = "user"
+JSON_RESPONSE_FORMAT = "json_object"
+FINISH_REASON_LENGTH = "length"
+
+KV_CACHE_TYPES = {
+    "float32": 0,
+    "float16": 1,
+    "int8": 8,
+    "int5": 7,
+    "int4": 2,
+}
+
+GPU_LAYERS_PRESETS = {"none": 0, "all": -1}
+
+CONTEXT_OVERFLOW_MARKER = "exceed context window"
+
 ERROR_AUDIO_MISSING = "audio_missing"
 ERROR_ASR_EMPTY = "asr_empty"
 ERROR_TRANSCRIPT_EMPTY = "transcript_empty"

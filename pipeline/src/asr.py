@@ -4,7 +4,6 @@ import time
 from pathlib import Path
 
 import ctranslate2
-import torch
 from faster_whisper import WhisperModel
 
 from src.config import Asr as AsrConfig
@@ -45,8 +44,6 @@ class Asr:
             self._model.model.unload_model()
         self._model = None
         gc.collect()
-        if torch.accelerator.is_available():
-            torch.accelerator.empty_cache()
 
     def transcribe(self, audio_path: Path) -> tuple[list[Segment], float]:
         logger.info("transcribing %s", audio_path.name)

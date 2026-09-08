@@ -54,7 +54,7 @@ def main() -> int:
                 {CRITERIA_TABLE: config.criteria, CALL_TYPES_TABLE: config.call_types}
             )
             asr = Asr(config.asr, config.asr_dir)
-            llm = Llm(config.llm, config.llm_dir)
+            llm = Llm(config.llm, config.llm_file)
             config.done_dir.mkdir(parents=True, exist_ok=True)
             run(config, database, asr, llm, license)
     except LicenseError as error:
@@ -82,11 +82,11 @@ def _stop(message: str, code: int) -> int:
 
 def _log_startup(config: Config) -> None:
     logger.info(
-        "pipeline starting: asr=%s on %s, llm=%s on %s, prompt=%s",
+        "pipeline starting: asr=%s on %s, llm=%s with %s layers on gpu, prompt=%s",
         config.asr.repo_id,
         config.asr.device,
         config.llm.repo_id,
-        config.llm.device,
+        config.llm.gpu_layers,
         config.prompt_label,
     )
     logger.debug("asr: %s", config.asr)
