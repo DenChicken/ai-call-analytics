@@ -43,6 +43,7 @@ CRITERIA_TITLE = "Изменение критериев"
 QUEUE_TITLE = "Очередь обработки"
 RECENT_TITLE = "Завершённые анализы"
 EMPTY_QUEUE = "Очередь пуста"
+SHOW_FAILED_LABEL = "С ошибками"
 EMPTY_RECENT = "Нет завершённых анализов"
 EMPTY_CRITERIA = "Нет оценённых звонков за период"
 FAILED_LABEL = "пропущено:"
@@ -259,9 +260,15 @@ def dashboard_page() -> rx.Component:
                         EMPTY_QUEUE,
                     ),
                     actions=rx.hstack(
+                        rx.checkbox(
+                            SHOW_FAILED_LABEL,
+                            checked=DashboardState.queue_failed,
+                            on_change=DashboardState.toggle_queue_failed,
+                            size="1",
+                        ),
                         _all_calls_link(),
                         refresh_button(DashboardState.refresh),
-                        spacing="2",
+                        spacing="3",
                         align="center",
                     ),
                 ),

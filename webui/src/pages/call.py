@@ -30,8 +30,7 @@ RECOMMENDATIONS_TITLE = "Рекомендации"
 METADATA_TITLE = "Метаданные анализа"
 CRM_LABEL = "Открыть в CRM"
 NO_AUDIO = "Запись недоступна"
-NO_TRANSCRIPT = "Расшифровка ещё не готова"
-NO_ANALYSIS = "Анализ ещё не выполнен"
+NO_DATA = "Нет данных"
 DISABLED_LABEL = "отключён"
 
 FIELD_MANAGER = "Менеджер"
@@ -187,7 +186,7 @@ def _text_list(title: str, items) -> rx.Component:
                 spacing="2",
                 width="100%",
             ),
-            empty_state(NO_ANALYSIS),
+            empty_state(NO_DATA),
         ),
     )
 
@@ -220,7 +219,7 @@ def _found_view() -> rx.Component:
                         spacing="2",
                         width="100%",
                     ),
-                    empty_state(NO_ANALYSIS),
+                    empty_state(NO_DATA),
                 ),
             ),
             rx.vstack(
@@ -253,7 +252,7 @@ def _found_view() -> rx.Component:
                             type="auto",
                             scrollbars="vertical",
                         ),
-                        empty_state(NO_TRANSCRIPT),
+                        empty_state(NO_DATA),
                     ),
                 ),
                 spacing="3",
@@ -268,7 +267,7 @@ def _found_view() -> rx.Component:
             rx.cond(
                 CallState.summary != "",
                 rx.text(CallState.summary, size="2"),
-                empty_state(NO_ANALYSIS),
+                empty_state(NO_DATA),
             ),
         ),
         rx.hstack(

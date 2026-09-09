@@ -10,7 +10,6 @@ from src import queries
 from src.constants import (
     DATABASE_CONNECT_TIMEOUT,
     MILLISECONDS_PER_SECOND,
-    QUEUE_STATUSES,
     SECONDS_PER_MINUTE,
 )
 
@@ -128,11 +127,11 @@ class Database:
     def extreme_calls(self, window: dict) -> dict[str, dict]:
         return {row["kind"]: row for row in self._fetch(queries.EXTREME_CALLS, window)}
 
-    def queue_jobs(self, types: list[str], limit: int) -> list[dict]:
+    def queue_jobs(self, types: list[str], limit: int, statuses: tuple[str, ...]) -> list[dict]:
         return self._fetch(
             queries.QUEUE_JOBS,
             {
-                "statuses": list(QUEUE_STATUSES),
+                "statuses": list(statuses),
                 "types": [str(code) for code in types],
                 "limit": limit,
             },

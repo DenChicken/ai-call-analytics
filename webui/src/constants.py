@@ -18,8 +18,9 @@ STATUS_FAILED = "failed"
 QUEUE_STATUSES = (
     STATUS_PENDING,
     STATUS_TRANSCRIBED,
-    STATUS_FAILED,
 )
+
+QUEUE_FAILED_STATUSES = QUEUE_STATUSES + (STATUS_FAILED,)
 
 ERROR_AUDIO_MISSING = "audio_missing"
 ERROR_ASR_EMPTY = "asr_empty"
@@ -182,6 +183,7 @@ PARAM_SORT = "sort"
 PARAM_DESC = "desc"
 PARAM_RANK = "rank"
 PARAM_MIN_CALLS = "mincalls"
+PARAM_QUEUE_FAILED = "queuefailed"
 
 TYPES_LABEL = "Типы звонков"
 STATUSES_LABEL = "Статусы"

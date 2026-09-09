@@ -11,12 +11,14 @@ from src.constants import (
     MIN_ANALYZED_CALLS,
     PARAM_MIN_CALLS,
     PARAM_PERIOD,
+    PARAM_QUEUE_FAILED,
     PARAM_RANK,
     PARAM_TYPES,
     PERIOD_BY_LABEL,
     PERIOD_DAYS,
     PERIOD_LABELS,
     PERIOD_TODAY,
+    QUEUE_FAILED_STATUSES,
     QUEUE_STATUSES,
     RANK_BY_LABEL,
     RANK_LABELS,
@@ -94,6 +96,7 @@ class DashboardState(TypesFilterState, AuthState):
     period: str = PERIOD_TODAY
     rank_mode: str = RANK_SMOOTHED
     min_calls_only: bool = False
+    queue_failed: bool = False
 
     processed: int = 0
     processed_delta: int = 0
@@ -191,11 +194,18 @@ class DashboardState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
+    @rx.event
+    def toggle_queue_failed(self, enabled: bool):
+        self.queue_failed = enabled
+        self._refresh()
+        return self._sync_url()
+
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
         self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
         self.rank_mode = urlstate.read_choice(params, PARAM_RANK, RANK_LABELS, self.rank_mode)
         self.min_calls_only = urlstate.read_flag(params, PARAM_MIN_CALLS, self.min_calls_only)
+        self.queue_failed = urlstate.read_flag(params, PARAM_QUEUE_FAILED, self.queue_failed)
         self._read_types(params)
 
     def _sync_url(self):
@@ -207,6 +217,7 @@ class DashboardState(TypesFilterState, AuthState):
                     PARAM_TYPES: self._types_param,
                     PARAM_RANK: "" if self.rank_mode == RANK_SMOOTHED else self.rank_mode,
                     PARAM_MIN_CALLS: "1" if self.min_calls_only else "",
+                    PARAM_QUEUE_FAILED: "1" if self.queue_failed else "",
                 },
             ),
             replace=True,
@@ -222,6 +233,7 @@ class DashboardState(TypesFilterState, AuthState):
             self.utc_offset,
             self.rank_mode,
             MIN_ANALYZED_CALLS if self.min_calls_only else 0,
+            QUEUE_FAILED_STATUSES if self.queue_failed else QUEUE_STATUSES,
         )
         self.processed = data.processed
         self.processed_delta = data.processed_delta
@@ -249,7 +261,12 @@ class DashboardState(TypesFilterState, AuthState):
 
 
 def collect(
-    period: str, types: list[str], offset_hours: int, rank_mode: str, minimum: int
+    period: str,
+    types: list[str],
+    offset_hours: int,
+    rank_mode: str,
+    minimum: int,
+    queue_statuses: tuple[str, ...],
 ) -> DashboardData:
     database = context.database()
     display = context.config().display
@@ -269,9 +286,7 @@ def collect(
         processed=totals["calls"],
         processed_delta=totals["calls"] - previous_totals["calls"],
         analyzed_today=database.analyses_count(since, until, types),
-        queued=sum(
-            counts.get(status, 0) for status in QUEUE_STATUSES if status != STATUS_FAILED
-        ),
+        queued=sum(counts.get(status, 0) for status in QUEUE_STATUSES),
         failed=counts.get(STATUS_FAILED, 0),
         best_manager=best[0],
         best_manager_id=best[1],
@@ -281,7 +296,9 @@ def collect(
         worst_score=worst[2],
         criteria_deltas=criteria.deltas(database, window, previous),
         top_managers=_top_managers(scored, rank_mode, minimum),
-        queue_rows=_queue_rows(database, types, display.queue_size, offset_hours),
+        queue_rows=_queue_rows(
+            database, types, display.queue_size, offset_hours, queue_statuses
+        ),
         recent_rows=_recent_rows(database, types, display.queue_size, offset_hours),
     )
 
@@ -314,7 +331,13 @@ def _top_managers(scored: list[dict], mode: str, minimum: int) -> list[TopManage
     ]
 
 
-def _queue_rows(database, types: list[str], limit: int, offset_hours: int) -> list[QueueRow]:
+def _queue_rows(
+    database,
+    types: list[str],
+    limit: int,
+    offset_hours: int,
+    statuses: tuple[str, ...],
+) -> list[QueueRow]:
     return [
         QueueRow(
             call_id=row["call_id"],
@@ -326,7 +349,7 @@ def _queue_rows(database, types: list[str], limit: int, offset_hours: int) -> li
             started_at=formatting.moment(row["started_at"], offset_hours),
             error=errors.describe(row["error_code"]),
         )
-        for row in database.queue_jobs(types, limit)
+        for row in database.queue_jobs(types, limit, statuses)
     ]
 
 
