@@ -4,17 +4,23 @@ from dataclasses import dataclass
 
 import reflex as rx
 
-from src import context, criteria, errors, formatting, urlstate
+from src import context, criteria, errors, formatting, ranking, urlstate
 from src.constants import (
     DEFAULT_STATUS_COLOR,
     EMPTY_VALUE,
+    MIN_ANALYZED_CALLS,
+    PARAM_MIN_CALLS,
     PARAM_PERIOD,
+    PARAM_RANK,
     PARAM_TYPES,
     PERIOD_BY_LABEL,
     PERIOD_DAYS,
     PERIOD_LABELS,
     PERIOD_TODAY,
     QUEUE_STATUSES,
+    RANK_BY_LABEL,
+    RANK_LABELS,
+    RANK_SMOOTHED,
     ROUTE_DASHBOARD,
     STATUS_COLORS,
     STATUS_FAILED,
@@ -86,6 +92,8 @@ class DashboardData:
 
 class DashboardState(TypesFilterState, AuthState):
     period: str = PERIOD_TODAY
+    rank_mode: str = RANK_SMOOTHED
+    min_calls_only: bool = False
 
     processed: int = 0
     processed_delta: int = 0
@@ -167,9 +175,27 @@ class DashboardState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
+    @rx.var
+    def rank_label(self) -> str:
+        return RANK_LABELS[self.rank_mode]
+
+    @rx.event
+    def set_rank_mode(self, label: str):
+        self.rank_mode = RANK_BY_LABEL.get(label, self.rank_mode)
+        self._refresh()
+        return self._sync_url()
+
+    @rx.event
+    def toggle_min_calls(self, enabled: bool):
+        self.min_calls_only = enabled
+        self._refresh()
+        return self._sync_url()
+
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
         self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self.rank_mode = urlstate.read_choice(params, PARAM_RANK, RANK_LABELS, self.rank_mode)
+        self.min_calls_only = urlstate.read_flag(params, PARAM_MIN_CALLS, self.min_calls_only)
         self._read_types(params)
 
     def _sync_url(self):
@@ -179,6 +205,8 @@ class DashboardState(TypesFilterState, AuthState):
                 {
                     PARAM_PERIOD: self.period,
                     PARAM_TYPES: self._types_param,
+                    PARAM_RANK: "" if self.rank_mode == RANK_SMOOTHED else self.rank_mode,
+                    PARAM_MIN_CALLS: "1" if self.min_calls_only else "",
                 },
             ),
             replace=True,
@@ -188,7 +216,13 @@ class DashboardState(TypesFilterState, AuthState):
         guarded(self, self._collect)
 
     def _collect(self) -> None:
-        data = collect(self.period, list(self.selected_types), self.utc_offset)
+        data = collect(
+            self.period,
+            list(self.selected_types),
+            self.utc_offset,
+            self.rank_mode,
+            MIN_ANALYZED_CALLS if self.min_calls_only else 0,
+        )
         self.processed = data.processed
         self.processed_delta = data.processed_delta
         self.analyzed_today = data.analyzed_today
@@ -214,7 +248,9 @@ class DashboardState(TypesFilterState, AuthState):
         self.recent_rows = data.recent_rows
 
 
-def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
+def collect(
+    period: str, types: list[str], offset_hours: int, rank_mode: str, minimum: int
+) -> DashboardData:
     database = context.database()
     display = context.config().display
 
@@ -244,7 +280,7 @@ def collect(period: str, types: list[str], offset_hours: int) -> DashboardData:
         worst_manager_id=worst[1],
         worst_score=worst[2],
         criteria_deltas=criteria.deltas(database, window, previous),
-        top_managers=_top_managers(scored),
+        top_managers=_top_managers(scored, rank_mode, minimum),
         queue_rows=_queue_rows(database, types, display.queue_size, offset_hours),
         recent_rows=_recent_rows(database, types, display.queue_size, offset_hours),
     )
@@ -262,15 +298,16 @@ def _extremes(scored: list[dict]) -> tuple[tuple, tuple]:
     )
 
 
-def _top_managers(scored: list[dict]) -> list[TopManagerRow]:
-    best = sorted(scored, key=lambda row: row["ratio"], reverse=True)[:TOP_MANAGERS_LIMIT]
+def _top_managers(scored: list[dict], mode: str, minimum: int) -> list[TopManagerRow]:
+    base = ranking.baseline(scored)
+    best = ranking.order(scored, mode, minimum)[:TOP_MANAGERS_LIMIT]
     return [
         TopManagerRow(
             agent_id=row["agent_id"],
             number=number,
             name=row["display_name"],
-            score=formatting.share(row["ratio"]),
-            score_label=formatting.share_label(row["ratio"]),
+            score=formatting.share(ranking.displayed(row, base, mode)),
+            score_label=formatting.share_label(ranking.displayed(row, base, mode)),
             analyzed=row["analyzed"],
         )
         for number, row in enumerate(best, start=FIRST_MANAGER_NUMBER)

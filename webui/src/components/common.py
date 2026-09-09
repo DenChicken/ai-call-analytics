@@ -1,12 +1,17 @@
 import reflex as rx
 
-from src.constants import MUTED_COLOR, PERIOD_LABELS, POSITIVE_SIGN
+from src.constants import MUTED_COLOR, PERIOD_LABELS, POSITIVE_SIGN, RANK_LABELS
 
 KPI_MIN_WIDTH = "12rem"
 KPI_ICON_SIZE = 16
 TABLE_SIZE = "1"
 SELECT_POSITION = "popper"
 PERIOD_WIDTH = "7.5rem"
+RANK_WIDTH = "11rem"
+HINT_ICON_SIZE = 14
+HINT_MAX_WIDTH = "22rem"
+HINT_SPACING = "3"
+HINT_ENTRY_SPACING = "1"
 MENU_ICON_SIZE = 12
 MENU_MAX_HEIGHT = "18rem"
 MENU_LABEL_PADDING = "0.25rem 0.5rem"
@@ -129,6 +134,45 @@ def period_picker(current: rx.Var, on_change) -> rx.Component:
         on_change=on_change,
         size="1",
         width=PERIOD_WIDTH,
+    )
+
+
+def rank_picker(current: rx.Var, on_change) -> rx.Component:
+    return rx.select(
+        list(RANK_LABELS.values()),
+        value=current,
+        on_change=on_change,
+        size="1",
+        width=RANK_WIDTH,
+    )
+
+
+def _hint_entry(heading: str, body: str) -> rx.Component:
+    return rx.vstack(
+        rx.text(heading, size="1", weight="bold"),
+        rx.text(body, size="1", color_scheme="gray"),
+        spacing=HINT_ENTRY_SPACING,
+    )
+
+
+def hint_icon(title: str, entries: tuple[tuple[str, str], ...]) -> rx.Component:
+    return rx.hover_card.root(
+        rx.hover_card.trigger(
+            rx.icon(
+                "circle-help",
+                size=HINT_ICON_SIZE,
+                color=MUTED_COLOR,
+                cursor=HINT_CURSOR,
+            )
+        ),
+        rx.hover_card.content(
+            rx.vstack(
+                rx.text(title, size="2", weight="bold"),
+                *[_hint_entry(heading, body) for heading, body in entries],
+                spacing=HINT_SPACING,
+            ),
+            max_width=HINT_MAX_WIDTH,
+        ),
     )
 
 

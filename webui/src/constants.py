@@ -136,6 +136,42 @@ PERIOD_LABELS = {
 
 PERIOD_BY_LABEL = {label: code for code, label in PERIOD_LABELS.items()}
 
+RANK_SMOOTHED = "smoothed"
+RANK_PLAIN = "plain"
+RANK_BY_CALLS = "calls"
+
+RANK_LABELS = {
+    RANK_SMOOTHED: "Взвешенный балл",
+    RANK_PLAIN: "Средний балл",
+    RANK_BY_CALLS: "По числу звонков",
+}
+
+RANK_BY_LABEL = {label: code for code, label in RANK_LABELS.items()}
+
+RANK_DEFAULT_NOTE = " - по умолчанию"
+
+RANK_HINTS = (
+    (
+        RANK_LABELS[RANK_SMOOTHED] + RANK_DEFAULT_NOTE,
+        "Чем меньше у менеджера звонков, тем осторожнее оценка: "
+        "она сдвигается к средней по компании. Поэтому один удачный "
+        "разговор не выводит в лидеры, а балл в рейтинге отличается "
+        "от балла в карточке звонка.",
+    ),
+    (
+        RANK_LABELS[RANK_PLAIN],
+        "Доля выполненных критериев без поправок. Наверх может попасть "
+        "тот, у кого всего один-два звонка.",
+    ),
+    (
+        RANK_LABELS[RANK_BY_CALLS],
+        "Кто больше разговаривал. Это объём, а не качество.",
+    ),
+)
+
+MIN_ANALYZED_LABEL = "От {count} звонков"
+MIN_ANALYZED_CALLS = 10
+
 PARAM_PERIOD = "period"
 PARAM_AGENT = "agent"
 PARAM_TYPES = "types"
@@ -144,11 +180,14 @@ PARAM_PAGE = "page"
 PARAM_SEARCH = "search"
 PARAM_SORT = "sort"
 PARAM_DESC = "desc"
+PARAM_RANK = "rank"
+PARAM_MIN_CALLS = "mincalls"
 
 TYPES_LABEL = "Типы звонков"
 STATUSES_LABEL = "Статусы"
 TYPES_SUMMARY_TEMPLATE = "Типы: {selected}/{total}"
 STATUSES_SUMMARY_TEMPLATE = "Статусы: {selected}/{total}"
+RANK_HINT_TITLE = "Как считается рейтинг"
 
 PERCENT_SCALE = 100
 SHARE_PRECISION = 2

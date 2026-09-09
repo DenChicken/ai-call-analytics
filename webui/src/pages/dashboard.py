@@ -5,8 +5,10 @@ from src.components.common import (
     HINT_CURSOR,
     checkbox_menu,
     empty_state,
+    hint_icon,
     kpi_card,
     period_picker,
+    rank_picker,
     refresh_button,
     scrollable_table,
     section_card,
@@ -17,6 +19,10 @@ from src.components.common import (
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
     ALL_CALLS_LABEL,
+    MIN_ANALYZED_CALLS,
+    MIN_ANALYZED_LABEL,
+    RANK_HINTS,
+    RANK_HINT_TITLE,
     ROUTE_CALL,
     ROUTE_CALLS,
     ROUTE_MANAGER,
@@ -152,6 +158,21 @@ def _top_managers_chart() -> rx.Component:
     )
 
 
+def _top_managers_actions() -> rx.Component:
+    return rx.hstack(
+        rx.checkbox(
+            MIN_ANALYZED_LABEL.format(count=MIN_ANALYZED_CALLS),
+            checked=DashboardState.min_calls_only,
+            on_change=DashboardState.toggle_min_calls,
+            size="1",
+        ),
+        rank_picker(DashboardState.rank_label, DashboardState.set_rank_mode),
+        hint_icon(RANK_HINT_TITLE, RANK_HINTS),
+        spacing="3",
+        align="center",
+    )
+
+
 def _manager_link(name: rx.Var, manager_id: rx.Var) -> rx.Component:
     return rx.cond(
         manager_id > 0,
@@ -222,7 +243,11 @@ def dashboard_page() -> rx.Component:
     return page_layout(
         rx.vstack(
             _kpi_row(),
-            section_card(TOP_MANAGERS_TITLE, _top_managers_chart()),
+            section_card(
+                TOP_MANAGERS_TITLE,
+                _top_managers_chart(),
+                actions=_top_managers_actions(),
+            ),
             section_card(CRITERIA_TITLE, _criteria_chart()),
             rx.hstack(
                 section_card(
