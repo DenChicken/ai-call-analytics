@@ -22,12 +22,13 @@ SEGMENTS_KEY = "segments"
 logger = logging.getLogger(__name__)
 
 
-@dataclass(frozen=True)
+@dataclass
 class Task:
     call_id: int
     audio_path: str
     stage: str
     attempts: int
+    exhausted: bool = False
 
 
 class Database:
@@ -124,17 +125,17 @@ class Database:
             attempts=row["attempts"],
         )
 
-    def start_attempt(self, task: Task) -> None:
+    def start_attempt(self, task: Task) -> bool:
         with self._cursor() as cursor:
             cursor.execute(
                 "UPDATE processing_jobs SET attempts = attempts + 1, updated_at = now() "
-                "WHERE call_id = %s",
+                "WHERE call_id = %s RETURNING attempts",
                 (task.call_id,),
             )
+            return cursor.fetchone()["attempts"] >= self._config.worker.max_attempts
 
     def fail_task(self, task: Task, code: str, message: str) -> None:
-        exhausted = task.attempts + 1 >= self._config.worker.max_attempts
-        status = STATUS_FAILED if exhausted else task.stage
+        status = STATUS_FAILED if task.exhausted else task.stage
         with self._cursor() as cursor:
             cursor.execute(
                 """

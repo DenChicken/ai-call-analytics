@@ -19,6 +19,7 @@ from src.constants import (
     ERROR_NO_CALL_TYPES,
     ERROR_NO_CRITERIA,
     ERROR_TRANSCRIPT_EMPTY,
+    ERROR_UNKNOWN,
     STATUS_PENDING,
 )
 from src.db import Database, Task
@@ -55,16 +56,17 @@ def _process(config: Config, database: Database, asr: Asr, llm: Llm, task: Task)
     )
     logger.trace("call %s audio at %s", task.call_id, audio_path)
 
-    database.start_attempt(task)
+    task.exhausted = database.start_attempt(task)
     try:
         if task.stage == STATUS_PENDING:
             _transcribe(database, asr, task, audio_path)
         else:
             _analyze(config, database, llm, task, audio_path, started)
-    except (shutdown.ShutdownRequested, FatalError):
-        raise
     except psycopg.Error as error:
         raise FatalError(f"database failed while processing call {task.call_id}: {error}") from error
+    except (shutdown.ShutdownRequested, FatalError) as error:
+        _give_up(database, task, error)
+        raise
     except CallError as error:
         logger.error("call %s failed: %s", task.call_id, error)
         database.fail_task(task, error.code, str(error))
@@ -72,6 +74,15 @@ def _process(config: Config, database: Database, asr: Asr, llm: Llm, task: Task)
         logger.exception("call %s failed unexpectedly", task.call_id)
         database.fail_task(task, error_code(error), str(error))
         shutdown.check()
+
+
+def _give_up(database: Database, task: Task, error: BaseException) -> None:
+    if not task.exhausted:
+        return
+    try:
+        database.fail_task(task, ERROR_UNKNOWN, str(error))
+    except psycopg.Error:
+        logger.exception("call %s could not be marked failed", task.call_id)
 
 
 def _transcribe(database: Database, asr: Asr, task: Task, audio_path: Path) -> None:
