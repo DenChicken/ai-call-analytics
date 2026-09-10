@@ -19,9 +19,9 @@ temp_dir = "temp"
 
 [fetch]
 interval_seconds = 30
-min_call_duration_seconds = 30
+min_call_duration_seconds = 90
 max_call_duration_seconds = 3600
-initial_lookback_days = 1
+initial_lookback_days = 7
 max_records_per_cycle = 100
 download_cooldown_seconds = 0
 

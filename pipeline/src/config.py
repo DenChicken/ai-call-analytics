@@ -11,10 +11,12 @@ from src.constants import (
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
+    PROMPT_TYPES_PLACEHOLDER,
 )
 
 PROMPT_PLACEHOLDERS = (
     PROMPT_CRITERIA_PLACEHOLDER,
+    PROMPT_TYPES_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
 )
@@ -154,20 +156,10 @@ class Llm(Section):
         return self
 
 
-class Fields(Section):
-    summary: str
-    call_type: str
-    scores: str
-    strengths: str
-    weaknesses: str
-    recommendations: str
-
-
 class Prompt(Section):
     label: str
     system_file: str
     user_file: str
-    fields: Fields
 
 
 class Logging(Section):
@@ -230,7 +222,6 @@ class Config:
         self.logs_dir = raw.paths.logs_dir / LOG_MODULE_DIR
 
         self.prompt_label = raw.prompt.label
-        self.fields = raw.prompt.fields
         self.system_prompt = _read_text(_inside(raw.paths.configs_dir, raw.prompt.system_file))
         self.user_prompt = _read_text(_inside(raw.paths.configs_dir, raw.prompt.user_file))
         for placeholder in PROMPT_PLACEHOLDERS:

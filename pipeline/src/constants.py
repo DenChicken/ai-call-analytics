@@ -25,9 +25,10 @@ DONE_DIR_TEMPLATE = "%Y-%m/%d"
 
 CRITERIA_TABLE = "criteria"
 CALL_TYPES_TABLE = "call_types"
-CRITERIA_LINE_TEMPLATE = "- {label}: {description}"
+REFERENCE_LINE_TEMPLATE = "- {code} ({label}): {description}"
 
 PROMPT_CRITERIA_PLACEHOLDER = "criteria"
+PROMPT_TYPES_PLACEHOLDER = "types"
 PROMPT_TRANSCRIPT_PLACEHOLDER = "transcript"
 PROMPT_MANAGER_PLACEHOLDER = "manager"
 UNKNOWN_MANAGER = "имя неизвестно"

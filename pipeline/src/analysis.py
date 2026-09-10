@@ -4,11 +4,12 @@ from pydantic import ValidationError
 
 from src.config import Config, Reference
 from src.constants import (
-    CRITERIA_LINE_TEMPLATE,
     ERROR_LLM_INVALID_OUTPUT,
     PROMPT_CRITERIA_PLACEHOLDER,
     PROMPT_MANAGER_PLACEHOLDER,
     PROMPT_TRANSCRIPT_PLACEHOLDER,
+    PROMPT_TYPES_PLACEHOLDER,
+    REFERENCE_LINE_TEMPLATE,
     UNKNOWN_MANAGER,
 )
 from src.errors import CallError
@@ -33,12 +34,11 @@ def analyze(
         len(criteria),
         len(call_types),
     )
-    model = build_analysis_model(
-        criteria, call_types, config.fields, config.llm.output.list_items
-    )
+    model = build_analysis_model(criteria, call_types, config.llm.output.list_items)
     prompt = config.user_prompt.format(
         **{
-            PROMPT_CRITERIA_PLACEHOLDER: _render_criteria(criteria),
+            PROMPT_CRITERIA_PLACEHOLDER: _render(criteria),
+            PROMPT_TYPES_PLACEHOLDER: _render(call_types),
             PROMPT_MANAGER_PLACEHOLDER: manager_name or UNKNOWN_MANAGER,
             PROMPT_TRANSCRIPT_PLACEHOLDER: plain,
         }
@@ -62,8 +62,10 @@ def analyze(
     return analysis
 
 
-def _render_criteria(criteria: list[Reference]) -> str:
+def _render(entries: list[Reference]) -> str:
     return "\n".join(
-        CRITERIA_LINE_TEMPLATE.format(label=entry.label, description=entry.description)
-        for entry in criteria
+        REFERENCE_LINE_TEMPLATE.format(
+            code=entry.code, label=entry.label, description=entry.description
+        )
+        for entry in entries
     )
