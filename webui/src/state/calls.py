@@ -165,6 +165,11 @@ class CallsState(PeriodFilterState, TypesFilterState, AuthState):
         else:
             codes.discard(code)
         self.selected_statuses = [status for status in STATUS_ORDER if status in codes]
+
+    @rx.event
+    def apply_statuses(self, is_open: bool):
+        if is_open:
+            return
         self.page = FIRST_PAGE
         self._refresh()
         return self._sync_url()

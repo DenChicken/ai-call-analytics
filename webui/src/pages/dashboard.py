@@ -66,6 +66,7 @@ def _header() -> rx.Component:
             DashboardState.available_types,
             lambda entry: DashboardState.selected_types.contains(entry.code),
             lambda entry, value: DashboardState.toggle_type(entry.code, value),
+            DashboardState.apply_types,
         ),
         period_picker(DashboardState.period_label, DashboardState.set_period),
     )

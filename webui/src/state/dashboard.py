@@ -153,7 +153,7 @@ class DashboardState(PeriodFilterState, TypesFilterState, AuthState):
                 if not self.session_login:
                     self.watching = False
                     return
-                if self._auto_refresh:
+                if self._auto_refresh and not self.filter_menu_open:
                     self._refresh()
 
     @rx.event

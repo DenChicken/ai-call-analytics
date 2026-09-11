@@ -179,7 +179,7 @@ def hint_icon(title: str, entries: tuple[tuple[str, str], ...]) -> rx.Component:
 
 
 def checkbox_menu(
-    label: str, summary: rx.Var, items: rx.Var, checked, on_change
+    label: str, summary: rx.Var, items: rx.Var, checked, on_change, on_close
 ) -> rx.Component:
     return rx.menu.root(
         rx.menu.trigger(
@@ -210,6 +210,7 @@ def checkbox_menu(
             max_height=MENU_MAX_HEIGHT,
             overflow_y="auto",
         ),
+        on_open_change=on_close,
     )
 
 

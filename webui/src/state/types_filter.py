@@ -8,6 +8,7 @@ from src.database import CallType
 class TypesFilterState(rx.State, mixin=True):
     available_types: list[CallType] = []
     selected_types: list[str] = []
+    filter_menu_open: bool = False
 
     @rx.var
     def types_summary(self) -> str:
@@ -25,6 +26,12 @@ class TypesFilterState(rx.State, mixin=True):
         self.selected_types = [
             entry.code for entry in self.available_types if entry.code in codes
         ]
+
+    @rx.event
+    def apply_types(self, is_open: bool):
+        self.filter_menu_open = is_open
+        if is_open:
+            return
         return self._types_changed()
 
     def _load_types(self) -> None:

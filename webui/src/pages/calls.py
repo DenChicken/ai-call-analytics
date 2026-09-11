@@ -65,6 +65,7 @@ def _type_filters() -> rx.Component:
         CallsState.available_types,
         lambda entry: CallsState.selected_types.contains(entry.code),
         lambda entry, value: CallsState.toggle_type(entry.code, value),
+        CallsState.apply_types,
     )
 
 
@@ -75,6 +76,7 @@ def _status_filters() -> rx.Component:
         CallsState.statuses,
         lambda entry: CallsState.selected_statuses.contains(entry.code),
         lambda entry, value: CallsState.toggle_status(entry.code, value),
+        CallsState.apply_statuses,
     )
 
 

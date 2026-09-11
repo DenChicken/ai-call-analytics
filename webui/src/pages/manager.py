@@ -109,6 +109,7 @@ def _header() -> rx.Component:
             ManagerState.available_types,
             lambda entry: ManagerState.selected_types.contains(entry.code),
             lambda entry, value: ManagerState.toggle_type(entry.code, value),
+            ManagerState.apply_types,
         ),
         period_picker(ManagerState.period_label, ManagerState.set_period),
     )

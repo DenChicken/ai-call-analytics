@@ -112,6 +112,7 @@ def managers_page() -> rx.Component:
                 ManagersState.available_types,
                 lambda entry: ManagersState.selected_types.contains(entry.code),
                 lambda entry, value: ManagersState.toggle_type(entry.code, value),
+                ManagersState.apply_types,
             ),
             period_picker(ManagersState.period_label, ManagersState.set_period),
         ),
