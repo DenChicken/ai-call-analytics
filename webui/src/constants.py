@@ -154,6 +154,8 @@ PERIODS = (
     Period(PERIOD_YEAR, "Год", 365, BUCKET_MONTH, False),
 )
 
+DEFAULT_PERIOD = PERIOD_MONTH
+
 PERIOD_BY_CODE = {period.code: period for period in PERIODS}
 
 PERIOD_BY_LABEL = {period.label: period.code for period in PERIODS}

@@ -2,15 +2,15 @@ import reflex as rx
 
 from src import urlstate
 from src.constants import (
+    DEFAULT_PERIOD,
     PARAM_PERIOD,
     PERIOD_BY_CODE,
     PERIOD_BY_LABEL,
-    PERIOD_TODAY,
 )
 
 
 class PeriodFilterState(rx.State, mixin=True):
-    period: str = PERIOD_TODAY
+    period: str = DEFAULT_PERIOD
 
     @rx.var
     def period_label(self) -> str:

@@ -11,7 +11,6 @@ from src.constants import (
     PARAM_PERIOD,
     PARAM_TYPES,
     PERIOD_BY_CODE,
-    PERIOD_MONTH,
     ROUTE_CALLS,
     ROUTE_MANAGER,
     STATUS_COLORS,
@@ -105,8 +104,6 @@ class ManagerData:
 
 
 class ManagerState(PeriodFilterState, TypesFilterState, AuthState):
-    period: str = PERIOD_MONTH
-
     found: bool = False
     name: str = EMPTY_VALUE
     email: str = ""

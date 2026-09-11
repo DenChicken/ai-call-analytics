@@ -15,7 +15,6 @@ from src.constants import (
     PARAM_RANK,
     PARAM_TYPES,
     PERIOD_BY_CODE,
-    PERIOD_TODAY,
     QUEUE_FAILED_STATUSES,
     QUEUE_STATUSES,
     RANK_BY_LABEL,
@@ -92,7 +91,6 @@ class DashboardData:
 
 
 class DashboardState(PeriodFilterState, TypesFilterState, AuthState):
-    period: str = PERIOD_TODAY
     rank_mode: str = RANK_SMOOTHED
     min_calls_only: bool = False
     queue_failed: bool = False

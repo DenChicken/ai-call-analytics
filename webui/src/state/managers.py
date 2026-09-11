@@ -11,7 +11,6 @@ from src.constants import (
     PARAM_SORT,
     PARAM_TYPES,
     PERIOD_BY_CODE,
-    PERIOD_WEEK,
     ROUTE_MANAGERS,
 )
 from src.database import build_window
@@ -57,7 +56,6 @@ class ManagerRow:
 
 
 class ManagersState(PeriodFilterState, TypesFilterState, AuthState):
-    period: str = PERIOD_WEEK
     search: str = ""
     sort_by: str = DEFAULT_SORT
     descending: bool = DEFAULT_DESCENDING

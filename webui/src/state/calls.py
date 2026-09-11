@@ -13,7 +13,6 @@ from src.constants import (
     PARAM_PERIOD,
     PARAM_STATUSES,
     PARAM_TYPES,
-    PERIOD_MONTH,
     ROUTE_CALLS,
     STATUS_COLORS,
     STATUS_LABELS,
@@ -62,7 +61,6 @@ class StatusOption:
 
 
 class CallsState(PeriodFilterState, TypesFilterState, AuthState):
-    period: str = PERIOD_MONTH
     agent_filter: str = ALL_AGENTS
     selected_statuses: list[str] = []
     statuses_before_menu: list[str] = []
