@@ -1,3 +1,5 @@
+from dataclasses import dataclass
+
 LOG_FILE_TIME_FORMAT = "%Y%m%d-%H%M%S"
 LOG_FILE_TEMPLATE = "webui-{timestamp}.log"
 LOG_LATEST_NAME = "latest.log"
@@ -90,6 +92,9 @@ ALL_CALLS_LABEL = "Все звонки"
 
 CHART_MARGIN = {"left": 10, "right": 20}
 CHART_TICK_COUNT = 6
+CHART_TICK_SIZE = 10
+CHART_AXIS_HEIGHT = 40
+CHART_TICK_INTERVAL = "equidistantPreserveStart"
 CRM_ICON_SIZE = 14
 MUTED_COLOR = "var(--gray-9)"
 FULL_HEIGHT = "100vh"
@@ -122,20 +127,38 @@ STATUS_COLORS = {
 PERIOD_TODAY = "today"
 PERIOD_WEEK = "7d"
 PERIOD_MONTH = "30d"
+PERIOD_QUARTER = "90d"
+PERIOD_HALF_YEAR = "180d"
+PERIOD_YEAR = "365d"
 
-PERIOD_DAYS = {
-    PERIOD_TODAY: 1,
-    PERIOD_WEEK: 7,
-    PERIOD_MONTH: 30,
-}
+BUCKET_DAY = "day"
+BUCKET_WEEK = "week"
+BUCKET_MONTH = "month"
 
-PERIOD_LABELS = {
-    PERIOD_TODAY: "Сегодня",
-    PERIOD_WEEK: "7 дней",
-    PERIOD_MONTH: "30 дней",
-}
 
-PERIOD_BY_LABEL = {label: code for code, label in PERIOD_LABELS.items()}
+@dataclass(frozen=True)
+class Period:
+    code: str
+    label: str
+    days: int
+    bucket: str
+    auto_refresh: bool
+
+
+PERIODS = (
+    Period(PERIOD_TODAY, "Сегодня", 1, BUCKET_DAY, True),
+    Period(PERIOD_WEEK, "7 дней", 7, BUCKET_DAY, True),
+    Period(PERIOD_MONTH, "30 дней", 30, BUCKET_DAY, True),
+    Period(PERIOD_QUARTER, "90 дней", 90, BUCKET_WEEK, False),
+    Period(PERIOD_HALF_YEAR, "Полгода", 180, BUCKET_WEEK, False),
+    Period(PERIOD_YEAR, "Год", 365, BUCKET_MONTH, False),
+)
+
+PERIOD_BY_CODE = {period.code: period for period in PERIODS}
+
+PERIOD_BY_LABEL = {period.label: period.code for period in PERIODS}
+
+PERIOD_LABELS = tuple(period.label for period in PERIODS)
 
 RANK_SMOOTHED = "smoothed"
 RANK_PLAIN = "plain"
@@ -203,6 +226,20 @@ EMPTY_VALUE = "—"
 DATETIME_LABEL_FORMAT = "%d.%m.%Y %H:%M"
 DAY_LABEL_FORMAT = "%d.%m"
 WEEKDAY_NAMES = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+MONTH_NAMES = (
+    "янв",
+    "фев",
+    "мар",
+    "апр",
+    "май",
+    "июн",
+    "июл",
+    "авг",
+    "сен",
+    "окт",
+    "ноя",
+    "дек",
+)
 DATETIME_FULL_TEMPLATE = "{moment} ({weekday})"
 UTC_OFFSET_TEMPLATE = "UTC{sign}{hours}"
 OFFSET_COOKIE_NAME = "webui_offset"
@@ -217,7 +254,7 @@ RELOAD_SCRIPT = "window.location.reload()"
 TIMEZONE_DIALOG_TITLE = "Сменить часовой пояс?"
 TIMEZONE_DIALOG_TEXT = (
     "Страница перезагрузится. Метки времени, границы периода и группировка "
-    "по дням будут пересчитаны: звонок у границы суток может перейти "
+    "на графиках будут пересчитаны: звонок у границы суток может перейти "
     "на соседний день, а «сегодня» — сместиться."
 )
 TIMEZONE_DIALOG_CONFIRM = "Сменить"

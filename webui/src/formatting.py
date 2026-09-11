@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone, tzinfo
 
 from src.constants import (
+    BUCKET_MONTH,
     DATETIME_FULL_TEMPLATE,
     DATETIME_LABEL_FORMAT,
     DAY_LABEL_FORMAT,
@@ -8,9 +9,10 @@ from src.constants import (
     DURATION_TEMPLATE,
     EMPTY_VALUE,
     MILLISECONDS_PER_SECOND,
+    MONTH_NAMES,
     NEGATIVE_SIGN,
     PERCENT_SCALE,
-    PERIOD_DAYS,
+    PERIOD_BY_CODE,
     POSITIVE_SIGN,
     SCORE_FRACTION_TEMPLATE,
     SECONDS_PER_MINUTE,
@@ -88,10 +90,16 @@ def day_label(value: date) -> str:
     return value.strftime(DAY_LABEL_FORMAT)
 
 
+def bucket_label(value: date, bucket: str) -> str:
+    if bucket == BUCKET_MONTH:
+        return f"{MONTH_NAMES[value.month - 1]} {value.year}"
+    return day_label(value)
+
+
 def period_bounds(period: str, offset_hours: int) -> tuple[datetime, datetime]:
     now = datetime.now(zone(offset_hours))
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    since = start_of_day - timedelta(days=PERIOD_DAYS[period] - 1)
+    since = start_of_day - timedelta(days=PERIOD_BY_CODE[period].days - 1)
     return since, start_of_day + timedelta(days=1)
 
 

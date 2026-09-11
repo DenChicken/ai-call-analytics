@@ -2,8 +2,11 @@ import reflex as rx
 
 from src.components.common import empty_state, truncated
 from src.constants import (
+    CHART_AXIS_HEIGHT,
     CHART_MARGIN,
     CHART_TICK_COUNT,
+    CHART_TICK_INTERVAL,
+    CHART_TICK_SIZE,
     ROUTE_MANAGER,
     SHARE_MAX,
 )
@@ -114,7 +117,12 @@ def top_managers_chart(state, name_key: str, score_key: str, empty: str) -> rx.C
                     rx.recharts.bar(
                         data_key=score_key, fill=TOP_BAR_COLOR, bar_size=TOP_BAR_SIZE
                     ),
-                    rx.recharts.x_axis(data_key=name_key),
+                    rx.recharts.x_axis(
+                        data_key=name_key,
+                        interval=CHART_TICK_INTERVAL,
+                        tick_size=CHART_TICK_SIZE,
+                        height=CHART_AXIS_HEIGHT,
+                    ),
                     rx.recharts.y_axis(
                         domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
                     ),

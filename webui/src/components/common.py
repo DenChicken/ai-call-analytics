@@ -129,11 +129,12 @@ def signed_count(value: rx.Var) -> rx.Component:
 
 def period_picker(current: rx.Var, on_change) -> rx.Component:
     return rx.select(
-        list(PERIOD_LABELS.values()),
+        list(PERIOD_LABELS),
         value=current,
         on_change=on_change,
         size="1",
         width=PERIOD_WIDTH,
+        position=SELECT_POSITION,
     )
 
 
@@ -144,6 +145,7 @@ def rank_picker(current: rx.Var, on_change) -> rx.Component:
         on_change=on_change,
         size="1",
         width=RANK_WIDTH,
+        position=SELECT_POSITION,
     )
 
 

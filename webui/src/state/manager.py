@@ -10,9 +10,7 @@ from src.constants import (
     PARAM_AGENT,
     PARAM_PERIOD,
     PARAM_TYPES,
-    PERIOD_BY_LABEL,
-    PERIOD_DAYS,
-    PERIOD_LABELS,
+    PERIOD_BY_CODE,
     PERIOD_MONTH,
     ROUTE_CALLS,
     ROUTE_MANAGER,
@@ -21,6 +19,7 @@ from src.constants import (
 )
 from src.database import build_filters, build_window
 from src.state.auth import AuthState, guarded
+from src.state.period_filter import PeriodFilterState
 from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
@@ -105,7 +104,7 @@ class ManagerData:
     calls_total: int
 
 
-class ManagerState(TypesFilterState, AuthState):
+class ManagerState(PeriodFilterState, TypesFilterState, AuthState):
     period: str = PERIOD_MONTH
 
     found: bool = False
@@ -188,9 +187,9 @@ class ManagerState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
-    @rx.var
-    def period_label(self) -> str:
-        return PERIOD_LABELS[self.period]
+    def _period_changed(self):
+        self._refresh()
+        return self._sync_url()
 
     @rx.var
     def all_calls_link(self) -> str:
@@ -203,15 +202,9 @@ class ManagerState(TypesFilterState, AuthState):
             },
         )
 
-    @rx.event
-    def set_period(self, label: str):
-        self.period = PERIOD_BY_LABEL.get(label, self.period)
-        self._refresh()
-        return self._sync_url()
-
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
-        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self._read_period(params)
         self._read_types(params)
 
     def _sync_url(self):
@@ -271,8 +264,11 @@ def collect(
 
     since, until = formatting.period_bounds(period, offset_hours)
     previous_since, previous_until = formatting.previous_bounds(since, until)
-    window = build_window(since, until, types, agent_id=agent_id)
-    previous = build_window(previous_since, previous_until, types, agent_id=agent_id)
+    bucket = PERIOD_BY_CODE[period].bucket
+    window = build_window(since, until, types, bucket, agent_id=agent_id)
+    previous = build_window(
+        previous_since, previous_until, types, bucket, agent_id=agent_id
+    )
     filters = build_filters(since, until, types, agent_id, None)
 
     agent = database.agent(agent_id)
@@ -347,8 +343,8 @@ def _criteria_trend(
 ) -> list[dict]:
     codes = [entry.code for entry in scores]
     days: dict[str, dict] = {}
-    for row in database.criteria_daily_ratios(window):
-        day = formatting.day_label(row["day"])
+    for row in database.criteria_bucket_ratios(window):
+        day = formatting.bucket_label(row["day"], window["bucket"])
         point = days.setdefault(day, {CHART_DAY_KEY: day, **dict.fromkeys(codes)})
         point[row["code"]] = formatting.share(row["ratio"])
     return list(days.values())
@@ -357,10 +353,10 @@ def _criteria_trend(
 def _trend(database, window: dict) -> list[dict]:
     return [
         {
-            CHART_DAY_KEY: formatting.day_label(row["day"]),
+            CHART_DAY_KEY: formatting.bucket_label(row["day"], window["bucket"]),
             CHART_SCORE_KEY: formatting.share(row["ratio"]),
         }
-        for row in database.agent_daily_ratios(window)
+        for row in database.agent_bucket_ratios(window)
     ]
 
 

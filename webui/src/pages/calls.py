@@ -25,6 +25,13 @@ EMPTY_MESSAGE = "Нет звонков по выбранным фильтрам"
 PAGE_SIZE_LABEL = "На странице"
 PREVIOUS_LABEL = "Назад"
 NEXT_LABEL = "Вперёд"
+FIRST_PAGE_HINT = "Первая страница"
+LAST_PAGE_HINT = "Последняя страница"
+GO_TO_PAGE_PLACEHOLDER = "№"
+GO_TO_PAGE_WIDTH = "4.5rem"
+GO_TO_PAGE_ELEMENT_ID = "calls-page-input"
+ENTER_KEY = "Enter"
+BLUR_SCRIPT = "document.getElementById('{element}')?.blur()"
 NAME_MAX_WIDTH = "11rem"
 AGENT_SELECT_WIDTH = "14rem"
 NAV_ICON_SIZE = 14
@@ -109,6 +116,28 @@ def _pagination() -> rx.Component:
         ),
         rx.spacer(),
         rx.text(CallsState.page_label, size="1", color_scheme="gray"),
+        rx.input(
+            placeholder=GO_TO_PAGE_PLACEHOLDER,
+            id=GO_TO_PAGE_ELEMENT_ID,
+            on_blur=CallsState.go_to_typed_page,
+            on_key_down=lambda key: rx.cond(
+                key == ENTER_KEY,
+                rx.call_script(BLUR_SCRIPT.format(element=GO_TO_PAGE_ELEMENT_ID)),
+                rx.noop(),
+            ),
+            width=GO_TO_PAGE_WIDTH,
+            size="1",
+        ),
+        rx.tooltip(
+            rx.button(
+                rx.icon("chevrons-left", size=NAV_ICON_SIZE),
+                on_click=CallsState.go_to_page(1),
+                disabled=CallsState.page <= 1,
+                variant="soft",
+                size="1",
+            ),
+            content=FIRST_PAGE_HINT,
+        ),
         rx.button(
             rx.icon("chevron-left", size=NAV_ICON_SIZE),
             PREVIOUS_LABEL,
@@ -124,6 +153,16 @@ def _pagination() -> rx.Component:
             disabled=CallsState.page >= CallsState.pages,
             variant="soft",
             size="1",
+        ),
+        rx.tooltip(
+            rx.button(
+                rx.icon("chevrons-right", size=NAV_ICON_SIZE),
+                on_click=CallsState.go_to_page(CallsState.pages),
+                disabled=CallsState.page >= CallsState.pages,
+                variant="soft",
+                size="1",
+            ),
+            content=LAST_PAGE_HINT,
         ),
         spacing="3",
         align="center",

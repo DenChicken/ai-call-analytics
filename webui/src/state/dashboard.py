@@ -14,9 +14,7 @@ from src.constants import (
     PARAM_QUEUE_FAILED,
     PARAM_RANK,
     PARAM_TYPES,
-    PERIOD_BY_LABEL,
-    PERIOD_DAYS,
-    PERIOD_LABELS,
+    PERIOD_BY_CODE,
     PERIOD_TODAY,
     QUEUE_FAILED_STATUSES,
     QUEUE_STATUSES,
@@ -30,6 +28,7 @@ from src.constants import (
 )
 from src.database import build_window
 from src.state.auth import AuthState, guarded
+from src.state.period_filter import PeriodFilterState
 from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
@@ -92,7 +91,7 @@ class DashboardData:
     recent_rows: list[AnalysisRow]
 
 
-class DashboardState(TypesFilterState, AuthState):
+class DashboardState(PeriodFilterState, TypesFilterState, AuthState):
     period: str = PERIOD_TODAY
     rank_mode: str = RANK_SMOOTHED
     min_calls_only: bool = False
@@ -132,6 +131,10 @@ class DashboardState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
+    def _period_changed(self):
+        self._refresh()
+        return self._sync_url()
+
     @rx.event
     def refresh(self):
         self._refresh()
@@ -150,7 +153,8 @@ class DashboardState(TypesFilterState, AuthState):
                 if not self.session_login:
                     self.watching = False
                     return
-                self._refresh()
+                if self._auto_refresh:
+                    self._refresh()
 
     @rx.event
     def toggle_criteria(self):
@@ -167,16 +171,6 @@ class DashboardState(TypesFilterState, AuthState):
     @rx.var
     def criteria_chart_height(self) -> int:
         return criteria.chart_height(self.visible_criteria)
-
-    @rx.var
-    def period_label(self) -> str:
-        return PERIOD_LABELS[self.period]
-
-    @rx.event
-    def set_period(self, label: str):
-        self.period = PERIOD_BY_LABEL.get(label, self.period)
-        self._refresh()
-        return self._sync_url()
 
     @rx.var
     def rank_label(self) -> str:
@@ -202,7 +196,7 @@ class DashboardState(TypesFilterState, AuthState):
 
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
-        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self._read_period(params)
         self.rank_mode = urlstate.read_choice(params, PARAM_RANK, RANK_LABELS, self.rank_mode)
         self.min_calls_only = urlstate.read_flag(params, PARAM_MIN_CALLS, self.min_calls_only)
         self.queue_failed = urlstate.read_flag(params, PARAM_QUEUE_FAILED, self.queue_failed)
@@ -273,8 +267,9 @@ def collect(
 
     since, until = formatting.period_bounds(period, offset_hours)
     previous_since, previous_until = formatting.previous_bounds(since, until)
-    window = build_window(since, until, types)
-    previous = build_window(previous_since, previous_until, types)
+    bucket = PERIOD_BY_CODE[period].bucket
+    window = build_window(since, until, types, bucket)
+    previous = build_window(previous_since, previous_until, types, bucket)
 
     totals = database.period_totals(window)
     previous_totals = database.period_totals(previous)

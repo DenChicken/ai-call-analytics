@@ -13,9 +13,6 @@ from src.constants import (
     PARAM_PERIOD,
     PARAM_STATUSES,
     PARAM_TYPES,
-    PERIOD_BY_LABEL,
-    PERIOD_DAYS,
-    PERIOD_LABELS,
     PERIOD_MONTH,
     ROUTE_CALLS,
     STATUS_COLORS,
@@ -25,6 +22,7 @@ from src.constants import (
 )
 from src.database import build_filters
 from src.state.auth import AuthState, guarded
+from src.state.period_filter import PeriodFilterState
 from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
@@ -63,7 +61,7 @@ class StatusOption:
     label: str
 
 
-class CallsState(TypesFilterState, AuthState):
+class CallsState(PeriodFilterState, TypesFilterState, AuthState):
     period: str = PERIOD_MONTH
     agent_filter: str = ALL_AGENTS
     selected_statuses: list[str] = []
@@ -99,9 +97,14 @@ class CallsState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
+    def _period_changed(self):
+        self.page = FIRST_PAGE
+        self._refresh()
+        return self._sync_url()
+
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
-        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self._read_period(params)
         self.selected_statuses = urlstate.read_list(
             params, PARAM_STATUSES, STATUS_ORDER, self.selected_statuses
         )
@@ -131,17 +134,6 @@ class CallsState(TypesFilterState, AuthState):
     @rx.event
     def refresh(self):
         self._refresh()
-
-    @rx.var
-    def period_label(self) -> str:
-        return PERIOD_LABELS[self.period]
-
-    @rx.event
-    def set_period(self, label: str):
-        self.period = PERIOD_BY_LABEL.get(label, self.period)
-        self.page = FIRST_PAGE
-        self._refresh()
-        return self._sync_url()
 
     @rx.event
     def set_agent_label(self, label: str):
@@ -188,6 +180,13 @@ class CallsState(TypesFilterState, AuthState):
         self.page = max(FIRST_PAGE, min(page, self.pages))
         self._refresh()
         return self._sync_url()
+
+    @rx.event
+    def go_to_typed_page(self, value: str):
+        text = str(value).strip()
+        if not text.isdigit():
+            return
+        return CallsState.go_to_page(int(text))
 
     @rx.var
     def pages(self) -> int:

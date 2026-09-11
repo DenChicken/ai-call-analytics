@@ -5,6 +5,8 @@ from src import formatting
 CHART_LABEL_KEY = "label"
 CHART_BEFORE_KEY = "before"
 CHART_AFTER_KEY = "after"
+LABEL_MAX_LENGTH = 24
+LABEL_ELLIPSIS = "…"
 PREVIEW_COUNT = 6
 GROUP_HEIGHT = 52
 CHART_PADDING = 64
@@ -41,10 +43,16 @@ def deltas(database, window: dict, previous: dict) -> list[CriterionDelta]:
     return sorted(entries, key=lambda entry: entry.after, reverse=True)
 
 
+def short_label(label: str) -> str:
+    if len(label) <= LABEL_MAX_LENGTH:
+        return label
+    return label[: LABEL_MAX_LENGTH - len(LABEL_ELLIPSIS)].rstrip() + LABEL_ELLIPSIS
+
+
 def chart_points(entries: list[CriterionDelta]) -> list[dict]:
     return [
         {
-            CHART_LABEL_KEY: entry.label,
+            CHART_LABEL_KEY: short_label(entry.label),
             CHART_BEFORE_KEY: entry.before,
             CHART_AFTER_KEY: entry.after,
         }

@@ -16,7 +16,11 @@ from src.components.common import (
 from src.components.layout import page_layout, sticky_header
 from src.constants import (
     ALL_CALLS_LABEL,
+    CHART_AXIS_HEIGHT,
+    CHART_MARGIN,
     CHART_TICK_COUNT,
+    CHART_TICK_INTERVAL,
+    CHART_TICK_SIZE,
     CRM_ICON_SIZE,
     ROUTE_CALL,
     ROUTE_MANAGERS,
@@ -36,10 +40,10 @@ KPI_CALLS = "Звонков"
 KPI_ANALYZED_HINT = "проанализировано:"
 KPI_BEST = "Лучший разговор"
 KPI_WORST = "Худший разговор"
-TREND_TITLE = "Средний балл по дням"
-CRITERIA_TREND_TITLE = "Критерии по дням"
+TREND_TITLE = "Средний балл"
+CRITERIA_TREND_TITLE = "Динамика критериев"
 RADAR_TITLE = "Критерии за период"
-CRITERIA_TITLE = "Изменение критериев"
+CRITERIA_TITLE = "Изменение за период"
 CALLS_TITLE = "Последние разговоры"
 ALL_CALLS_HINT = "всего за период:"
 NOT_FOUND_MANAGER = "Менеджер не найден"
@@ -161,13 +165,19 @@ def _score_chart() -> rx.Component:
         ManagerState.trend.length() > 0,
         rx.recharts.bar_chart(
             rx.recharts.bar(data_key=CHART_SCORE_KEY, fill=BAR_COLOR),
-            rx.recharts.x_axis(data_key=CHART_DAY_KEY),
+            rx.recharts.x_axis(
+                data_key=CHART_DAY_KEY,
+                interval=CHART_TICK_INTERVAL,
+                tick_size=CHART_TICK_SIZE,
+                height=CHART_AXIS_HEIGHT,
+            ),
             rx.recharts.y_axis(domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT),
             rx.recharts.graphing_tooltip(),
             rx.recharts.cartesian_grid(stroke_dasharray="3 3", vertical=False),
             data=ManagerState.trend,
             height=CHART_HEIGHT,
             width="100%",
+            margin=CHART_MARGIN,
         ),
         empty_state(EMPTY_TREND),
     )
@@ -278,7 +288,12 @@ def _criteria_chart() -> rx.Component:
                                 hide=ManagerState.hidden_lines.contains(line.code),
                             ),
                         ),
-                        rx.recharts.x_axis(data_key=CHART_DAY_KEY),
+                        rx.recharts.x_axis(
+                            data_key=CHART_DAY_KEY,
+                            interval=CHART_TICK_INTERVAL,
+                            tick_size=CHART_TICK_SIZE,
+                            height=CHART_AXIS_HEIGHT,
+                        ),
                         rx.recharts.y_axis(
                             domain=[0, SHARE_MAX], tick_count=CHART_TICK_COUNT
                         ),
@@ -287,6 +302,7 @@ def _criteria_chart() -> rx.Component:
                         data=ManagerState.criteria_trend,
                         height=CRITERIA_CHART_HEIGHT,
                         width="100%",
+                        margin=CHART_MARGIN,
                     ),
                     width="100%",
                 ),
@@ -360,6 +376,7 @@ def _radar_chart() -> rx.Component:
                     outer_radius=RADAR_OUTER_RADIUS,
                     height=RADAR_HEIGHT,
                     width="100%",
+                    margin=CHART_MARGIN,
                 ),
                 width="100%",
                 min_width="0",

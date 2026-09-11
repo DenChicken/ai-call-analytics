@@ -1,3 +1,5 @@
+from src.constants import BUCKET_DAY, BUCKET_MONTH, BUCKET_WEEK
+
 USER_BY_LOGIN = """
 SELECT id, login, password_hash FROM users WHERE login = %(login)s
 """
@@ -71,9 +73,20 @@ JOIN criterion_scores s ON s.call_id = c.id
 GROUP BY s.criterion_code
 """
 
-CRITERIA_DAILY_RATIOS = f"""
+LOCAL_TIME = (
+    "(c.started_at AT TIME ZONE 'UTC' + make_interval(hours => %(offset_hours)s))"
+)
+
+BUCKET_EXPRESSIONS = {
+    BUCKET_DAY: f"{LOCAL_TIME}::date",
+    BUCKET_WEEK: f"date_trunc('week', {LOCAL_TIME})::date",
+    BUCKET_MONTH: f"date_trunc('month', {LOCAL_TIME})::date",
+}
+
+CRITERIA_BUCKET_RATIOS = {
+    bucket: f"""
 SELECT s.criterion_code AS code,
-       (c.started_at AT TIME ZONE %(timezone)s)::date AS day,
+       {expression} AS day,
        avg(s.score)::float AS ratio
 FROM calls c
 {CALL_JOIN}
@@ -82,6 +95,8 @@ JOIN criterion_scores s ON s.call_id = c.id
 GROUP BY s.criterion_code, day
 ORDER BY day
 """
+    for bucket, expression in BUCKET_EXPRESSIONS.items()
+}
 
 PERIOD_TOTALS = f"""
 SELECT count(*) AS calls,
@@ -112,8 +127,9 @@ WHERE c.started_at >= %(since)s AND c.started_at < %(until)s
 GROUP BY c.agent_id, ag.display_name
 """
 
-AGENT_DAILY_RATIOS = f"""
-SELECT (c.started_at AT TIME ZONE %(timezone)s)::date AS day,
+AGENT_BUCKET_RATIOS = {
+    bucket: f"""
+SELECT {expression} AS day,
        avg(m.ratio)::float AS ratio
 FROM calls c
 {CALL_JOIN}
@@ -122,6 +138,8 @@ FROM calls c
 GROUP BY day
 ORDER BY day
 """
+    for bucket, expression in BUCKET_EXPRESSIONS.items()
+}
 
 EXTREME_CALLS = f"""
 WITH scored AS (

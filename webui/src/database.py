@@ -16,18 +16,27 @@ from src.constants import (
 POOL_MIN_SIZE = 1
 POOL_MAX_SIZE = 4
 MINUTES_PER_HOUR = 60
-ZONE_NAME_TEMPLATE = "{sign}{hours:02d}:{minutes:02d}"
-ZONE_POSITIVE_SIGN = "+"
-ZONE_NEGATIVE_SIGN = "-"
+SECONDS_PER_HOUR = SECONDS_PER_MINUTE * MINUTES_PER_HOUR
 UNKNOWN_QUERY_NAME = "query"
 
 logger = logging.getLogger(__name__)
 
-QUERY_NAMES = {
-    text: name
-    for name, text in vars(queries).items()
-    if isinstance(text, str) and not name.startswith("_")
-}
+
+def _query_names() -> dict[str, str]:
+    names = {}
+    for name, value in vars(queries).items():
+        if name.startswith("_"):
+            continue
+        if isinstance(value, str):
+            names[value] = name
+        elif isinstance(value, dict):
+            for key, text in value.items():
+                if isinstance(text, str):
+                    names[text] = f"{name}[{key}]"
+    return names
+
+
+QUERY_NAMES = _query_names()
 
 
 def _query_name(query: str) -> str:
@@ -112,8 +121,8 @@ class Database:
     def criteria_ratios(self, window: dict) -> list[dict]:
         return self._fetch(queries.CRITERIA_RATIOS, window)
 
-    def criteria_daily_ratios(self, window: dict) -> list[dict]:
-        return self._fetch(queries.CRITERIA_DAILY_RATIOS, window)
+    def criteria_bucket_ratios(self, window: dict) -> list[dict]:
+        return self._fetch(queries.CRITERIA_BUCKET_RATIOS[window["bucket"]], window)
 
     def period_totals(self, window: dict) -> dict:
         return self._fetch_one(queries.PERIOD_TOTALS, window)
@@ -121,8 +130,8 @@ class Database:
     def agent_totals(self, window: dict) -> list[dict]:
         return self._fetch(queries.AGENT_TOTALS, window)
 
-    def agent_daily_ratios(self, window: dict) -> list[dict]:
-        return self._fetch(queries.AGENT_DAILY_RATIOS, window)
+    def agent_bucket_ratios(self, window: dict) -> list[dict]:
+        return self._fetch(queries.AGENT_BUCKET_RATIOS[window["bucket"]], window)
 
     def extreme_calls(self, window: dict) -> dict[str, dict]:
         return {row["kind"]: row for row in self._fetch(queries.EXTREME_CALLS, window)}
@@ -195,23 +204,19 @@ def build_window(
     since: datetime,
     until: datetime,
     types: list[str],
+    bucket: str,
     agent_id: int | None = None,
 ) -> dict:
     return {
         "since": since,
         "until": until,
         "types": [str(code) for code in types],
-        "timezone": _zone_name(since),
+        "offset_hours": _offset_hours(since),
+        "bucket": bucket,
         "agent_id": agent_id,
     }
 
 
-def _zone_name(value: datetime) -> str:
+def _offset_hours(value: datetime) -> int:
     offset = value.utcoffset() or timedelta()
-    total_minutes = int(offset.total_seconds() // SECONDS_PER_MINUTE)
-    sign = ZONE_POSITIVE_SIGN if total_minutes >= 0 else ZONE_NEGATIVE_SIGN
-    return ZONE_NAME_TEMPLATE.format(
-        sign=sign,
-        hours=abs(total_minutes) // MINUTES_PER_HOUR,
-        minutes=abs(total_minutes) % MINUTES_PER_HOUR,
-    )
+    return int(offset.total_seconds() // SECONDS_PER_HOUR)

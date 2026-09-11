@@ -10,14 +10,13 @@ from src.constants import (
     PARAM_SEARCH,
     PARAM_SORT,
     PARAM_TYPES,
-    PERIOD_BY_LABEL,
-    PERIOD_DAYS,
-    PERIOD_LABELS,
+    PERIOD_BY_CODE,
     PERIOD_WEEK,
     ROUTE_MANAGERS,
 )
 from src.database import build_window
 from src.state.auth import AuthState, guarded
+from src.state.period_filter import PeriodFilterState
 from src.state.types_filter import TypesFilterState
 
 logger = logging.getLogger(__name__)
@@ -57,7 +56,7 @@ class ManagerRow:
     last_call_key: float
 
 
-class ManagersState(TypesFilterState, AuthState):
+class ManagersState(PeriodFilterState, TypesFilterState, AuthState):
     period: str = PERIOD_WEEK
     search: str = ""
     sort_by: str = DEFAULT_SORT
@@ -77,13 +76,7 @@ class ManagersState(TypesFilterState, AuthState):
         self._refresh()
         return self._sync_url()
 
-    @rx.var
-    def period_label(self) -> str:
-        return PERIOD_LABELS[self.period]
-
-    @rx.event
-    def set_period(self, label: str):
-        self.period = PERIOD_BY_LABEL.get(label, self.period)
+    def _period_changed(self):
         self._refresh()
         return self._sync_url()
 
@@ -108,7 +101,7 @@ class ManagersState(TypesFilterState, AuthState):
 
     def _read_url(self) -> None:
         params = self.router.url.query_parameters
-        self.period = urlstate.read_choice(params, PARAM_PERIOD, PERIOD_DAYS, self.period)
+        self._read_period(params)
         self.search = urlstate.read(params, PARAM_SEARCH)
         self.sort_by = urlstate.read_choice(params, PARAM_SORT, SORT_LABELS, self.sort_by)
         self.descending = urlstate.read_flag(params, PARAM_DESC, self.descending)
@@ -149,8 +142,9 @@ def collect(period: str, types: list[str], offset_hours: int) -> list[ManagerRow
     since, until = formatting.period_bounds(period, offset_hours)
     previous_since, previous_until = formatting.previous_bounds(since, until)
 
-    window = build_window(since, until, types)
-    previous = build_window(previous_since, previous_until, types)
+    bucket = PERIOD_BY_CODE[period].bucket
+    window = build_window(since, until, types, bucket)
+    previous = build_window(previous_since, previous_until, types, bucket)
     earlier = {row["agent_id"]: row["ratio"] for row in database.agent_totals(previous)}
 
     rows = []
