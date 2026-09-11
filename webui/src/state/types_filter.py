@@ -5,10 +5,15 @@ from src.constants import PARAM_TYPES, TYPES_SUMMARY_TEMPLATE
 from src.database import CallType
 
 
+def same_selection(before, after) -> bool:
+    return [str(entry) for entry in before] == [str(entry) for entry in after]
+
+
 class TypesFilterState(rx.State, mixin=True):
     available_types: list[CallType] = []
     selected_types: list[str] = []
     filter_menu_open: bool = False
+    types_before_menu: list[str] = []
 
     @rx.var
     def types_summary(self) -> str:
@@ -31,6 +36,9 @@ class TypesFilterState(rx.State, mixin=True):
     def apply_types(self, is_open: bool):
         self.filter_menu_open = is_open
         if is_open:
+            self.types_before_menu = list(self.selected_types)
+            return
+        if same_selection(self.types_before_menu, self.selected_types):
             return
         return self._types_changed()
 

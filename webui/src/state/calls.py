@@ -23,7 +23,7 @@ from src.constants import (
 from src.database import build_filters
 from src.state.auth import AuthState, guarded
 from src.state.period_filter import PeriodFilterState
-from src.state.types_filter import TypesFilterState
+from src.state.types_filter import TypesFilterState, same_selection
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +65,7 @@ class CallsState(PeriodFilterState, TypesFilterState, AuthState):
     period: str = PERIOD_MONTH
     agent_filter: str = ALL_AGENTS
     selected_statuses: list[str] = []
+    statuses_before_menu: list[str] = []
     page: int = FIRST_PAGE
     page_size: int = 0
 
@@ -168,7 +169,11 @@ class CallsState(PeriodFilterState, TypesFilterState, AuthState):
 
     @rx.event
     def apply_statuses(self, is_open: bool):
+        self.filter_menu_open = is_open
         if is_open:
+            self.statuses_before_menu = list(self.selected_statuses)
+            return
+        if same_selection(self.statuses_before_menu, self.selected_statuses):
             return
         self.page = FIRST_PAGE
         self._refresh()
