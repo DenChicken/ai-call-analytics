@@ -2,7 +2,7 @@ import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 
-from src.constants import LOG_LEVELS, LOG_MODULE_DIR
+from src.constants import LOG_LEVELS, LOG_MODULE_DIR, SECONDS_PER_MINUTE
 
 PATHS_SECTION = "paths"
 LOGGING_SECTION = "logging"
@@ -41,6 +41,7 @@ class FetchConfig:
     initial_lookback_days: int
     max_records_per_cycle: int
     download_cooldown_seconds: float
+    record_delay_seconds: int
 
 
 @dataclass(frozen=True)
@@ -227,6 +228,8 @@ def load_config(path: str | Path) -> Config:
         initial_lookback_days=_require(fetch_raw, "initial_lookback_days", "fetch"),
         max_records_per_cycle=_require(fetch_raw, "max_records_per_cycle", "fetch"),
         download_cooldown_seconds=_require(fetch_raw, "download_cooldown_seconds", "fetch"),
+        record_delay_seconds=_require(fetch_raw, "record_delay_minutes", "fetch")
+        * SECONDS_PER_MINUTE,
     )
 
     if fetch.max_call_duration_seconds <= fetch.min_call_duration_seconds:

@@ -72,6 +72,7 @@ class BitrixSource(Source):
         self._max_records_per_cycle = fetch.max_records_per_cycle
         self._min_duration_seconds = fetch.min_call_duration_seconds
         self._max_duration_seconds = fetch.max_call_duration_seconds
+        self._record_delay_seconds = fetch.record_delay_seconds
         self._portal_url = str(require_option(source_config, "portal_url")).rstrip("/")
         self._client = BitrixClient(
             read_secret_file(
@@ -188,6 +189,10 @@ class BitrixSource(Source):
             call_filter = {">=CALL_START_DATE": since.strftime(DATE_FORMAT)}
         else:
             call_filter = {">ID": cursor}
+        mature_before = datetime.now(timezone.utc) - timedelta(
+            seconds=self._record_delay_seconds
+        )
+        call_filter["<=CALL_START_DATE"] = mature_before.strftime(DATE_FORMAT)
 
         records = []
         start = 0

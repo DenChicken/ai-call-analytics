@@ -46,8 +46,8 @@ min_silence_duration_ms = 300
 speech_pad_ms = 400
 
 [llm]
-repo_id = "unsloth/Qwen3-4B-Instruct-2507-GGUF"
-model_file = "Qwen3-4B-Instruct-2507-Q4_K_M.gguf"
+repo_id = "unsloth/Qwen3.5-9B-GGUF"
+model_file = "Qwen3.5-9B-Q4_K_M.gguf"
 gpu_layers = "none"
 context_tokens = 8192
 batch_tokens = 256

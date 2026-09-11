@@ -24,6 +24,7 @@ max_call_duration_seconds = 3600
 initial_lookback_days = 7
 max_records_per_cycle = 100
 download_cooldown_seconds = 0
+record_delay_minutes = 120
 
 [network]
 connect_timeout = 5
