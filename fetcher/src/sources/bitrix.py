@@ -70,6 +70,7 @@ class BitrixSource(Source):
         self._name = source_config.name
         self._initial_lookback_days = fetch.initial_lookback_days
         self._max_records_per_cycle = fetch.max_records_per_cycle
+        self._cursor_overlap_records = fetch.cursor_overlap_records
         self._min_duration_seconds = fetch.min_call_duration_seconds
         self._max_duration_seconds = fetch.max_call_duration_seconds
         self._record_delay_seconds = fetch.record_delay_seconds
@@ -188,7 +189,7 @@ class BitrixSource(Source):
             since = datetime.now(timezone.utc) - timedelta(days=self._initial_lookback_days)
             call_filter = {">=CALL_START_DATE": since.strftime(DATE_FORMAT)}
         else:
-            call_filter = {">ID": cursor}
+            call_filter = {">ID": str(max(int(cursor) - self._cursor_overlap_records, 0))}
         mature_before = datetime.now(timezone.utc) - timedelta(
             seconds=self._record_delay_seconds
         )

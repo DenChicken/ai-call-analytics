@@ -40,6 +40,7 @@ class FetchConfig:
     max_call_duration_seconds: int
     initial_lookback_days: int
     max_records_per_cycle: int
+    cursor_overlap_records: int
     download_cooldown_seconds: float
     record_delay_seconds: int
 
@@ -227,6 +228,7 @@ def load_config(path: str | Path) -> Config:
         max_call_duration_seconds=_require(fetch_raw, "max_call_duration_seconds", "fetch"),
         initial_lookback_days=_require(fetch_raw, "initial_lookback_days", "fetch"),
         max_records_per_cycle=_require(fetch_raw, "max_records_per_cycle", "fetch"),
+        cursor_overlap_records=_require(fetch_raw, "cursor_overlap_records", "fetch"),
         download_cooldown_seconds=_require(fetch_raw, "download_cooldown_seconds", "fetch"),
         record_delay_seconds=_require(fetch_raw, "record_delay_minutes", "fetch")
         * SECONDS_PER_MINUTE,
@@ -236,6 +238,18 @@ def load_config(path: str | Path) -> Config:
         raise ConfigError(
             f"max_call_duration_seconds ({fetch.max_call_duration_seconds}) must be greater "
             f"than min_call_duration_seconds ({fetch.min_call_duration_seconds}) in [fetch]"
+        )
+
+    if fetch.cursor_overlap_records < 0:
+        raise ConfigError(
+            f"'cursor_overlap_records' in [fetch] is {fetch.cursor_overlap_records}, "
+            "it cannot be negative"
+        )
+    if fetch.cursor_overlap_records >= fetch.max_records_per_cycle:
+        raise ConfigError(
+            f"'cursor_overlap_records' ({fetch.cursor_overlap_records}) must be smaller than "
+            f"'max_records_per_cycle' ({fetch.max_records_per_cycle}) in [fetch]: "
+            "the overlap is re-read every cycle and would leave no room for new records"
         )
 
     network = NetworkConfig(
