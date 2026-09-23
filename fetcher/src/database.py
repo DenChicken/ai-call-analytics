@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 POOL_SIZE = 1
 
+SELECT_SOURCE_ID = "SELECT id FROM sources WHERE name = %s"
+
 
 class Database:
     def __init__(self, config: DatabaseConfig):
@@ -34,14 +36,21 @@ class Database:
     @retried
     def get_source_id(self, name: str) -> int:
         with self._pool.connection() as connection, connection.cursor() as cursor:
+            cursor.execute(SELECT_SOURCE_ID, (name,))
+            row = cursor.fetchone()
+            if row:
+                return row["id"]
+
             cursor.execute(
-                """
-                INSERT INTO sources (name) VALUES (%s)
-                ON CONFLICT (name) DO UPDATE SET name = EXCLUDED.name
-                RETURNING id
-                """,
+                "INSERT INTO sources (name) VALUES (%s) ON CONFLICT (name) DO NOTHING RETURNING id",
                 (name,),
             )
+            row = cursor.fetchone()
+            if row:
+                logger.info("source %s registered as id %s", name, row["id"])
+                return row["id"]
+
+            cursor.execute(SELECT_SOURCE_ID, (name,))
             return cursor.fetchone()["id"]
 
     @retried
