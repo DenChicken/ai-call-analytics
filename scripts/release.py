@@ -21,7 +21,7 @@ PRIVATE_KEY_STEM = "license_private_key"
 KEYGEN_SCRIPT = "keygen.py"
 PRIVATE_NAMES = (KEYGEN_SCRIPT, PRIVATE_KEY_STEM)
 
-COMPANY_NAME = "ai-call-analytics"
+COMPANY_NAME = "speech-analysis-engine"
 
 OUTPUT_DIR_NAME = "release"
 STAGE_DIR_NAME = "stage"

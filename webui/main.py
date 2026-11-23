@@ -37,7 +37,7 @@ from src.logging_setup import new_log_file
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Serve the call analytics web interface")
+    parser = argparse.ArgumentParser(description="Serve the speech analysis web interface")
     parser.add_argument("-c", "--config", required=True, help="path to TOML config")
     return parser.parse_args()
 

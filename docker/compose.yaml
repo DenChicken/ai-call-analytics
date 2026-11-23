@@ -1,4 +1,4 @@
-name: ai-call-analytics
+name: speech-analysis-engine
 
 x-logging: &logging
   driver: json-file
@@ -17,7 +17,7 @@ networks:
 
 services:
   fetcher:
-    image: ai-call-analytics/fetcher:${VERSION}
+    image: speech-analysis-engine/fetcher:${VERSION}
     restart: unless-stopped
     user: "${RUN_AS}"
     logging: *logging
@@ -29,7 +29,7 @@ services:
       - ${CONFIGS_DIR}/fetcher:/configs:ro
 
   pipeline:
-    image: ai-call-analytics/pipeline:${VERSION}
+    image: speech-analysis-engine/pipeline:${VERSION}
     restart: unless-stopped
     user: "${RUN_AS}"
     logging: *logging
@@ -42,7 +42,7 @@ services:
       - ${CONFIGS_DIR}/pipeline:/configs:ro
 
   webui:
-    image: ai-call-analytics/webui:${VERSION}
+    image: speech-analysis-engine/webui:${VERSION}
     restart: unless-stopped
     logging: *logging
     extra_hosts: *host-access

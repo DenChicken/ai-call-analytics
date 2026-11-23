@@ -70,7 +70,7 @@ RUN cd pipeline && PYTHONPATH=/build python3 -m nuitka \
         --include-package=licensing \
         --output-dir=/out \
         --output-filename=pipeline \
-        --company-name=ai-call-analytics \
+        --company-name=speech-analysis-engine \
         --product-name=pipeline \
         main.py
 

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "licensing"
 version = "1.0.0"
-description = "License verification for ai-call-analytics components"
+description = "License verification for speech-analysis-engine components"
 requires-python = ">=3.14"
 dependencies = ["cryptography>=44"]
 

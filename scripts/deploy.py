@@ -400,7 +400,7 @@ def _print_running(paths: dict[str, Path], port: int) -> None:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Deploy ai-call-analytics")
+    parser = argparse.ArgumentParser(description="Deploy speech-analysis-engine")
     parser.add_argument(
         "command",
         choices=(COMMAND_INIT, *COMPOSE_COMMANDS),

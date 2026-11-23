@@ -34,7 +34,7 @@ RUN cd fetcher && PYTHONPATH=/build python3 -m nuitka \
         --include-package=licensing \
         --output-dir=/out \
         --output-filename=fetcher \
-        --company-name=ai-call-analytics \
+        --company-name=speech-analysis-engine \
         --product-name=fetcher \
         main.py
 

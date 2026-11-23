@@ -1,6 +1,6 @@
-# ai-call-analytics
+# speech-analysis-engine
 
-ai-call-analytics automatically reviews sales calls. It takes call recordings from a CRM, converts them to text, and uses a language model to check how well the manager handled each conversation. The results are shown in a web interface.
+speech-analysis-engine automatically reviews sales calls. It takes call recordings from a CRM, converts them to text, and uses a language model to check how well the manager handled each conversation. The results are shown in a web interface.
 
 The system runs entirely on your own server. Speech recognition and the language model work locally, so recordings and results are never sent anywhere.
 

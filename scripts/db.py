@@ -162,7 +162,7 @@ COMMANDS = {
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Manage the call analytics database")
+    parser = argparse.ArgumentParser(description="Manage the speech analysis database")
     parser.add_argument(
         "command",
         choices=sorted(COMMANDS),
